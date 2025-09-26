@@ -12,6 +12,7 @@ const bankAccountRoutes = require('./routes/bankAccounts.routes');
 const productRoutes = require('./routes/product.routes');
 const billsRoutes = require('./routes/bills.routes');
 const attachmentsRoutes = require('./routes/attachments.routes');
+const DbConfig = require('./config/db');
 
 const app = express();
 
@@ -24,6 +25,17 @@ app.use('/api/accounts', bankAccountRoutes);
 app.use('/api/product', productRoutes);
 app.use('/api/bills', billsRoutes);
 app.use('/api/attachments', attachmentsRoutes);
+
+// Initialize the database connection
+(async () => {
+  const db = await DbConfig.init(config.database);
+  if (!db.success) {
+    console.error('Error connecting to the database:', db.message);
+  } else {
+    console.log('Connected to MySQL database');
+  }
+})();
+
 
 // Ruta por defecto
 app.get('/', (req, res) => {

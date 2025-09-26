@@ -14,4 +14,14 @@ module.exports = {
     jwtSecret: process.env.JWT_SECRET || 'fallback_secret_key',
     jwtExpiresIn: '24h',
 
+    database: {
+        host: process.env.DB_HOST || 'localhost',
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD || '123456789',
+        database: process.env.DB_NAME || 'ExpressOdoo',
+        port: process.env.DB_PORT || 3306,
+        connectionLimit: 10
+
+    }
+
 };

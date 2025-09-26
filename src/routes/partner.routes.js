@@ -8,5 +8,6 @@ const router = express.Router();
     router.post('/', partnerController.createPartner);
     router.put('/:id', partnerController.updatePartner);   
     router.delete('/:id', partnerController.deletePartner);
+    router.post('/with-account', partnerController.createPartnerWithAccount);
 
 module.exports = router;

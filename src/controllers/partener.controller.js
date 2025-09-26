@@ -49,7 +49,16 @@ const partnerController = {
             console.error('Error en partnerController.deletePartner:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al eliminar partner', error: error.message });
         }
-    }
+    },
+    async createPartnerWithAccount(req, res) {
+        try {
+            const result = await partnerService.createPartnerWithAccount(req.body);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en partnerController.createPartnerWithAccount:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al crear partner con cuenta', error: error.message });
+        }
+    },
 }
 
 module.exports = partnerController;

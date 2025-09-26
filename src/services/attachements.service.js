@@ -4,7 +4,7 @@ const { pickFields } = require("../utils/util");
 const productService = require("./products.service");
 
 const attachementService = {
-    async getAttachments(res_model, res_id, attachmentFields = ['name', 'res_model', 'res_id']) {
+    async getAttachments(res_model, res_id, attachmentFields = ['name','mimetype', 'file_size', 'res_model', 'res_id','url']) {
         try {
             const domain = [];
             if (res_model) {
@@ -14,8 +14,7 @@ const attachementService = {
                 domain.push(['res_id', '=', res_id]);
             }
             const response = await odooConector.executeOdooRequest('ir.attachment', 'search_read', {
-                domain: domain,
-                fields: attachmentFields
+                fields: attachmentFields,
             });
             if (!response.success) {
                 if (response.error) {
@@ -33,7 +32,7 @@ const attachementService = {
         try {
             const response = await odooConector.executeOdooRequest('ir.attachment', 'search_read', {
                 domain: [['id', '=', Number(id)]],
-                fields: [],
+                fields: ['name', 'mimetype', 'file_size', 'res_model', 'res_id', 'url'],
                 limit: 1
             });
             if (!response.success) {
@@ -70,6 +69,11 @@ const attachementService = {
 
             if (referenceIdResponse.data.length === 0) {
                 return { statusCode: 404, message: 'No se puede crear el adjunto porque la referencia no existe' };
+            }
+
+            // Validar que el archivo esté presente
+            if (!file || !file.originalname) {
+                return { statusCode: 400, message: 'No se ha proporcionado un archivo válido' };
             }
 
             const data = {

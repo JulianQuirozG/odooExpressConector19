@@ -1,4 +1,5 @@
-const { BILL_FIELDS, PRODUCT_FIELDS } = require("../utils/fields");
+const { da } = require("zod/locales");
+const { BILL_FIELDS, PRODUCT_FIELDS, PRODUCT_FIELDS_BILL } = require("../utils/fields");
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 const productService = require("./products.service");
@@ -90,10 +91,27 @@ const billService = {
                 return { statusCode: billExists.statusCode, message: billExists.message, data: billExists.data };
             }
             const bill = pickFields(dataBill, BILL_FIELDS);
+
+            if (dataBill.invoice_line_ids && dataBill.invoice_line_ids.length >= 0) {
+
+                const lineIds = billExists.data.invoice_line_ids;
+                if (lineIds && lineIds.length > 0) {
+                    const deleted = await odooConector.executeOdooRequest('account.move.line', 'unlink', {
+                        ids: lineIds
+                    });
+                    console.log(deleted);
+                }
+                
+                const productResponse = await productService.validListId(dataBill.invoice_line_ids.map(line => { return Number(line.product_id) }));
+                const productsFound = dataBill.invoice_line_ids.map((line) => { return productResponse.data.foundIds.includes(Number(line.product_id)) ? [0, 0, pickFields(line, PRODUCT_FIELDS_BILL)] : false }).filter(line => line !== false);
+                bill.invoice_line_ids = productsFound;
+            }
+
             const response = await odooConector.executeOdooRequest('account.move', 'write', {
                 ids: [Number(id)],
                 vals: bill
             });
+
             if (!response.success) {
                 if (response.error) {
                     return { statusCode: 500, message: 'Error al actualizar factura', error: response.message };
