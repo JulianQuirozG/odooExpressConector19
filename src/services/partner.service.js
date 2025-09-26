@@ -1,6 +1,8 @@
-const { CLIENT_FIELDS } = require("../utils/fields");
+const { CLIENT_FIELDS, BANK_ACCOUNT_FIELDS } = require("../utils/fields");
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
+const bankService = require("./bank.service");
+const bankAccountService = require("./bankAccount.service");
 
 const partnerService = {
     async getPartners(partnerFields = ['name', 'email', 'phone']) {
@@ -104,7 +106,42 @@ const partnerService = {
             console.log('Error en partnerService.deletePartner:', error);
             return { statusCode: 500, message: 'Error al eliminar partner', error: error.message };
         }
-    }
+    },
+    async createPartnerWithAccount(dataPartner) {
+        try {
+            const partner = pickFields(dataPartner, CLIENT_FIELDS);
+            const response = await this.createPartner(partner);
+
+            if(dataPartner.bankAccounts){
+                const bankAccounts = dataPartner.bankAccounts.map((account)=>{pickFields(account, BANK_ACCOUNT_FIELDS)})
+                await Promise.all(bankAccounts.map(async (account) => {
+                    account.partner_id = response.data; // Asignar el ID del partner recién creado
+                    if(!account.bank_id){
+                        const bankResponse = await bankService.getOneBank();
+                    }
+
+                }))
+
+
+                for (const account of bankAccounts) {
+                    account.partner_id = response.data; // Asignar el ID del partner recién creado
+
+                    const bankAccountResponse = await bankAccountService.createBankAccount(account);
+                }
+            }
+
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al crear partner con cuenta', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al crear partner con cuenta', data: response.data };
+            }
+            return { statusCode: 201, message: 'Partner con cuenta creado con éxito', data: response.data };
+        } catch (error) {
+            console.log('Error en partnerService.createPartnerWithAccount:', error);
+            return { statusCode: 500, message: 'Error al crear partner con cuenta', error: error.message };
+        }
+    },
 }
 
 module.exports = partnerService;

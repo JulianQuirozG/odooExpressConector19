@@ -15,6 +15,10 @@ const BANK_ACCOUNT_FIELDS = [
     // ...otros campos de cuenta bancaria
 ];
 
+const BANK_ACCOUNT_PARTNER_FIELDS = [
+    "acc_number","partner_id","bank_id","bank_name" , "currency_id", "company_id","sanitized_acc_number"
+    // ...otros campos de cuenta bancaria
+];
 const PROVIDER_FIELDS = [
     "name", "is_company", "company_type", "lang", "phone", "vat", "email",
     "street","street2", "zip","country_id","supplier_rank", "company_id", "website",

@@ -96,26 +96,26 @@ const attachementService = {
             return { statusCode: 500, message: 'Error al crear adjunto', error: error.message };
         }
     },
-    async deleteBill(id) {
+    async deleteAttachment(id) {
         try {
-            const billExists = await this.getOneBill(id);
-            if (billExists.statusCode !== 200) {
-                return { statusCode: billExists.statusCode, message: billExists.message, data: billExists.data };
+            const attachmentExists = await this.getOneAttachment(id);
+            if (attachmentExists.statusCode !== 200) {
+                return { statusCode: attachmentExists.statusCode, message: attachmentExists.message, data: attachmentExists.data };
             }
-            const response = await odooConector.executeOdooRequest('account.move', 'unlink', {
+            const response = await odooConector.executeOdooRequest('ir.attachment', 'unlink', {
                 ids: [Number(id)]
             });
             if (!response.success) {
                 if (response.error) {
-                    return { statusCode: 500, message: 'Error al eliminar factura', error: response.message };
+                    return { statusCode: 500, message: 'Error al eliminar adjunto', error: response.message };
                 }
-                return { statusCode: 400, message: 'Error al eliminar factura', data: response.data };
+                return { statusCode: 400, message: 'Error al eliminar adjunto', data: response.data };
             }
-            return { statusCode: 200, message: 'Factura eliminada con éxito', data: response.data };
+            return { statusCode: 200, message: 'Adjunto eliminado con éxito', data: response.data };
 
         } catch (error) {
-            console.log('Error en billService.deleteBill:', error);
-            return { statusCode: 500, message: 'Error al eliminar factura', error: error.message };
+            console.log('Error en attachementService.deleteAttachment:', error);
+            return { statusCode: 500, message: 'Error al eliminar adjunto', error: error.message };
         }
     },
 }
