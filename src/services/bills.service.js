@@ -3,6 +3,7 @@ const { BILL_FIELDS, PRODUCT_FIELDS, PRODUCT_FIELDS_BILL } = require("../utils/f
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 const productService = require("./products.service");
+const partnerService = require("./partner.service");
 
 const billService = {
     async getBills(billFields = ['name', 'amount_total', 'state']) {
@@ -101,7 +102,7 @@ const billService = {
                     });
                     console.log(deleted);
                 }
-                
+
                 const productResponse = await productService.validListId(dataBill.invoice_line_ids.map(line => { return Number(line.product_id) }));
                 const productsFound = dataBill.invoice_line_ids.map((line) => { return productResponse.data.foundIds.includes(Number(line.product_id)) ? [0, 0, pickFields(line, PRODUCT_FIELDS_BILL)] : false }).filter(line => line !== false);
                 bill.invoice_line_ids = productsFound;
@@ -165,6 +166,105 @@ const billService = {
         } catch (error) {
             console.log('Error en billService.confirmBill:', error);
             return { statusCode: 500, message: 'Error al confirmar factura', error: error.message };
+        }
+    },
+    async resetToDraftBill(id) {
+        try {
+            const billExists = await this.getOneBill(id);
+            if (billExists.statusCode !== 200) {
+                return { statusCode: billExists.statusCode, message: billExists.message, data: billExists.data };
+            }
+            const response = await odooConector.executeOdooRequest('account.move', 'button_draft', {
+                ids: [Number(id)]
+            });
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al reestablecer factura a borrador', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al reestablecer factura a borrador', data: response.data };
+            }
+            return { statusCode: 200, message: 'Factura reestablecida a borrador con éxito', data: response.data };
+        } catch (error) {
+            console.log('Error en billService.resetToDraftBill:', error);
+            return { statusCode: 500, message: 'Error al reestablecer factura a borrador', error: error.message };
+        }
+    },
+    async createDebitNote(id, dataDebit) {
+        try {
+            const billExists = await this.getOneBill(id);
+            if (billExists.statusCode !== 200) {
+                return { statusCode: billExists.statusCode, message: billExists.message, data: billExists.data };
+            }
+
+            // Crear el wizard de nota de débito
+            const wizardData = {
+                move_ids: [[6, 0, [Number(id)]]],
+                reason: dataDebit.reason || 'Nota de débito',
+                date: dataDebit.date || new Date().toISOString().split('T')[0],
+                journal_id: dataDebit.journal_id || false
+            };
+
+            const wizardResponse = await odooConector.executeOdooRequest('account.debit.note', 'create', {
+                vals_list: [wizardData]
+            });
+
+            if (!wizardResponse.success) {
+                return { statusCode: 500, message: 'Error al crear wizard de nota de débito', error: wizardResponse.message };
+            }
+
+            // Ejecutar la creación de la nota de débito
+            const debitNoteResponse = await odooConector.executeOdooRequest('account.debit.note', 'create_debit', {
+                ids: wizardResponse.data
+            });
+
+            if (!debitNoteResponse.success) {
+                return { statusCode: 500, message: 'Error al crear nota de débito', error: debitNoteResponse.message };
+            }
+
+            return { statusCode: 201, message: 'Nota de débito creada con éxito', data: debitNoteResponse.data };
+
+        } catch (error) {
+            console.log('Error en billService.createDebitNote:', error);
+            return { statusCode: 500, message: 'Error al crear nota de débito', error: error.message };
+        }
+    },
+    async createCreditNote(id, dataCredit) {
+        try {
+            const billExists = await this.getOneBill(id);
+            if (billExists.statusCode !== 200) {
+                return { statusCode: billExists.statusCode, message: billExists.message, data: billExists.data };
+            }
+
+            // Crear el wizard de nota de débito
+            const wizardData = {
+                move_ids: [[6, 0, [Number(id)]]],
+                reason: dataCredit.reason || 'Nota de crédito',
+                date: dataCredit.date || new Date().toISOString().split('T')[0],
+                journal_id: dataCredit.journal_id || false,
+                //refund_method: 'refund' // 'refund', 'cancel', 'modify'
+            };
+
+            const wizardResponse = await odooConector.executeOdooRequest('account.move.reversal', 'create', {
+                vals_list: [wizardData]
+            });
+
+            if (!wizardResponse.success) {
+                return { statusCode: 500, message: 'Error al crear wizard', error: wizardResponse.message };
+            }
+
+            const creditNoteResponse = await odooConector.executeOdooRequest('account.move.reversal', 'reverse_moves', {
+                ids: wizardResponse.data
+            });
+
+            if (!creditNoteResponse.success) {
+                return { statusCode: 500, message: 'Error al crear nota de crédito', error: creditNoteResponse.message };
+            }
+
+            return { statusCode: 201, message: 'Nota de crédito creada con éxito', data: creditNoteResponse.data };
+
+        } catch (error) {
+            console.log('Error en billService.createCreditNote:', error);
+            return { statusCode: 500, message: 'Error al crear nota de crédito', error: error.message };
         }
     }
 }

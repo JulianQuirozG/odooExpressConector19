@@ -5,10 +5,11 @@ const bankService = require("./bank.service");
 const bankAccountService = require("./bankAccount.service");
 
 const partnerService = {
-    async getPartners(partnerFields = ['name', 'email', 'phone']) {
+    async getPartners(partnerFields = ['name', 'email', 'phone'], domain = []) {
         try {
             const response = await odooConector.executeOdooRequest('res.partner', 'search_read', {
-                fields: partnerFields
+                fields: partnerFields,
+                domain: domain
             });
             if (!response.success) {
                 if (response.error) {
@@ -118,6 +119,7 @@ const partnerService = {
                 await Promise.all(bankAccounts.map(async (account) => {
 
                     if (!BankAccountSuccess.includes(account.acc_number)) {
+                        account.partner_id = response.data[0];
                         const bankAccountResponse = await bankAccountService.createBankAccount(account);
                         if (bankAccountResponse.statusCode !== 201) {
                             BankAccountError.push(account.acc_number);
@@ -132,14 +134,11 @@ const partnerService = {
             }
 
             const partnerCreated = await this.getOnePartner(response.data[0]);
-
-            if (!partnerCreated.success) {
-                if (partnerCreated.error) {
-                    return { statusCode: 500, message: 'Error al crear partner con cuenta', error: partnerCreated.message };
-                }
+            console.log(partnerCreated);
+            if (partnerCreated.statusCode !== 200) {
                 return { statusCode: 400, message: 'Error al crear partner con cuenta', data: { partner: partnerCreated.data, BankAccountSuccess, BankAccountError } };
             }
-            return { statusCode: 201, message: 'Partner con cuenta creado con éxito', data: partnerCreated.data };
+            return { statusCode: 201, message: 'Partner con cuenta creado con éxito',data: { partner: partnerCreated.data, BankAccountSuccess, BankAccountError }  };
         } catch (error) {
             console.log('Error en partnerService.createPartnerWithAccount:', error);
             return { statusCode: 500, message: 'Error al crear partner con cuenta', error: error.message };
@@ -150,13 +149,13 @@ const partnerService = {
         try {
             const partner = pickFields(dataPartner, CLIENT_FIELDS);
             const response = await this.updatePartner(id, partner);
-            
+
             const BankAccountError = [];
             const BankAccountSuccess = [];
 
             if (dataPartner.bankAccounts && dataPartner.bankAccounts.length >= 0) {
 
-                
+
                 const bankAccounts = dataPartner.bankAccounts.map((account) => { return pickFields(account, BANK_ACCOUNT_PARTNER_FIELDS) })
                 await Promise.all(bankAccounts.map(async (account) => {
 

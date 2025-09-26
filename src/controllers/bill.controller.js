@@ -59,6 +59,36 @@ const billController = {
             console.error('Error en billController.confirmBill:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al confirmar factura', error: error.message });
         }
+    },
+    async resetToDraftBill(req, res) {
+        try{
+            const { id } = req.params;
+            const result = await billService.resetToDraftBill(id);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.resetToDraftBill:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al reestablecer factura a borrador', error: error.message });
+        }   
+    },
+    async debitNote(req, res) {
+        try{
+            const { id } = req.params;
+            const result = await billService.createDebitNote(id,req.body);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.debitNote:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al crear nota de débito', error: error.message });
+        }   
+    },
+    async creditNote(req, res) {
+        try{
+            const { id } = req.params;
+            const result = await billService.createCreditNote(id,req.body);
+            res.status(result.statusCode).json(result);
+        }catch (error) {
+            console.error('Error en billController.creditNote:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al crear nota de crédito', error: error.message });
+        }
     }
 }
 

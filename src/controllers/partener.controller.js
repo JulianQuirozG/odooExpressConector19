@@ -1,13 +1,32 @@
 const partnerService = require("../services/partner.service");
+const { CLIENT_FIELDS } = require("../utils/fields");
 
 
 const partnerController = {
     async getPartners(req, res) {
         try {
-            const result = await partnerService.getPartners();
+            const result = await partnerService.getPartners(CLIENT_FIELDS);
             res.status(result.statusCode).json(result);
-        }catch (error) {
+        } catch (error) {
             console.error('Error en partnerController.getPartners:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener partners', error: error.message });
+        }
+    },
+    async getPartnersCustomers(req, res) {
+        try {
+            const result = await partnerService.getPartners(CLIENT_FIELDS, [['customer_rank', '>', 0]]);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en partnerController.getPartnersCustomers:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener partners', error: error.message });
+        }
+    },
+    async getPartnersProveedores(req, res) {
+        try {
+            const result = await partnerService.getPartners(CLIENT_FIELDS, [['supplier_rank', '>', 0]]);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en partnerController.getPartnersProveedores:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al obtener partners', error: error.message });
         }
     },
@@ -31,7 +50,7 @@ const partnerController = {
         }
     },
     async updatePartner(req, res) {
-        try{
+        try {
             const { id } = req.params;
             const result = await partnerService.updatePartner(id, req.body);
             res.status(result.statusCode).json(result);
