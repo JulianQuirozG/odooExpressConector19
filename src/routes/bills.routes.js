@@ -12,5 +12,6 @@ const router = express.Router();
     router.put('/reset/:id', billController.resetToDraftBill);
     router.post('/debit-note/:id', billController.debitNote);
     router.post('/credit-note/:id', billController.creditNote);
-    
+    router.post('/payment/:invoiceId', billController.createPayment);
+
 module.exports = router;

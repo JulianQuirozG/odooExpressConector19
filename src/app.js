@@ -27,6 +27,7 @@ app.use('/api/bills', billsRoutes);
 app.use('/api/attachments', attachmentsRoutes);
 
 // Initialize the database connection
+/** 
 (async () => {
   const db = await DbConfig.init(config.database);
   if (!db.success) {
@@ -35,7 +36,7 @@ app.use('/api/attachments', attachmentsRoutes);
     console.log('Connected to MySQL database');
   }
 })();
-
+*/
 
 // Ruta por defecto
 app.get('/', (req, res) => {

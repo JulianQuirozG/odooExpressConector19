@@ -89,6 +89,16 @@ const billController = {
             console.error('Error en billController.creditNote:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al crear nota de crédito', error: error.message });
         }
+    },
+    async createPayment(req, res) {
+        try {
+            const { invoiceId } = req.params;
+            const result = await billService.createPayment(invoiceId, req.body);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.createPayment:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al crear pago', error: error.message });
+        }
     }
 }
 
