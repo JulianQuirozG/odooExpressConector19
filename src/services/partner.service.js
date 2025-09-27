@@ -5,6 +5,7 @@ const bankService = require("./bank.service");
 const bankAccountService = require("./bankAccount.service");
 
 const partnerService = {
+    //obtener todos los partners
     async getPartners(partnerFields = ['name', 'email', 'phone'], domain = []) {
         try {
             const response = await odooConector.executeOdooRequest('res.partner', 'search_read', {
@@ -23,11 +24,12 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al obtener partners', error: error.message };
         }
     },
+    //obtener un partner por id
     async getOnePartner(id) {
         try {
             const response = await odooConector.executeOdooRequest('res.partner', 'search_read', {
                 domain: [['id', '=', id]],
-                fields: ['name', 'email', 'phone'],
+                fields: ['name', 'email', 'phone','bank_ids'],
                 limit: 1
             });
             if (!response.success) {
@@ -45,6 +47,7 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al obtener partner', error: error.message };
         }
     },
+    //crear un partner
     async createPartner(dataPartner) {
         try {
             const partner = pickFields(dataPartner, CLIENT_FIELDS)
@@ -63,6 +66,7 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al crear partner', error: error.message };
         }
     },
+    //actualizar un partner
     async updatePartner(id, dataPartner) {
         try {
             const partnerExists = await this.getOnePartner(id);
@@ -86,6 +90,7 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al actualizar partner', error: error.message };
         }
     },
+    //eliminar un partner
     async deletePartner(id) {
         try {
             const partnerExists = await this.getOnePartner(id);
@@ -108,6 +113,7 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al eliminar partner', error: error.message };
         }
     },
+    //crear un partner con cuenta bancaria
     async createPartnerWithAccount(dataPartner) {
         try {
             const partner = pickFields(dataPartner, CLIENT_FIELDS);
@@ -144,7 +150,7 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al crear partner con cuenta', error: error.message };
         }
     },
-
+    //actualizar un partner con cuenta bancaria
     async updatePartnerWithAccount(id, dataPartner) {
         try {
             const partner = pickFields(dataPartner, CLIENT_FIELDS);

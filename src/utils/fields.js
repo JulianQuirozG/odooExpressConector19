@@ -113,8 +113,8 @@ const PRODUCT_FIELDS_BILL = [
 
 const BILL_FIELDS = [
     "move_type", "partner_id", "invoice_date", "invoice_date_due", "ref",
-    "currency_id", "company_id", "journal_id", "narration",
-    "payment_reference", "invoice_origin", "state"
+    "currency_id", "company_id", "journal_id", "narration", "payment_reference",
+    "payment_reference", "invoice_origin", "state", "partner_bank_id", "invoice_vendor_bill_id"
 ];
 
 const INVOICE_LINE_FIELDS = [

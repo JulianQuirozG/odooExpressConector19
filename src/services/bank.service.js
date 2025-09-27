@@ -3,6 +3,7 @@ const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 
 const bankService = {
+    //obtener todos los bancos
     async getBanks(bankFields = ['name', 'bic'], domain = []) {
         try {
             const response = await odooConector.executeOdooRequest('res.bank', 'search_read', {
@@ -21,6 +22,7 @@ const bankService = {
             return { statusCode: 500, message: 'Error al obtener bancos', error: error.message };
         }
     },
+    //obtener un banco por id
     async getOneBank(id) {
         try {
             const response = await odooConector.executeOdooRequest('res.bank', 'search_read', {
@@ -43,6 +45,7 @@ const bankService = {
             return { statusCode: 500, message: 'Error al obtener banco', error: error.message };
         }
     },
+    //crear un banco
     async createBank(dataBank) {
         try {
             const bank = pickFields(dataBank, BANK_FIELDS);
@@ -61,18 +64,19 @@ const bankService = {
             return { statusCode: 500, message: 'Error al crear banco', error: error.message };
         }
     },
+    //actualizar un banco
     async updateBank(id, dataBank) {
         try {
             const bankExists = await this.getOneBank(id);
             if (bankExists.statusCode !== 200) {
-                return { statusCode: bankExists.statusCode, message: bankExists.message, data: bankExists.data};
+                return { statusCode: bankExists.statusCode, message: bankExists.message, data: bankExists.data };
             }
             const bank = pickFields(dataBank, ['name', 'bic', 'account_number']);
             const response = await odooConector.executeOdooRequest('res.bank', 'write', {
                 ids: [Number(id)],
                 vals: bank
             });
-            if(!response.success) {
+            if (!response.success) {
                 if (response.error) {
                     return { statusCode: 500, message: 'Error al actualizar banco', error: response.message };
                 }
@@ -84,16 +88,17 @@ const bankService = {
             return { statusCode: 500, message: 'Error al actualizar banco', error: error.message };
         }
     },
+    //eliminar un banco
     async deleteBank(id) {
         try {
             const bankExists = await this.getOneBank(id);
             if (bankExists.statusCode !== 200) {
-                return { statusCode: bankExists.statusCode, message: bankExists.message, data: bankExists.data};
+                return { statusCode: bankExists.statusCode, message: bankExists.message, data: bankExists.data };
             }
             const response = await odooConector.executeOdooRequest('res.bank', 'unlink', {
                 ids: [Number(id)]
             });
-            if(!response.success) {
+            if (!response.success) {
                 if (response.error) {
                     return { statusCode: 500, message: 'Error al eliminar banco', error: response.message };
                 }

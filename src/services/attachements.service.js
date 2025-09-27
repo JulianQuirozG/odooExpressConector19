@@ -4,6 +4,7 @@ const { pickFields } = require("../utils/util");
 const productService = require("./products.service");
 
 const attachementService = {
+    //obtener adjuntos por modelo y id
     async getAttachments(res_model, res_id, attachmentFields = ['name','mimetype', 'file_size', 'res_model', 'res_id','url']) {
         try {
             const domain = [];
@@ -28,6 +29,7 @@ const attachementService = {
             return { statusCode: 500, message: 'Error al obtener attachments', error: error.message };
         }
     },
+    //obtener un adjunto por id
     async getOneAttachment(id) {
         try {
             const response = await odooConector.executeOdooRequest('ir.attachment', 'search_read', {
@@ -50,6 +52,7 @@ const attachementService = {
             return { statusCode: 500, message: 'Error al obtener adjunto', error: error.message };
         }
     },
+    //crear un adjunto
     async createAttachement(model, referenceId, file) {
         try {
             //verifico la factura si viene en el body
@@ -100,6 +103,7 @@ const attachementService = {
             return { statusCode: 500, message: 'Error al crear adjunto', error: error.message };
         }
     },
+    //eliminar un adjunto
     async deleteAttachment(id) {
         try {
             const attachmentExists = await this.getOneAttachment(id);

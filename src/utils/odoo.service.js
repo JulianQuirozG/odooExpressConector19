@@ -3,6 +3,7 @@ const config = require('../config/config');
 const ODOO_URL = config.odooUrl;
 const API_KEY = config.odooApiKey;
 const odooConector = {
+    // Ejecutar una solicitud a Odoo
     async executeOdooRequest(model, method, args = {}) {
         try {
             const URL = `${ODOO_URL}/${model}/${method}`;

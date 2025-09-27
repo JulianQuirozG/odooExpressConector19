@@ -3,6 +3,7 @@ const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 
 const productService = {
+    //obtener todos los productos
     async getProducts(productFields = ['name', 'default_code', 'list_price']) {
         try {
             const response = await odooConector.executeOdooRequest('product.template', 'search_read', {
@@ -20,6 +21,7 @@ const productService = {
             return { statusCode: 500, message: 'Error al obtener productos', error: error.message };
         }
     },
+    //obtener un producto por id
     async getOneProduct(id) {
         try {
             const response = await odooConector.executeOdooRequest('product.template', 'search_read', {
@@ -42,6 +44,7 @@ const productService = {
             return { statusCode: 500, message: 'Error al obtener producto', error: error.message };
         }
     },
+    //crear un producto
     async createProduct(dataProduct) {
         try {
             const product = pickFields(dataProduct, PRODUCT_FIELDS);
@@ -60,6 +63,7 @@ const productService = {
             return { statusCode: 500, message: 'Error al crear producto', error: error.message };
         }
     },
+    //actualizar un producto
     async updateProduct(id, dataProduct) {
         try {
             const productExists = await this.getOneProduct(id);
@@ -83,6 +87,7 @@ const productService = {
             return { statusCode: 500, message: 'Error al actualizar producto', error: error.message };
         }
     },
+    //eliminar un producto
     async deleteProduct(id) {
         try {
             const productExists = await this.getOneProduct(id);
@@ -105,6 +110,7 @@ const productService = {
             return { statusCode: 500, message: 'Error al eliminar producto', error: error.message };
         }
     },
+    //validar una lista de ids de productos
     async validListId(ids){
         try {
             const response = await odooConector.executeOdooRequest('product.template', 'read', {

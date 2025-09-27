@@ -3,6 +3,7 @@ const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 const bankService = require("./bank.service");
 const bankAccountService = {
+    //obtener todos los bancos
     async getBanksAccounts(bankFields = ['id', 'display_name', 'partner_id', 'currency_id', 'bank_id']) {
         try {
             const response = await odooConector.executeOdooRequest('res.partner.bank', 'search_read', {
@@ -20,6 +21,7 @@ const bankAccountService = {
             return { statusCode: 500, message: 'Error al obtener bancos', error: error.message };
         }
     },
+    //obtener un banco por id
     async getOneBankAccount(id, bankFields = ['id', 'display_name', 'partner_id', 'currency_id', 'bank_id']) {
         try {
             const response = await odooConector.executeOdooRequest('res.partner.bank', 'search_read', {
@@ -42,6 +44,7 @@ const bankAccountService = {
             return { statusCode: 500, message: 'Error al obtener banco', error: error.message };
         }
     },
+    //crear un banco
     async createBankAccount(dataBank) {
         try {
             console.log(dataBank);
@@ -73,6 +76,7 @@ const bankAccountService = {
             return { statusCode: 500, message: 'Error al crear banco', error: error.message };
         }
     },
+    //actualizar un banco
     async updateBankAccount(id, dataBank) {
         try {
             const bankExists = await this.getOneBankAccount(id);
@@ -96,6 +100,7 @@ const bankAccountService = {
             return { statusCode: 500, message: 'Error al actualizar banco', error: error.message };
         }
     },
+    //eliminar un banco
     async deleteBankAccount(id) {
         try {
             const bankExists = await this.getOneBankAccount(id);

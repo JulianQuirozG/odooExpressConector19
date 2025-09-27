@@ -12,6 +12,7 @@ const bankAccountRoutes = require('./routes/bankAccounts.routes');
 const productRoutes = require('./routes/product.routes');
 const billsRoutes = require('./routes/bills.routes');
 const attachmentsRoutes = require('./routes/attachments.routes');
+const journalRoutes = require('./routes/journal.routes');
 const DbConfig = require('./config/db');
 
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api/accounts', bankAccountRoutes);
 app.use('/api/product', productRoutes);
 app.use('/api/bills', billsRoutes);
 app.use('/api/attachments', attachmentsRoutes);
+app.use('/api/journal', journalRoutes);
 
 // Initialize the database connection
 /** 
