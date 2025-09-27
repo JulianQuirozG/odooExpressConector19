@@ -565,7 +565,7 @@ const billService = {
         paymentData.amount || Math.abs(invoice.amount_residual);
       const paymentDate =
         paymentData.date || new Date().toISOString().split("T")[0];
-      console.log("Monto del pago:", paymentData.payment_method_line_id);
+      //console.log("Monto del pago:", paymentData.payment_method_line_id);
       // Datos del wizard de pago
       const wizardData = {
         payment_type: paymentType,
