@@ -4,9 +4,13 @@ const ODOO_URL = config.odooUrl;
 const API_KEY = config.odooApiKey;
 const ODOO_DB = config.odooDb;
 const odooConector = {
+
     // Ejecutar una solicitud a Odoo
     async executeOdooRequest(model, method, args = {}) {
         try {
+            console.log('Base Odoo URL:', ODOO_URL);
+            console.log('Odoo DB:', ODOO_DB);
+            console.log('Odoo API Key:', API_KEY ? '****' : 'No configurada');
             const URL = `${ODOO_URL}/${model}/${method}`;
             const request = await axios.post(URL,
                 { ...args },
