@@ -101,7 +101,8 @@ const PRODUCT_FIELDS = [
     "name", "default_code", "type",            // 'product', 'consu', 'service'
     "list_price", "standard_price", "categ_id", "uom_id", "uom_po_id", "barcode",
     "sale_ok", "purchase_ok", "active", "description", "image_1920", "company_id",
-    "taxes_id", "supplier_taxes_id", "weight", "volume", "tracking",
+    "taxes_id", "supplier_taxes_id", "weight", "volume", "tracking","service_to_purchase","l10n_co_dian_mandate_contract",
+    "property_account_income_id","property_account_expense_id","property_stock_account_input","purchase_method"
 ];
 
 const PRODUCT_FIELDS_BILL = [
@@ -127,6 +128,7 @@ const INVOICE_LINE_FIELDS = [
     // ...otros campos de línea si los necesitas
 ];
 
+const QUOTATION_LINES_FIELDS = ["partner_id","order_line"];
 
 
 const QUOTATION_LINES = [
