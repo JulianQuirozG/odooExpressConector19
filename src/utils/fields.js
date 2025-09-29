@@ -126,6 +126,27 @@ const INVOICE_LINE_FIELDS = [
     "account_id"       // ID de la cuenta contable
     // ...otros campos de línea si los necesitas
 ];
+
+
+
+const QUOTATION_LINES = [
+    0, 0,
+    {
+        product_id: 5,
+        name: "Descripción",
+        product_uom_qty: 1,
+        price_unit: 130000,
+        tax_ids: [[4, 51]]
+    }
+];
+
+const QUOTATION_FIELDS = {
+    partner_id: 15,                       // ✅ Cliente (obligatorio)
+    order_line: [                          // ✅ Líneas de productos (obligatorio)
+        QUOTATION_LINES
+    ]
+};
+
 module.exports = {
     CLIENT_FIELDS,
     BANK_FIELDS,
@@ -135,5 +156,7 @@ module.exports = {
     INVOICE_LINE_FIELDS,
     BILL_FIELDS,
     BANK_ACCOUNT_PARTNER_FIELDS,
-    PRODUCT_FIELDS_BILL
+    PRODUCT_FIELDS_BILL,
+    QUOTATION_FIELDS,
+    QUOTATION_LINES
 };
