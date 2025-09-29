@@ -2,6 +2,7 @@ const axios = require('axios');
 const config = require('../config/config');
 const ODOO_URL = config.odooUrl;
 const API_KEY = config.odooApiKey;
+const ODOO_DB = config.odooDb;
 const odooConector = {
     // Ejecutar una solicitud a Odoo
     async executeOdooRequest(model, method, args = {}) {
@@ -12,7 +13,8 @@ const odooConector = {
                 {
                     headers: {
                         "Content-Type": "application/json",
-                        'Authorization': `Bearer ${API_KEY}`
+                        'Authorization': `Bearer ${API_KEY}`,
+                        'X-Odoo-Database': `${ODOO_DB}`
                     }
                 }
             );
