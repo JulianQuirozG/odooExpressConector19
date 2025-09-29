@@ -48,6 +48,12 @@ const productService = {
     async createProduct(dataProduct) {
         try {
             const product = pickFields(dataProduct, PRODUCT_FIELDS);
+
+            if(dataProduct.seller_ids?.length > 0){
+                product.seller_ids = dataProduct.seller_ids.map((seller) => { return [0, 0, seller]});
+            }
+            
+
             const response = await odooConector.executeOdooRequest('product.template', 'create', {
                 vals_list: [product]
             });
