@@ -10,6 +10,7 @@ const {validateBody} = require('../middleware/validateBody.middleware');
 //Schema
 const createSaleSchema = require('../schemas/Sale/createSale.schema');
 
+//Routes
 router.get('/', saleController.getSales);
 router.get('/:id', saleController.getSaleById);
 router.post('/', validateBody(createSaleSchema), saleController.createSale);

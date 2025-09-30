@@ -1,4 +1,4 @@
-const salesFields = ["name", "partner_id", "date_order", "amount_total", "state"];
+const salesFields = ["name", "partner_id", "date_order", "amount_total", "state", "name"];
 const odooConector = require("../utils/odoo.service");
 
 //Services
@@ -6,6 +6,13 @@ const quotationService = require("./quotation.service");
 const purchaseOrderService = require("./purchaseOrder.service");
 
 const saleService = {
+    /**
+     * Obtiene todas las órdenes de venta (sale.order) en estado 'sale' o 'done' desde Odoo.
+     *
+     * @async
+     * @returns {Promise<Object>} Resultado con statusCode, data (array de ventas) y mensaje. Si hay error, incluye el mensaje y el error.
+     *
+     */
     async getSales() {
         try {
             //Obtener todas las ordenes de venta 
@@ -35,8 +42,19 @@ const saleService = {
         }
     },
 
+    /**
+     * Obtiene el detalle de una orden de venta (sale.order) por su ID desde Odoo.
+     *
+     * @async
+     * @param {number} id - ID de la orden de venta a consultar.
+     * @returns {Promise<Object>} Resultado con statusCode, data (detalle de la venta) y mensaje. Si hay error, incluye el mensaje y el error.
+     *
+     */
     async getSaleById(id) {
         try {
+            // Validar el ID de la venta
+            if (isNaN(Number(id))) return { statusCode: 400, message: 'ID de venta inválido', data: [] };
+            
             // Obtener una orden de venta por ID
             const response = await odooConector.executeOdooRequest(
                 "sale.order",
@@ -68,6 +86,30 @@ const saleService = {
         }
     },
 
+    /**
+     * Crea una orden de venta en Odoo a partir de los datos recibidos.
+     *
+     *
+     * @async
+     * @param {Object} data - Datos para crear la venta y la compra.
+     * @param {Object} data.dataVenta - Datos de la cotización/venta (partner_id, productos, fechas, etc).
+     * @param {Object} data.dataCompra - Datos para actualizar la orden de compra (proveedor, productos, etc).
+     * @returns {Promise<Object>} Resultado con statusCode, data y mensaje. Si hay error, incluye el mensaje y el error.
+     *
+     * Ejemplo de data:
+     * {
+     *   dataVenta: {
+     *     partner_id: 1,
+     *     date_order: "2025-09-30",
+     *     validity_date: "2025-10-15",
+     *     order_line: [ ... ]
+     *   },
+     *   dataCompra: {
+     *     proveedor_id: 2,
+     *     order_line: [ ... ]
+     *   }
+     * }
+     */
     async createSale(data) {
         try {
             //preparamos la informacion de la venta y de la compra
@@ -86,17 +128,20 @@ const saleService = {
             if (purchaseOrder.statusCode !== 200) return purchaseOrder;
 
             //actualizar orden de compra 
-            const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrder.data[0].id, dataCompra);
-            if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
+            //const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrder.data[0].id, dataCompra);
+            //if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
 
             //Regresar la informacion de la orden de venta final con orden de compra
             const sale = await this.getSaleById(quotation.data.id);
-            sale.data[0].purchaseOrder = purchaseOrder.data[0];
 
             if (sale.statusCode !== 200) return sale;
             return {
                 statusCode: 201,
-                data: sale.data
+                data: {
+                    saleOrder: sale.data[0],
+                    ///purchaseOrder: updatePurchaseOrder.data
+                },
+                message: 'Venta creada con éxito',
             };
         } catch (error) {
             console.error('Error al crear la venta en Odoo', error);
