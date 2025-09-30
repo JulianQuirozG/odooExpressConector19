@@ -2,12 +2,29 @@ const { pick } = require('../schemas/bill.schema');
 const { PURCHASE_ORDER_FIELDS, SALE_ORDER_FIELDS } = require('../utils/fields');
 const odooConector = require('../utils/odoo.service');
 const { pickFields } = require('../utils/util');
+const billService = require('./bills.service');
 const { createBill } = require('./bills.service');
 const partnerService = require('./partner.service');
 const productService = require('./products.service');
 
 const purchaseOrderService = {
-    //obtener todas las ordenes de compra
+    /**
+     * Obtiene todas las órdenes de compra
+     * @async
+     * @function getPurchaseOrders
+     * @param {string[]} [purchaseOrderFields=['name', 'partner_id', 'date_order', 'amount_total', 'state']] - Campos a obtener
+     * @returns {Promise<Object>} Respuesta con las órdenes de compra
+     * @returns {number} returns.statusCode - Código de estado HTTP
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {Array} returns.data - Array de órdenes de compra
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * const result = await purchaseOrderService.getPurchaseOrders(['name', 'partner_id']);
+     * if (result.statusCode === 200) {
+     *   console.log('Órdenes:', result.data);
+     * }
+     */
     async getPurchaseOrders(purchaseOrderFields = ['name', 'partner_id', 'date_order', 'amount_total', 'state']) {
         try {
             const response = await odooConector.executeOdooRequest('purchase.order', 'search_read', {
@@ -22,6 +39,26 @@ const purchaseOrderService = {
             return { statusCode: 500, message: 'Error al obtener ordenes de compra', error: error.message };
         }
     },
+    /**
+     * Obtiene una orden de compra por su ID
+     * @async
+     * @function getPurchaseOrderById
+     * @param {number|string} id - ID de la orden de compra
+     * @param {string[]} [purchaseOrderFields=['name', 'partner_id', 'date_order', 'amount_total', 'state', 'order_line']] - Campos a obtener
+     * @returns {Promise<Object>} Respuesta con la orden de compra
+     * @returns {number} returns.statusCode - Código de estado HTTP (200, 404, 500)
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {Array|Object} returns.data - Datos de la orden de compra o array vacío si no se encuentra
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * const result = await purchaseOrderService.getPurchaseOrderById(123);
+     * if (result.statusCode === 200) {
+     *   console.log('Orden encontrada:', result.data);
+     * } else if (result.statusCode === 404) {
+     *   console.log('Orden no encontrada');
+     * }
+     */
     async getPurchaseOrderById(id, purchaseOrderFields = ['name', 'partner_id', 'date_order', 'amount_total', 'state', 'order_line']) {
         try {
             const response = await odooConector.executeOdooRequest('purchase.order', 'search_read', {
@@ -38,13 +75,42 @@ const purchaseOrderService = {
                 return { statusCode: 404, message: 'Orden de compra no encontrada', data: [] };
             }
 
-            return { statusCode: 200, message: 'Orden de compra obtenida', data: response.data };
+            return { statusCode: 200, message: 'Orden de compra obtenida', data: response.data[0] };
         } catch (error) {
             console.log('Error en purchaseOrderService.getPurchaseOrderById:', error);
             return { statusCode: 500, message: 'Error al obtener orden de compra', error: error.message };
         }
     },
-    //crear una orden de compra
+    /**
+     * Crea una nueva orden de compra
+     * @async
+     * @function createPurchaseOrder
+     * @param {Object} data - Datos de la orden de compra
+     * @param {number} [data.partner_id] - ID del proveedor
+     * @param {string} [data.name] - Nombre/referencia de la orden
+     * @param {string} [data.date_order] - Fecha de la orden
+     * @param {Array<Object>} [data.order_line] - Líneas de la orden
+     * @param {number} data.order_line[].product_id - ID del producto
+     * @param {string} [data.order_line[].name] - Descripción del producto
+     * @param {number} [data.order_line[].product_qty] - Cantidad
+     * @param {number} [data.order_line[].price_unit] - Precio unitario
+     * @returns {Promise<Object>} Respuesta con la orden creada
+     * @returns {number} returns.statusCode - Código de estado HTTP (201, 400, 500)
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {Object} returns.data - Datos de la orden creada y productos no encontrados
+     * @returns {Object} returns.data.purchaseOrder - Orden de compra creada
+     * @returns {Array} returns.data.NotFoundProducts - Productos que no se encontraron
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * const orderData = {
+     *   partner_id: 24,
+     *   order_line: [
+     *     { product_id: 22, product_qty: 5, price_unit: 100 }
+     *   ]
+     * };
+     * const result = await purchaseOrderService.createPurchaseOrder(orderData);
+     */
     async createPurchaseOrder(data) {
         try {
             if (data.partner_id) {
@@ -89,7 +155,32 @@ const purchaseOrderService = {
             throw error;
         }
     },
-    //actualizar una orden de compra existente, recibe el id del pedido y los datos a actualizar, ademas una opcion de accion (replace, update)
+    /**
+     * Actualiza una orden de compra existente
+     * @async
+     * @function updatePurchaseOrder
+     * @param {number|string} id - ID de la orden de compra a actualizar
+     * @param {Object} data - Datos para actualizar
+     * @param {number} [data.partner_id] - ID del proveedor
+     * @param {Array<Object>} [data.order_line] - Líneas de la orden a actualizar
+     * @param {string} [action='replace'] - Acción a realizar ('replace' | 'update')
+     * @returns {Promise<Object>} Respuesta con el resultado de la actualización
+     * @returns {number} returns.statusCode - Código de estado HTTP (200, 400, 404, 500)
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {Object} returns.data - Datos de la orden actualizada y productos no encontrados
+     * @returns {Object} returns.data.updateResult - Orden de compra actualizada
+     * @returns {Array} returns.data.NotFoundProducts - Productos que no se encontraron
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * const updateData = {
+     *   partner_id: 25,
+     *   order_line: [
+     *     { product_id: 22, product_qty: 10, price_unit: 150 }
+     *   ]
+     * };
+     * const result = await purchaseOrderService.updatePurchaseOrder(123, updateData, 'replace');
+     */
     async updatePurchaseOrder(id, data, action = 'replace') {
         try {
             if (data.partner_id) {
@@ -161,6 +252,24 @@ const purchaseOrderService = {
         }
     },
 
+    /**
+     * Valida una lista de IDs de órdenes de compra
+     * @async
+     * @function validListId
+     * @param {number[]} purchaseOrderIds - Array de IDs de órdenes de compra a validar
+     * @returns {Promise<Object>} Respuesta con los IDs encontrados y no encontrados
+     * @returns {number} returns.statusCode - Código de estado HTTP (200, 400, 500)
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {Object} returns.data - Resultados de la validación
+     * @returns {number[]} returns.data.foundIds - IDs que fueron encontrados en Odoo
+     * @returns {number[]} returns.data.notFoundIds - IDs que no fueron encontrados
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * const result = await purchaseOrderService.validListId([1, 2, 3, 999]);
+     * console.log('Encontrados:', result.data.foundIds); // [1, 2, 3]
+     * console.log('No encontrados:', result.data.notFoundIds); // [999]
+     */
     async validListId(purchaseOrderIds) {
         try {
             if (!purchaseOrderIds || !Array.isArray(purchaseOrderIds) || purchaseOrderIds.length === 0) {
@@ -187,12 +296,39 @@ const purchaseOrderService = {
     },
 
     /**
-     * Actualiza las rows dependiendo de la accción
-     * (1) ACTUALIZAR lineas,
-     * (2) elimina el id de la linea, 
-     * (3) desconecta la línea pero no la elimina de la base de datos, 
-     * (5) elimina todas las líneas conectadas, 
-     * (6) reemplaza todas las líneas con las especificadas
+     * Actualiza las líneas de una orden de compra usando comandos específicos
+     * @async
+     * @function updatePurchaseOrderLines
+     * @param {number|string} id - ID de la orden de compra
+     * @param {number} action - Acción a realizar:
+     *   - 1: Actualizar líneas existentes
+     *   - 2: Eliminar líneas específicas
+     *   - 3: Desconectar líneas (mantiene en BD pero desvincula)
+     *   - 5: Eliminar todas las líneas
+     *   - 6: Reemplazar todas las líneas con las especificadas
+     * @param {Array} lines - Array de líneas o IDs según la acción:
+     *   - Para acción 1: Array de objetos con datos de líneas
+     *   - Para acciones 2,3: Array de IDs de líneas
+     *   - Para acción 5: No se usa
+     *   - Para acción 6: Array de IDs de líneas existentes
+     * @returns {Promise<Object>} Respuesta con el resultado de la operación
+     * @returns {number} returns.statusCode - Código de estado HTTP (200, 400, 500)
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {*} returns.data - Datos de respuesta de Odoo
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * // Eliminar líneas específicas
+     * await purchaseOrderService.updatePurchaseOrderLines(123, 2, [15, 16]);
+     * 
+     * // Eliminar todas las líneas
+     * await purchaseOrderService.updatePurchaseOrderLines(123, 5, []);
+     * 
+     * // Actualizar líneas existentes
+     * const linesToUpdate = [
+     *   { product_id: 22, product_qty: 5, price_unit: 100 }
+     * ];
+     * await purchaseOrderService.updatePurchaseOrderLines(123, 1, linesToUpdate);
      */
     async updatePurchaseOrderLines(id, action, lines) {
         try {
@@ -235,7 +371,7 @@ const purchaseOrderService = {
                 return { statusCode: 400, message: 'Error al actualizar líneas de orden de compra', data: response.data };
             }
 
-            
+
 
             return { statusCode: 200, message: 'Líneas de orden de compra actualizadas con éxito', data: response.data };
 
@@ -249,7 +385,30 @@ const purchaseOrderService = {
         }
     },
 
-    //recibe el id de la orden de compra y una lista de lineas [{id:1,product_id:12}{id:1,product_id:13}] a verificar
+    /**
+     * Verifica y actualiza las líneas de una orden de compra
+     * Valida que el número de líneas proporcionadas coincida con las existentes
+     * @async
+     * @function verifyAndUpdatePurchaseOrderLines
+     * @param {number|string} id - ID de la orden de compra
+     * @param {Array<Object>} [lines=[]] - Array de líneas a verificar y actualizar
+     * @param {number} [lines[].id] - ID de la línea (opcional)
+     * @param {number} lines[].product_id - ID del producto
+     * @param {number} [lines[].product_qty] - Cantidad del producto
+     * @param {number} [lines[].price_unit] - Precio unitario
+     * @returns {Promise<Object>} Respuesta con el resultado de la verificación y actualización
+     * @returns {number} returns.statusCode - Código de estado HTTP (200, 400, 500)
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {*} returns.data - Datos de respuesta
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * const linesToVerify = [
+     *   { product_id: 22, product_qty: 5, price_unit: 100 },
+     *   { product_id: 23, product_qty: 2, price_unit: 200 }
+     * ];
+     * const result = await purchaseOrderService.verifyAndUpdatePurchaseOrderLines(123, linesToVerify);
+     */
     async verifyAndUpdatePurchaseOrderLines(id, lines = []) {
         try {
             const purchaseOrderExists = await this.getPurchaseOrderById(id);
@@ -279,7 +438,23 @@ const purchaseOrderService = {
             };
         }
     },
-
+    /**
+     * Confirma una orden de compra (cambia estado a confirmado)
+     * @async
+     * @function confirmPurchaseOrder
+     * @param {number|string} id - ID de la orden de compra a confirmar
+     * @returns {Promise<Object>} Respuesta con el resultado de la confirmación
+     * @returns {number} returns.statusCode - Código de estado HTTP (200, 400, 404, 500)
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {*} returns.data - Datos de respuesta de Odoo
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * const result = await purchaseOrderService.confirmPurchaseOrder(123);
+     * if (result.statusCode === 200) {
+     *   console.log('Orden confirmada exitosamente');
+     * }
+     */
     async confirmPurchaseOrder(id) {
         try {
             const purchaseOrderExists = await this.getPurchaseOrderById(id);
@@ -308,6 +483,23 @@ const purchaseOrderService = {
             };
         }
     },
+    /**
+     * Crea una factura (bill) a partir de una o más órdenes de compra
+     * @async
+     * @function createBillFromPurchaseOrder
+     * @param {number[]} purchaseOrderId - Array de IDs de órdenes de compra
+     * @returns {Promise<Object>} Respuesta con la factura creada
+     * @returns {number} returns.statusCode - Código de estado HTTP (201, 400, 404, 500)
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {Object} returns.data - Datos de la factura creada
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * const result = await purchaseOrderService.createBillFromPurchaseOrder([123, 124]);
+     * if (result.statusCode === 201) {
+     *   console.log('Factura creada:', result.data);
+     * }
+     */
     async createBillFromPurchaseOrder(purchaseOrderId) {
         try {
             if (!purchaseOrderId || !Array.isArray(purchaseOrderId) || purchaseOrderId.length === 0) {
@@ -316,16 +508,15 @@ const purchaseOrderService = {
             const idArray = purchaseOrderId.map((id) => { return Number(id) });
 
             const purchaseOrderExists = await this.validListId(idArray);
-
             if (purchaseOrderExists.statusCode !== 200) {
                 return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
             }
-            const idsFound = purchaseOrderExists.data.foundIds.map((id) => { return Number(id) });
 
+            const idsFound = purchaseOrderExists.data.foundIds.map((id) => { return Number(id) });
             if (idsFound.length === 0) {
                 return { statusCode: 404, message: 'Ninguna de las ordenes de compra proporcionadas fue encontrada.', data: [] };
             }
-            console.log('idsFound for creating bills:', idsFound);
+            //console.log('idsFound for creating bills:', idsFound);
             const newBill = await odooConector.executeOdooRequest('purchase.order', 'action_create_invoice', {
                 ids: idsFound
             });
@@ -336,8 +527,70 @@ const purchaseOrderService = {
                 }
                 return { statusCode: newBill.statusCode, message: newBill.message, data: newBill.data };
             }
+            
+            const bill = await billService.getOneBill(newBill.data.res_id);
 
-            return { statusCode: 200, message: 'Factura creada con éxito', data: newBill.data };
+            return { statusCode: 201, message: 'Factura creada con éxito', data: bill.data };
+
+        } catch (error) {
+            console.error("Error creating bill from purchase order:", error);
+            return {
+                statusCode: 500,
+                message: 'Error al crear factura desde orden de compra',
+                error: error.message
+            };
+        }
+    },
+    async createBillFromPurchaseOrder2(purchaseOrderId) {
+        try {
+            if (!purchaseOrderId || !Array.isArray(purchaseOrderId) || purchaseOrderId.length === 0) {
+                return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de ordenes de compra para crear facturas.' };
+            }
+            const idArray = purchaseOrderId.map((id) => { return Number(id) });
+
+            const purchaseOrderExists = await this.validListId(idArray);
+            if (purchaseOrderExists.statusCode !== 200) {
+                return purchaseOrderExists;
+            }
+
+            const idsFound = purchaseOrderExists.data.foundIds.map((id) => { return Number(id) });
+            if (idsFound.length === 0) {
+                return { statusCode: 404, message: 'Ninguna de las ordenes de compra proporcionadas fue encontrada.', data: [] };
+            }
+
+            const billData = {
+                move_type: 'in_invoice', // Factura de proveedor
+                // Obtener datos de la primera orden para la factura
+            };
+
+            const firstOrder = await this.getPurchaseOrderById(idsFound[0]);
+            if (firstOrder.statusCode !== 200) {
+                return firstOrder;
+            }
+            const orderData = firstOrder.data;
+            billData.partner_id = orderData.partner_id[0];
+            if (orderData.currency_id) billData.currency_id = orderData.currency_id[0];
+            if (orderData.company_id) billData.company_id = orderData.company_id[0];
+
+            console.log('Bill data prepared:', billData);
+
+
+            //console.log('idsFound for creating bills:', idsFound);
+            const createResponse = await odooConector.executeOdooRequest('account.move', 'create', {
+                vals_list: [billData]
+            });
+
+
+            if (!createResponse.success) {
+                if (createResponse.error) {
+                    return { statusCode: 500, message: 'Error al crear factura desde orden de compra', error: createResponse.message };
+                }
+                return { statusCode: createResponse.statusCode, message: createResponse.message, data: createResponse.data };
+            }
+            console.log('Bill created with ID:', createResponse.data.id);
+            const bill = await billService.getOneBill(createResponse.data.id);
+
+            return { statusCode: 201, message: 'Factura creada con éxito', data: bill.data };
 
         } catch (error) {
             console.error("Error creating bill from purchase order:", error);
