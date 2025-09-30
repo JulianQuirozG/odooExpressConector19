@@ -61,7 +61,7 @@ const saleService = {
                 "sale.order",
                 "search_read",
                 {
-                    fields: salesFields,
+                    
                     domain: [["state", "in", ["sale", "done"]], ["id", "=", id]],
                     limit: 1
                 }
@@ -138,13 +138,11 @@ const saleService = {
             if (confirmPurchaseOrder.statusCode !== 200) return confirmPurchaseOrder;
 
             //Crear factura de la orden de compra
-            const createBill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
-            if (createBill.statusCode !== 201) return createBill;
+            const bill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
+            if (bill.statusCode !== 201) return bill;
 
             //Confirmar factura de la orden de compra
-            const billId = (await purchaseOrderService.getPurchaseOrderById(purchaseOrderId)).data[0].invoice_ids[0];
-
-            const confirmBill = await billService.confirmBill(billId);
+            const confirmBill = await billService.confirmBill(bill.data.id);
             if (confirmBill.statusCode !== 200) return confirmBill;
 
             //Regresar la informacion de la orden de venta final con orden de compra
