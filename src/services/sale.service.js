@@ -3,6 +3,7 @@ const odooConector = require("../utils/odoo.service");
 
 //Services
 const quotationService = require("./quotation.service");
+const purchaseOrderService = require("./purchaseOrder.service");
 
 const saleService = {
     async getSales() {
@@ -81,14 +82,17 @@ const saleService = {
             if (confirmQuotation.statusCode !== 200) return confirmQuotation;
 
             // Recuperar la información de la orden de compra generada al confirmar la cotización
-            const purchaseOrder = await quotationService.getPurchaseOrderBySaleOrderId(quotation.data.id);
+            const purchaseOrder = await quotationService.getPurchaseOrdersBySaleOrderId(quotation.data.id);
             if (purchaseOrder.statusCode !== 200) return purchaseOrder;
 
-            console.log("Órdenes de compra relacionadas:", purchaseOrder.data);
             //actualizar orden de compra 
-            //Regresar la informacion de la orden de venta final con orden de compra
+            const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrder.data[0].id, dataCompra);
+            if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
 
+            //Regresar la informacion de la orden de venta final con orden de compra
             const sale = await this.getSaleById(quotation.data.id);
+            sale.data[0].purchaseOrder = purchaseOrder.data[0];
+
             if (sale.statusCode !== 200) return sale;
             return {
                 statusCode: 201,

@@ -121,7 +121,7 @@ const purchaseOrderService = {
                 purchaseOrder.order_line = filterLines.map((line) => { return [0, 0, pickFields(line, SALE_ORDER_FIELDS)] });
 
                 if (purchaseOrder.order_line.length <= 1) {
-                    await this.updatePurchaseOrderLines(id, 5, []); // Elimina todas las líneas existentes
+                    //await this.updatePurchaseOrderLines(id, 5, []); // Elimina todas las líneas existentes
                 }
             }
             console.log('purchaseOrder to update:', JSON.stringify(purchaseOrder));

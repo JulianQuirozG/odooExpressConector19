@@ -222,7 +222,7 @@ const quotationService = {
             };
         }
     },
-    async getPurchaseOrderBySaleOrderId(saleOrderId) {
+    async getPurchaseOrdersBySaleOrderId(saleOrderId) {
         try {
             //verifico que la orden de venta exista
             const quotationResponse = await this.getOneQuotation(saleOrderId);
