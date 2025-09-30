@@ -77,7 +77,7 @@ const purchaseOrderController = {
             res.status(500).json({ statusCode: 500, message: 'Error al crear factura desde la orden de compra', error: error.message });
         }
     },
-    async validListId(req, res) {   
+    async validListId(req, res) {
         try {
             const { listId } = req.body;
             const result = await purchaseOrderService.validListId(listId);
@@ -85,7 +85,7 @@ const purchaseOrderController = {
         } catch (error) {
             console.error('Error en purchaseOrderController.validListId:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al validar lista de precios', error: error.message });
-        }   
+        }
     },
     async verifyAndUpdatePurchaseOrderLines(req, res) {
         try {
@@ -99,7 +99,6 @@ const purchaseOrderController = {
             res.status(500).json({ statusCode: 500, message: 'Error al verificar y actualizar las líneas de la orden de compra', error: error.message });
         }
     }
-
 };
 
 module.exports = purchaseOrderController;
