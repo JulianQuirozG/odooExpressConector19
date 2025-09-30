@@ -86,6 +86,18 @@ const purchaseOrderController = {
             console.error('Error en purchaseOrderController.validListId:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al validar lista de precios', error: error.message });
         }   
+    },
+    async verifyAndUpdatePurchaseOrderLines(req, res) {
+        try {
+            const { id } = req.params;
+            const { lines } = req.body;
+            const result = await purchaseOrderService.verifyAndUpdatePurchaseOrderLines(id, lines);
+            res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error en purchaseOrderController.verifyAndUpdatePurchaseOrderLines:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al verificar y actualizar las líneas de la orden de compra', error: error.message });
+        }
     }
 
 };
