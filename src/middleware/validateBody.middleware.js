@@ -1,5 +1,3 @@
-const clientSchema = require('../schemas/client.schema.js')
-const updateClientSchema = require('../schemas/clientUpdate.schema.js')
 const z = require('zod')
 
 // Middleware para validar los parámetros del body

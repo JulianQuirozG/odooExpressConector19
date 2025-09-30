@@ -142,12 +142,8 @@ const QUOTATION_LINES = [
     }
 ];
 
-const QUOTATION_FIELDS = {
-    partner_id: 15,                       // ✅ Cliente (obligatorio)
-    order_line: [                          // ✅ Líneas de productos (obligatorio)
-        QUOTATION_LINES
-    ]
-};
+const QUOTATION_FIELDS = ["partner_id",
+    "order_line"];
 
 module.exports = {
     CLIENT_FIELDS,

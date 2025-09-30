@@ -12,8 +12,8 @@ const { pickFields } = require("../utils/util");
 const productService = require("./products.service");
 const partnerService = require("./partner.service");
 
-const billService = {
-    //obtener todas las facturas
+const quotationService = {
+    //obtener todas las cotizaciones
     async getQuotation(quotationFields = ["name", "partner_id", "date_order", "validity_date",
         "amount_total", "state", "order_line"]) {
         try {
@@ -99,516 +99,83 @@ const billService = {
     //crear una cotización
     async createQuotation(dataQuotation) {
         try {
-            //verifico al partner si viene en el body
-            if (dataQuotation.partner_id) {
-                const partnerResponse = await partnerService.getOnePartner(
-                    dataQuotation.partner_id
-                );
-                if (partnerResponse.statusCode !== 200) {
-                    return {
-                        statusCode: partnerResponse.statusCode,
-                        message: "No se puede crear la cotización porque el partner no existe",
-                        error: partnerResponse.message,
-                    };
-                }
+
+            //verifico que el partner exista
+            const partnerResponse = await partnerService.getOnePartner(
+                dataQuotation.partner_id
+            );
+            if (partnerResponse.statusCode !== 200) {
+                return {
+                    statusCode: partnerResponse.statusCode,
+                    message: "No se puede crear la cotización porque el partner no existe",
+                    error: partnerResponse.message,
+                };
             }
-            //obtengo los datos de la cotización
-            const quotation = pickFields(dataQuotation, QUOTATION_FIELDS);
-            console.log(quotation);
-            //si tiene productos los verifico
+
+            //Verifico que los productos existan
+            console.log('Data quotation lines:',  dataQuotation.order_line.map((line) => Number(line.product_id)));
             if (dataQuotation.order_line && dataQuotation.order_line.length > 0) {
-                const productIds = dataQuotation.order_line.map((line) =>
-                    Number(line.product_id)
-                );
-                //le paso la lista de ids de productos sin repetidos para verificar que existan
-                const productsResponse = await productService.validListId([
-                    ...new Set(productIds),
-                ]);
-
-                if (productsResponse.statusCode === 200) {
-                    //filtro las lineas de la factura para quedarme solo con las que tienen productos existentes
-                    const cosas = dataBill.invoice_line_ids.filter((line) =>
-                        productsResponse.data.foundIds.includes(Number(line.product_id))
-                    );
-                    bill.invoice_line_ids = cosas.map((line) => [0, 0, line]);
-                }
-            }
-
-            const response = await odooConector.executeOdooRequest(
-                "account.move",
-                "create",
-                {
-                    vals_list: [bill],
-                }
-            );
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al crear factura",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al crear factura",
-                    data: response.data,
-                };
-            }
-            return {
-                statusCode: 201,
-                message: "Factura creada con éxito",
-                data: response.data,
-            };
-        } catch (error) {
-            console.log("Error en billService.createBill:", error);
-            return {
-                statusCode: 500,
-                message: "Error al crear factura",
-                error: error.message,
-            };
-        }
-    },
-    //actualizar una factura
-    async updateBill(id, dataBill) {
-        try {
-            const billExists = await this.getOneBill(id);
-            if (billExists.statusCode !== 200) {
-                return {
-                    statusCode: billExists.statusCode,
-                    message: billExists.message,
-                    data: billExists.data,
-                };
-            }
-            const bill = pickFields(dataBill, BILL_FIELDS);
-
-            if (dataBill.invoice_line_ids && dataBill.invoice_line_ids.length >= 0) {
-                const lineIds = billExists.data.invoice_line_ids;
-                if (lineIds && lineIds.length > 0) {
-                    const deleted = await odooConector.executeOdooRequest(
-                        "account.move.line",
-                        "unlink",
-                        {
-                            ids: lineIds,
-                        }
-                    );
-                    console.log(deleted);
-                }
-
                 const productResponse = await productService.validListId(
-                    dataBill.invoice_line_ids.map((line) => {
-                        return Number(line.product_id);
-                    })
+                    dataQuotation.order_line.map((line) => Number(line.product_id))
                 );
-                const productsFound = dataBill.invoice_line_ids
-                    .map((line) => {
-                        return productResponse.data.foundIds.includes(
-                            Number(line.product_id)
-                        )
-                            ? [0, 0, pickFields(line, INVOICE_LINE_FIELDS)]
-                            : false;
-                    })
-                    .filter((line) => line !== false);
-                bill.invoice_line_ids = productsFound;
-            }
 
-            const response = await odooConector.executeOdooRequest(
-                "account.move",
-                "write",
-                {
-                    ids: [Number(id)],
-                    vals: bill,
-                }
-            );
-
-            if (!response.success) {
-                if (response.error) {
+                console.log('Productos encontrados:', productResponse);
+                dataQuotation.order_line = dataQuotation.order_line.filter((line) =>
+                    productResponse.data.foundIds.includes(Number(line.product_id))
+                );
+              
+                if (productResponse.statusCode !== 200) {
                     return {
-                        statusCode: 500,
-                        message: "Error al actualizar factura",
-                        error: response.message,
+                        statusCode: productResponse.statusCode,
+                        message: "No se puede crear la cotización porque algunos productos no existen",
+                        error: productResponse.message,
                     };
                 }
-                return {
-                    statusCode: 400,
-                    message: "Error al actualizar factura",
-                    data: response.data,
-                };
-            }
-            return {
-                statusCode: 201,
-                message: "Factura actualizada con éxito",
-                data: response.data,
-            };
-        } catch (error) {
-            console.log("Error en billService.updateBill:", error);
-            return {
-                statusCode: 500,
-                message: "Error al actualizar factura",
-                error: error.message,
-            };
-        }
-    },
-    //eliminar una factura
-    async deleteBill(id) {
-        try {
-            const billExists = await this.getOneBill(id);
-            if (billExists.statusCode !== 200) {
-                return {
-                    statusCode: billExists.statusCode,
-                    message: billExists.message,
-                    data: billExists.data,
-                };
-            }
-            const response = await odooConector.executeOdooRequest(
-                "account.move",
-                "unlink",
-                {
-                    ids: [Number(id)],
-                }
-            );
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al eliminar factura",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al eliminar factura",
-                    data: response.data,
-                };
-            }
-            return {
-                statusCode: 200,
-                message: "Factura eliminada con éxito",
-                data: response.data,
-            };
-        } catch (error) {
-            console.log("Error en billService.deleteBill:", error);
-            return {
-                statusCode: 500,
-                message: "Error al eliminar factura",
-                error: error.message,
-            };
-        }
-    },
-    //confirmar una factura
-    async confirmBill(id) {
-        try {
-            const billExists = await this.getOneBill(id, [['state', '!=', 'posted']]);
-            if (billExists.statusCode !== 200) {
-                return {
-                    statusCode: billExists.statusCode,
-                    message: billExists.message + " o ya está confirmada",
-                    data: billExists.data,
-                };
-            }
-            const response = await odooConector.executeOdooRequest(
-                "account.move",
-                "action_post",
-                {
-                    ids: [Number(id)],
-                }
-            );
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al confirmar factura",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al confirmar factura",
-                    data: response.data,
-                };
-            }
-            return {
-                statusCode: 200,
-                message: "Factura confirmada con éxito",
-                data: response.data,
-            };
-        } catch (error) {
-            console.log("Error en billService.confirmBill:", error);
-            return {
-                statusCode: 500,
-                message: "Error al confirmar factura",
-                error: error.message,
-            };
-        }
-    },
-    //reestablecer una factura a borrador
-    async resetToDraftBill(id) {
-        try {
-            const billExists = await this.getOneBill(id, [['state', '!=', 'draft']]);
-            if (billExists.statusCode !== 200) {
-                return {
-                    statusCode: billExists.statusCode,
-                    message: billExists.message,
-                    data: billExists.data,
-                };
-            }
-            const response = await odooConector.executeOdooRequest(
-                "account.move",
-                "button_draft",
-                {
-                    ids: [Number(id)],
-                }
-            );
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al reestablecer factura a borrador",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al reestablecer factura a borrador",
-                    data: response.data,
-                };
-            }
-            return {
-                statusCode: 200,
-                message: "Factura reestablecida a borrador con éxito",
-                data: response.data,
-            };
-        } catch (error) {
-            console.log("Error en billService.resetToDraftBill:", error);
-            return {
-                statusCode: 500,
-                message: "Error al reestablecer factura a borrador",
-                error: error.message,
-            };
-        }
-    },
-    //Crear una nota de debito a partir de una factura confirmada
-    async createDebitNote(id, dataDebit) {
-        try {
-            const billExists = await this.getOneBill(id, [['state', '=', 'posted']]);
-            if (billExists.statusCode !== 200) {
-                return {
-                    statusCode: billExists.statusCode,
-                    message: billExists.message,
-                    data: billExists.data,
-                };
             }
 
-            // Crear el wizard de nota de débito
-            const wizardData = {
-                move_ids: [[6, 0, [Number(id)]]],
-                reason: dataDebit.reason || "Nota de débito",
-                date: dataDebit.date || new Date().toISOString().split("T")[0],
-                journal_id: dataDebit.journal_id || false,
-            };
+            //preparo los datos de los productos
+            dataQuotation.order_line = dataQuotation.order_line
+                ? dataQuotation.order_line.map((line) => {
+                    return [0, 0, line];
+                })
+                : [];
 
-            const wizardResponse = await odooConector.executeOdooRequest(
-                "account.debit.note",
+            //Crear la cotización
+            const quotation = await odooConector.executeOdooRequest(
+                "sale.order",
                 "create",
                 {
-                    vals_list: [wizardData],
+                    vals_list: dataQuotation,
                 }
             );
 
-            if (!wizardResponse.success) {
+            if (!quotation.success) {return {
+                    statusCode: 400,
+                    message: "Error al crear cotización",
+                    data: quotation.data,
+                };
+            }
+            if (quotation.error) {
                 return {
                     statusCode: 500,
-                    message: "Error al crear wizard de nota de débito",
-                    error: wizardResponse.message,
+                    message: "Error al crear cotización",
+                    error: quotation.message,
                 };
             }
 
-            // Ejecutar la creación de la nota de débito
-            const debitNoteResponse = await odooConector.executeOdooRequest(
-                "account.debit.note",
-                "create_debit",
-                {
-                    ids: wizardResponse.data,
-                }
-            );
-
-            if (!debitNoteResponse.success) {
-                return {
-                    statusCode: 500,
-                    message: "Error al crear nota de débito",
-                    error: debitNoteResponse.message,
-                };
-            }
-
-            return {
-                statusCode: 201,
-                message: "Nota de débito creada con éxito",
-                data: debitNoteResponse.data,
-            };
-        } catch (error) {
-            console.log("Error en billService.createDebitNote:", error);
-            return {
-                statusCode: 500,
-                message: "Error al crear nota de débito",
-                error: error.message,
-            };
-        }
-    },
-    //Crear una nota de credito a partir de una factura confirmada
-    async createCreditNote(id, dataCredit) {
-        try {
-            const billExists = await this.getOneBill(id, [['state', '=', 'posted']]);
-            if (billExists.statusCode !== 200) {
-                return {
-                    statusCode: billExists.statusCode,
-                    message: billExists.message,
-                    data: billExists.data,
-                };
-            }
-
-            // Crear el wizard de nota de débito
-            const wizardData = {
-                move_ids: [Number(id)],
-                reason: dataCredit.reason || "Nota de crédito",
-                date: dataCredit.date || new Date().toISOString().split("T")[0],
-                journal_id: dataCredit.journal_id || false,
-                //refund_method: 'refund' // 'refund', 'cancel', 'modify'
-            };
-
-            const wizardResponse = await odooConector.executeOdooRequest(
-                "account.move.reversal",
-                "create",
-                {
-                    vals_list: [wizardData],
-                }
-            );
-
-            if (!wizardResponse.success) {
-                return {
-                    statusCode: 500,
-                    message: "Error al crear wizard",
-                    error: wizardResponse.message,
-                };
-            }
-
-            const creditNoteResponse = await odooConector.executeOdooRequest(
-                "account.move.reversal",
-                "reverse_moves",
-                {
-                    ids: wizardResponse.data,
-                }
-            );
-
-            if (!creditNoteResponse.success) {
-                return {
-                    statusCode: 500,
-                    message: "Error al crear nota de crédito",
-                    error: creditNoteResponse.message,
-                };
-            }
-
-            return {
-                statusCode: 201,
-                message: "Nota de crédito creada con éxito",
-                data: creditNoteResponse.data,
-            };
-        } catch (error) {
-            console.log("Error en billService.createCreditNote:", error);
-            return {
-                statusCode: 500,
-                message: "Error al crear nota de crédito",
-                error: error.message,
-            };
-        }
-    },
-    // Crear un pago para una factura de una factura confirmada
-    async createPayment(invoiceId, paymentDatas) {
-        try {
-            const billExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
-            if (billExists.statusCode !== 200) {
-                return {
-                    statusCode: billExists.statusCode,
-                    message: billExists.message,
-                    data: billExists.data,
-                };
-            }
-
-            const invoice = billExists.data;
-            const residual = invoice.amount_residual;
-
-            // Validar y ajustar el monto
-            if (paymentDatas.amount && paymentDatas.amount > residual) {
-                paymentDatas.amount = residual;
-            }
-
-            const wizardData = {
-                payment_date: paymentDatas.date || new Date().toISOString().split("T")[0],
-                communication: paymentDatas.memo || `Pago de ${invoice.name}`,
-                amount: paymentDatas.amount || residual,
-                journal_id: paymentDatas.journal_id || false,
-                payment_method_line_id: Number(paymentDatas.payment_method_line_id) || false
-            };
-            console.log("Datos del wizard de pago:", wizardData);
-            // Crear el wizard con la estructura correcta
-            const wizardCreate = await odooConector.executeOdooRequest(
-                'account.payment.register',
-                'create',
-                {
-                    vals_list: wizardData, // ✅ Objeto directo, no array
-                    context: {
-                        active_model: 'account.move',
-                        active_ids: [Number(invoiceId)]
-                    }
-                }
-            );
-
-            if (!wizardCreate.success) {
-                return {
-                    statusCode: 500,
-                    message: "Error al crear el asistente de pago",
-                    error: wizardCreate.message,
-                };
-            }
-
-            // CORREGIDO: Obtener el ID correctamente
-            const wizardId = Array.isArray(wizardCreate.data) ? wizardCreate.data[0] : wizardCreate.data;
-
-            // Crear el pago
-            const payment = await odooConector.executeOdooRequest(
-                'account.payment.register',
-                'action_create_payments',
-                { ids: [wizardId] }
-            );
-
-            if (!payment.success) {
-                return {
-                    statusCode: 500,
-                    message: "Error al crear el pago",
-                    error: payment.message,
-                };
-            }
-
-            // Obtener información actualizada de la factura
-            const updatedInvoice = await this.getOneBill(invoiceId);
-
-            return {
-                statusCode: 201,
-                message: "Pago creado con éxito",
-                data: payment.data,
-                invoice: updatedInvoice.statusCode === 200 ? updatedInvoice.data : null
-            };
-
+            //regresar la cotización creada
+            return this.getOneQuotation(quotation.data);
 
 
         } catch (error) {
-            console.log("Error en billService.createPayment:", error);
+            console.log("Error al crear la cotización:", error);
             return {
                 statusCode: 500,
-                message: "Error al crear pago",
+                message: "Error al crear cotización",
                 error: error.message,
             };
         }
     }
 };
 
-module.exports = billService;
+module.exports = quotationService;
