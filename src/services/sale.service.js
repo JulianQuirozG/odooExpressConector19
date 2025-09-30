@@ -4,6 +4,7 @@ const odooConector = require("../utils/odoo.service");
 //Services
 const quotationService = require("./quotation.service");
 const purchaseOrderService = require("./purchaseOrder.service");
+const billService = require("./bills.service");
 
 const saleService = {
     /**
@@ -125,11 +126,26 @@ const saleService = {
 
             // Recuperar la información de la orden de compra generada al confirmar la cotización
             const purchaseOrder = await quotationService.getPurchaseOrdersBySaleOrderId(quotation.data.id);
+            const purchaseOrderId = purchaseOrder.data[0].id;
             if (purchaseOrder.statusCode !== 200) return purchaseOrder;
 
             //actualizar orden de compra 
-            //const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrder.data[0].id, dataCompra);
-            //if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
+            const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrderId, dataCompra, 'update');
+            if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
+
+            //Confirmar orden de compra
+            const confirmPurchaseOrder = await purchaseOrderService.confirmPurchaseOrder(purchaseOrderId);
+            if (confirmPurchaseOrder.statusCode !== 200) return confirmPurchaseOrder;
+
+            //Crear factura de la orden de compra
+            const createBill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
+            if (createBill.statusCode !== 201) return createBill;
+
+            //Confirmar factura de la orden de compra
+            const billId = (await purchaseOrderService.getPurchaseOrderById(purchaseOrderId)).data[0].invoice_ids[0];
+
+            const confirmBill = await billService.confirmBill(billId);
+            if (confirmBill.statusCode !== 200) return confirmBill;
 
             //Regresar la informacion de la orden de venta final con orden de compra
             const sale = await this.getSaleById(quotation.data.id);
@@ -139,7 +155,7 @@ const saleService = {
                 statusCode: 201,
                 data: {
                     saleOrder: sale.data[0],
-                    ///purchaseOrder: updatePurchaseOrder.data
+                    purchaseOrder: updatePurchaseOrder.data
                 },
                 message: 'Venta creada con éxito',
             };
