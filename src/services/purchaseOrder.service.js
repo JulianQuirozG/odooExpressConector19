@@ -2,6 +2,7 @@ const { pick } = require('../schemas/bill.schema');
 const { PURCHASE_ORDER_FIELDS, SALE_ORDER_FIELDS } = require('../utils/fields');
 const odooConector = require('../utils/odoo.service');
 const { pickFields } = require('../utils/util');
+const { createBill } = require('./bills.service');
 const partnerService = require('./partner.service');
 const productService = require('./products.service');
 
@@ -98,7 +99,7 @@ const purchaseOrderService = {
                 }
             }
 
-            
+
             const purchaseOrderExists = await this.getPurchaseOrderById(id);
             if (purchaseOrderExists.statusCode !== 200) {
                 return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
@@ -140,6 +141,31 @@ const purchaseOrderService = {
         } catch (error) {
             console.error("Error updating purchase order:", error);
             throw error;
+        }
+    },
+
+    async validListId(purchaseOrderIds) {
+        try {
+            if (!purchaseOrderIds || !Array.isArray(purchaseOrderIds) || purchaseOrderIds.length === 0) {
+                return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de ordenes de compra para validar.' };
+            }
+            const response = await odooConector.executeOdooRequest('purchase.order', 'search_read', {
+                domain: [['id', 'in', purchaseOrderIds]],
+                fields: ['id']
+            });
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al validar IDs de ordenes de compra', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al validar IDs de ordenes de compra', data: response.data };
+            }
+            console.log('Response from validListId:', response.data);
+            const foundIds = response.data.map((po) => { return po.id });
+            const notFoundIds = purchaseOrderIds.filter((id) => !foundIds.includes(id));
+            return { statusCode: 200, message: 'Validación completada', data: { foundIds, notFoundIds } };
+        } catch (error) {
+            console.log('Error en purchaseOrderService.validListId:', error);
+            return { statusCode: 500, message: 'Error al validar IDs de ordenes de compra', error: error.message };
         }
     },
 
@@ -192,6 +218,75 @@ const purchaseOrderService = {
             return {
                 statusCode: 500,
                 message: 'Error al actualizar líneas de orden de compra',
+                error: error.message
+            };
+        }
+    },
+
+    async confirmPurchaseOrder(id) {
+        try {
+            const purchaseOrderExists = await this.getPurchaseOrderById(id);
+            if (purchaseOrderExists.statusCode !== 200) {
+                return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
+            }
+            const response = await odooConector.executeOdooRequest("purchase.order", "button_confirm", {
+                ids: [Number(id)]
+            });
+
+            console.log('Response from confirmPurchaseOrder:', response);
+
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al confirmar orden de compra', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al confirmar orden de compra', data: response.data };
+            }
+            return { statusCode: 200, message: 'Orden de compra confirmada con éxito', data: response.data };
+        } catch (error) {
+            console.error("Error confirming purchase order:", error);
+            return {
+                statusCode: 500,
+                message: 'Error al confirmar orden de compra',
+                error: error.message
+            };
+        }
+    },
+    async createBillFromPurchaseOrder(purchaseOrderId) {
+        try {
+            if (!purchaseOrderId || !Array.isArray(purchaseOrderId) || purchaseOrderId.length === 0) {
+                return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de ordenes de compra para crear facturas.' };
+            }
+            const idArray = purchaseOrderId.map((id) => { return Number(id) });
+
+            const purchaseOrderExists = await this.validListId(idArray);
+
+            if (purchaseOrderExists.statusCode !== 200) {
+                return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
+            }
+            const idsFound = purchaseOrderExists.data.foundIds.map((id) => { return Number(id) });
+
+            if (idsFound.length === 0) {
+                return { statusCode: 404, message: 'Ninguna de las ordenes de compra proporcionadas fue encontrada.', data: [] };
+            }
+            console.log('idsFound for creating bills:', idsFound);
+            const newBill = await odooConector.executeOdooRequest('purchase.order', 'action_create_invoice', {
+                ids: idsFound
+            });
+
+            if (!newBill.success) {
+                if (newBill.error) {
+                    return { statusCode: 500, message: 'Error al crear factura desde orden de compra', error: newBill.message };
+                }
+                return { statusCode: newBill.statusCode, message: newBill.message, data: newBill.data };
+            }
+
+            return { statusCode: 200, message: 'Factura creada con éxito', data: newBill.data };
+
+        } catch (error) {
+            console.error("Error creating bill from purchase order:", error);
+            return {
+                statusCode: 500,
+                message: 'Error al crear factura desde orden de compra',
                 error: error.message
             };
         }

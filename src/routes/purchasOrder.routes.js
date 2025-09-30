@@ -11,5 +11,8 @@ router.get('/:id', purchaseOrderController.getPurchaseOrderById);
 router.post('/', purchaseOrderController.createPurchaseOrder);
 router.put('/:id', purchaseOrderController.updatePurchaseOrder);
 router.put('/editRows/:id', purchaseOrderController.updatePurchaseOrderLines);
+router.post('/confirm/:id', purchaseOrderController.confirmPurchaseOrder);
+router.post('/create-bill', purchaseOrderController.createBillFromPurchaseOrder);
+router.post('/validListId', purchaseOrderController.validListId);
 
 module.exports = router;
