@@ -98,17 +98,6 @@ const purchaseOrderController = {
             console.error('Error en purchaseOrderController.verifyAndUpdatePurchaseOrderLines:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al verificar y actualizar las líneas de la orden de compra', error: error.message });
         }
-    },
-    async createBillFromPurchaseOrder2(req, res) {
-        try {
-            const { id } = req.body;
-            const result = await purchaseOrderService.createBillFromPurchaseOrder2(id);
-            res.status(result.statusCode).json(result);
-        }
-        catch (error) {
-            console.error('Error en purchaseOrderController.createBillFromPurchaseOrder2:', error);
-            res.status(500).json({ statusCode: 500, message: 'Error al crear factura desde la orden de compra', error: error.message });
-        }
     }
 };
 

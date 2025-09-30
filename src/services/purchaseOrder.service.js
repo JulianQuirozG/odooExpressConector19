@@ -540,66 +540,6 @@ const purchaseOrderService = {
                 error: error.message
             };
         }
-    },
-    async createBillFromPurchaseOrder2(purchaseOrderId) {
-        try {
-            if (!purchaseOrderId || !Array.isArray(purchaseOrderId) || purchaseOrderId.length === 0) {
-                return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de ordenes de compra para crear facturas.' };
-            }
-            const idArray = purchaseOrderId.map((id) => { return Number(id) });
-
-            const purchaseOrderExists = await this.validListId(idArray);
-            if (purchaseOrderExists.statusCode !== 200) {
-                return purchaseOrderExists;
-            }
-
-            const idsFound = purchaseOrderExists.data.foundIds.map((id) => { return Number(id) });
-            if (idsFound.length === 0) {
-                return { statusCode: 404, message: 'Ninguna de las ordenes de compra proporcionadas fue encontrada.', data: [] };
-            }
-
-            const billData = {
-                move_type: 'in_invoice', // Factura de proveedor
-                // Obtener datos de la primera orden para la factura
-            };
-
-            const firstOrder = await this.getPurchaseOrderById(idsFound[0]);
-            if (firstOrder.statusCode !== 200) {
-                return firstOrder;
-            }
-            const orderData = firstOrder.data;
-            billData.partner_id = orderData.partner_id[0];
-            if (orderData.currency_id) billData.currency_id = orderData.currency_id[0];
-            if (orderData.company_id) billData.company_id = orderData.company_id[0];
-
-            console.log('Bill data prepared:', billData);
-
-
-            //console.log('idsFound for creating bills:', idsFound);
-            const createResponse = await odooConector.executeOdooRequest('account.move', 'create', {
-                vals_list: [billData]
-            });
-
-
-            if (!createResponse.success) {
-                if (createResponse.error) {
-                    return { statusCode: 500, message: 'Error al crear factura desde orden de compra', error: createResponse.message };
-                }
-                return { statusCode: createResponse.statusCode, message: createResponse.message, data: createResponse.data };
-            }
-            console.log('Bill created with ID:', createResponse.data.id);
-            const bill = await billService.getOneBill(createResponse.data.id);
-
-            return { statusCode: 201, message: 'Factura creada con éxito', data: bill.data };
-
-        } catch (error) {
-            console.error("Error creating bill from purchase order:", error);
-            return {
-                statusCode: 500,
-                message: 'Error al crear factura desde orden de compra',
-                error: error.message
-            };
-        }
     }
 };
 module.exports = purchaseOrderService;
