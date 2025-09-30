@@ -15,7 +15,7 @@ const partnerService = require("./partner.service");
 const quotationService = {
     //obtener todas las cotizaciones
     async getQuotation(quotationFields = ["name", "partner_id", "date_order", "validity_date",
-        "amount_total", "state", "order_line"]) {
+        "amount_total", "state", "order_line", "procurement_group_id"]) {
         try {
             const response = await odooConector.executeOdooRequest(
                 "sale.order",
@@ -99,7 +99,6 @@ const quotationService = {
     //crear una cotización
     async createQuotation(dataQuotation) {
         try {
-
             //verifico que el partner exista
             const partnerResponse = await partnerService.getOnePartner(
                 dataQuotation.partner_id
@@ -113,17 +112,15 @@ const quotationService = {
             }
 
             //Verifico que los productos existan
-            console.log('Data quotation lines:',  dataQuotation.order_line.map((line) => Number(line.product_id)));
             if (dataQuotation.order_line && dataQuotation.order_line.length > 0) {
                 const productResponse = await productService.validListId(
                     dataQuotation.order_line.map((line) => Number(line.product_id))
                 );
 
-                console.log('Productos encontrados:', productResponse);
                 dataQuotation.order_line = dataQuotation.order_line.filter((line) =>
                     productResponse.data.foundIds.includes(Number(line.product_id))
                 );
-              
+
                 if (productResponse.statusCode !== 200) {
                     return {
                         statusCode: productResponse.statusCode,
@@ -149,7 +146,8 @@ const quotationService = {
                 }
             );
 
-            if (!quotation.success) {return {
+            if (!quotation.success) {
+                return {
                     statusCode: 400,
                     message: "Error al crear cotización",
                     data: quotation.data,
@@ -164,7 +162,13 @@ const quotationService = {
             }
 
             //regresar la cotización creada
-            return this.getOneQuotation(quotation.data);
+            const newQuotation = await this.getOneQuotation(quotation.data);
+            if (newQuotation.statusCode !== 200) return newQuotation;
+            return {
+                statusCode: 201,
+                message: "Cotización creada",
+                data: newQuotation.data,
+            };
 
 
         } catch (error) {
@@ -172,6 +176,95 @@ const quotationService = {
             return {
                 statusCode: 500,
                 message: "Error al crear cotización",
+                error: error.message,
+            };
+        }
+    },
+
+    //confirmar una cotización
+    async confirmQuotation(id) {
+        try {
+            //verifico que la cotización exista
+            const quotationResponse = await this.getOneQuotation(id, [['state', '=', 'draft']]);
+            if (quotationResponse.statusCode !== 200) return quotationResponse;
+            console.log(quotationResponse.data);
+            //confirmo la cotización
+            const quotationConfirmed = await odooConector.executeOdooRequest(
+                "sale.order",
+                "action_confirm",
+                { ids: [Number(id)] });
+            if (quotationConfirmed.error) {
+                return {
+                    statusCode: 500,
+                    message: "Error al confirmar cotización",
+                    error: quotationConfirmed.message,
+                };
+            }
+            if (!quotationConfirmed.success) {
+                return {
+                    statusCode: 400,
+                    message: "Error al confirmar cotización",
+                    data: quotationConfirmed.data,
+                };
+            }
+            console.log("Cotización confirmada en Odoo:", quotationConfirmed.data);
+            return {
+                statusCode: 200,
+                message: "Cotización confirmada",
+                data: await this.getOneQuotation(id),
+            };
+        }
+        catch (error) {
+            console.log("Error al confirmar la cotización:", error);
+            return {
+                statusCode: 500,
+                message: "Error al confirmar cotización",
+                error: error.message,
+            };
+        }
+    },
+    async getPurchaseOrderBySaleOrderId(saleOrderId) {
+        try {
+            //verifico que la orden de venta exista
+            const quotationResponse = await this.getOneQuotation(saleOrderId);
+            if (quotationResponse.statusCode !== 200) return quotationResponse;
+
+            //obtengo las ordenes de compra relacionadas
+            let purchaseOrdersIds = await odooConector.executeOdooRequest('sale.order', 'action_view_purchase_orders', { ids: [saleOrderId] });
+            if (purchaseOrdersIds.error) {
+                return {
+                    statusCode: 500,
+                    message: "Error al obtener órdenes de compra",
+                    error: purchaseOrdersIds.message,
+                };
+            }
+            if (!purchaseOrdersIds.success) {
+                return {
+                    statusCode: 400,
+                    message: "Error al obtener órdenes de compra",
+                    data: purchaseOrdersIds.data,
+                };
+            }
+            purchaseOrdersIds = purchaseOrdersIds.data;
+
+            //Si solo tiene una orden de compra relacionada
+            if (purchaseOrdersIds.res_id) purchaseOrdersIds = [purchaseOrdersIds.res_id];
+            else purchaseOrdersIds.data = purchaseOrdersIds.data.domain[0][2];
+
+            //Obtengo los datos de las ordenes de compra
+            const purchaseOrders = await odooConector.executeOdooRequest('purchase.order', 'search_read', {
+                domain: [['id', 'in', purchaseOrdersIds]],
+                fields: ['name', 'partner_id', 'date_order', 'amount_total', 'state', 'order_line'],
+            });
+
+            return { statusCode: 200, message: "Órdenes de compra relacionadas", data: purchaseOrders.data };
+
+
+        } catch (error) {
+            console.log("Error al obtener las órdenes de compra:", error);
+            return {
+                statusCode: 500,
+                message: "Error al obtener órdenes de compra",
                 error: error.message,
             };
         }
