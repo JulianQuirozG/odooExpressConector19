@@ -28,6 +28,9 @@ const productSchema = z.object({
     categ_id: z.number().optional(),
     default_code: z.string().optional(),
     barcode: z.string().optional(),
+    l10n_co_edi_brand: z.string().optional(),
+    l10n_co_edicustoms_code: z.string().optional(),
+    l10n_co_edi_ref_nominal_tax: z.number().optional(),
 
     // UNIDADES
     uom_id: z.number().optional(),
@@ -52,9 +55,12 @@ const productSchema = z.object({
     property_account_income_id: z.number().optional(),
     property_account_expense_id: z.number().optional(),
     property_stock_account_input: z.number().optional(),
-    l10n_co_dian_mandate_contract: z.boolean().optional(),
+    
     company_id: z.number().optional(),
-    service_to_purchase: z.boolean().optional()
+    service_to_purchase: z.boolean().optional(),
+    //contabilidad unspsc
+    l10n_co_dian_mandate_contract: z.boolean().optional(),
+    unspsc_code_id: z.number().optional(),
 
 }).strict();
 
