@@ -151,7 +151,10 @@ const purchaseOrderService = {
                 }
                 return { statusCode: 400, message: 'Error al actualizar orden de compra', data: response.data };
             }
-            return { statusCode: 200, message: 'Orden de compra actualizada con éxito', data: { updateResult: response.data, NotFoundProducts: NotFoundProducts } };
+
+            const purchaseOrderUpdated = await this.getPurchaseOrderById(id);
+
+            return { statusCode: 200, message: 'Orden de compra actualizada con éxito', data: { updateResult: purchaseOrderUpdated.data, NotFoundProducts: NotFoundProducts } };
         } catch (error) {
             console.error("Error updating purchase order:", error);
             throw error;
@@ -231,6 +234,8 @@ const purchaseOrderService = {
                 }
                 return { statusCode: 400, message: 'Error al actualizar líneas de orden de compra', data: response.data };
             }
+
+            
 
             return { statusCode: 200, message: 'Líneas de orden de compra actualizadas con éxito', data: response.data };
 
