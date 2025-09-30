@@ -22,7 +22,7 @@ const purchaseOrderService = {
             return { statusCode: 500, message: 'Error al obtener ordenes de compra', error: error.message };
         }
     },
-    async getPurchaseOrderById(id, purchaseOrderFields = ['name', 'partner_id', 'date_order', 'amount_total', 'state']) {
+    async getPurchaseOrderById(id, purchaseOrderFields = ['name', 'partner_id', 'date_order', 'amount_total', 'state', 'order_line']) {
         try {
             const response = await odooConector.executeOdooRequest('purchase.order', 'search_read', {
                 domain: [['id', '=', Number(id)]],
@@ -121,7 +121,9 @@ const purchaseOrderService = {
                 purchaseOrder.order_line = filterLines.map((line) => { return [0, 0, pickFields(line, SALE_ORDER_FIELDS)] });
 
                 if (purchaseOrder.order_line.length <= 1) {
-                    await this.updatePurchaseOrderLines(id, 5, []); // Elimina todas las líneas existentes
+                    console.log('Eliminando todas las líneas existentes antes de agregar la nueva línea', purchaseOrderExists.data[0].order_line);
+                    console.log((await this.updatePurchaseOrderLines(id, 2, purchaseOrderExists.data[0].order_line)).data); // Elimina todas las líneas existentes
+
                 }
             }
             console.log('purchaseOrder to update:', JSON.stringify(purchaseOrder));
@@ -170,7 +172,9 @@ const purchaseOrderService = {
     },
 
     /**
-     * Actualiza las rows dependiendo de la accción (2) elimina el id de la linea, 
+     * Actualiza las rows dependiendo de la accción
+     * (1) ACTUALIZAR lineas,
+     * (2) elimina el id de la linea, 
      * (3) desconecta la línea pero no la elimina de la base de datos, 
      * (5) elimina todas las líneas conectadas, 
      * (6) reemplaza todas las líneas con las especificadas
@@ -181,7 +185,7 @@ const purchaseOrderService = {
             if (purchaseOrderExists.statusCode !== 200) {
                 return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
             }
-            const validActions = [2, 3, 5, 6];
+            const validActions = [1, 2, 3, 5, 6];
             if (!validActions.includes(action)) {
                 return { statusCode: 400, message: 'Acción no válida. Use 2 (eliminar), 3 (desconectar), 5 (eliminar todas), o 6 (reemplazar).' };
             }
@@ -195,14 +199,20 @@ const purchaseOrderService = {
             let actions = [action, ...lines];
             if (action === 5) {
                 actions = [action];
+            } else if (action === 2) {
+                actions = lines.map((line) => { return [2, line] });
+            } else if (action === 1) {
+                actions = lines.map((line, index) => { return [1, purchaseOrderExists.data[0].order_line[Number(index)], line] });
             }
+
+            console.log('Actions for updatePurchaseOrderLines:', actions);
             const response = await odooConector.executeOdooRequest("purchase.order", "write", {
                 ids: [Number(id)],
                 vals: {
-                    order_line: [actions]
+                    order_line: actions
                 }
             });
-
+            console.log('Response from updatePurchaseOrderLines:', response);
             if (!response.success) {
                 if (response.error) {
                     return { statusCode: 500, message: 'Error al actualizar líneas de orden de compra', error: response.message };
@@ -218,6 +228,37 @@ const purchaseOrderService = {
             return {
                 statusCode: 500,
                 message: 'Error al actualizar líneas de orden de compra',
+                error: error.message
+            };
+        }
+    },
+
+    //recibe el id de la orden de compra y una lista de lineas [{id:1,product_id:12}{id:1,product_id:13}] a verificar
+    async verifyAndUpdatePurchaseOrderLines(id, lines = []) {
+        try {
+            const purchaseOrderExists = await this.getPurchaseOrderById(id);
+            if (purchaseOrderExists.statusCode !== 200) {
+                return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
+            }
+
+            //verificamos que la lista de lineas a verificar correspondan en size
+            if ((!lines || lines.length === 0) || lines.length !== purchaseOrderExists.data[0].order_line.length) {
+                return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de líneas para verificar y actualizar.' };
+            }
+
+            const response = await this.updatePurchaseOrderLines(id, 1, lines);
+
+            if (response.statusCode !== 200) {
+                return { statusCode: response.statusCode, message: response.message, data: response.data };
+            }
+
+            return { statusCode: 200, message: 'Líneas de orden de compra verificadas y actualizadas con éxito', data: response.data };
+
+        } catch (error) {
+            console.error("Error in verifyAndUpdatePurchaseOrderLines:", error);
+            return {
+                statusCode: 500,
+                message: 'Error al verificar y actualizar líneas de orden de compra',
                 error: error.message
             };
         }
