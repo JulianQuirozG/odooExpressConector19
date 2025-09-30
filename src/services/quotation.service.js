@@ -61,7 +61,6 @@ const quotationService = {
                 "search_read",
                 {
                     domain: domainFinal,
-                    fields: ["name", "partner_id", "date_order", "validity_date", "amount_total", "state", "order_line"],
                     limit: 1,
                 }
             );

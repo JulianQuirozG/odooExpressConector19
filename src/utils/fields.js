@@ -130,6 +130,59 @@ const INVOICE_LINE_FIELDS = [
 
 const QUOTATION_LINES_FIELDS = ["partner_id","order_line"];
 
+const PURCHASE_ORDER_FIELDS = [
+    // BÁSICOS
+    "partner_id",
+    "currency_id", 
+    "company_id",
+    
+    // FECHAS
+    "date_order",
+    "date_planned",
+    
+    // CONFIGURACIONES
+    "locked",
+    "priority",
+    "partner_ref",
+    "receipt_reminder_email",
+    "reminder_date_before_receipt",
+    "picking_type_id",
+    "dest_address_id",
+    
+    // INFORMACIÓN ADICIONAL
+    "note",
+    "user_id",
+    "origin",
+    
+    // TÉRMINOS COMERCIALES
+    "incoterm_id",
+    "incoterm_location",
+    "payment_term_id",
+    "fiscal_position_id",
+    
+    // ESTADOS Y CONTROL
+    "state",
+    "invoice_status",
+    "receipt_reminder_email"
+];
+
+const SALE_ORDER_FIELDS = [
+    // PARTNER Y DIRECCIONES
+    "partner_id",
+    "partner_invoice_id", 
+    "partner_shipping_id",
+    "company_id",
+    
+    "name",              // ✅ OBLIGATORIO - Descripción
+    "product_qty",       // ✅ OBLIGATORIO - Cantidad
+    "price_unit",        // ✅ OBLIGATORIO - Precio unitario
+    "product_uom_id",    // ✅ OBLIGATORIO - Unidad de medida
+    "date_planned",      // ✅ OBLIGATORIO - Fecha planeada
+    "product_id",        // ✅ OBLIGATORIO - ID del producto
+    "discount",
+    "propagate_cancel",
+
+];
 
 const QUOTATION_LINES = [
     0, 0,
@@ -156,5 +209,7 @@ module.exports = {
     BANK_ACCOUNT_PARTNER_FIELDS,
     PRODUCT_FIELDS_BILL,
     QUOTATION_FIELDS,
-    QUOTATION_LINES
+    QUOTATION_LINES,
+    SALE_ORDER_FIELDS,
+    PURCHASE_ORDER_FIELDS
 };
