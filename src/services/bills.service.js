@@ -9,6 +9,7 @@ const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 const productService = require("./products.service");
 const partnerService = require("./partner.service");
+const { updateBill } = require("../controllers/bill.controller");
 
 const billService = {
     //obtener todas las facturas
@@ -165,7 +166,7 @@ const billService = {
         }
     },
     //actualizar una factura
-    async updateBill(id, dataBill) {
+    async updateBill(id, dataBill, action = 'replace') {
         try {
             const billExists = await this.getOneBill(id);
             if (billExists.statusCode !== 200) {
@@ -175,36 +176,45 @@ const billService = {
                     data: billExists.data,
                 };
             }
+            //verifico al partner si viene en el body
             const bill = pickFields(dataBill, BILL_FIELDS);
 
             if (dataBill.invoice_line_ids && dataBill.invoice_line_ids.length >= 0) {
                 const lineIds = billExists.data.invoice_line_ids;
-                if (lineIds && lineIds.length > 0) {
-                    const deleted = await odooConector.executeOdooRequest(
-                        "account.move.line",
-                        "unlink",
-                        {
-                            ids: lineIds,
-                        }
-                    );
-                    console.log(deleted);
-                }
 
-                const productResponse = await productService.validListId(
-                    dataBill.invoice_line_ids.map((line) => {
-                        return Number(line.product_id);
-                    })
-                );
-                const productsFound = dataBill.invoice_line_ids
-                    .map((line) => {
-                        return productResponse.data.foundIds.includes(
-                            Number(line.product_id)
-                        )
-                            ? [0, 0, pickFields(line, INVOICE_LINE_FIELDS)]
-                            : false;
-                    })
-                    .filter((line) => line !== false);
-                bill.invoice_line_ids = productsFound;
+                //si viene replace borro todas las lineas anteriores y agrego las nuevas
+                //verifico si hay lineas para agregar
+                if (dataBill.invoice_line_ids.length > 0) {
+                    //le saco el id de los productos al body y verifico que existan
+                    const productResponse = await productService.validListId(
+                        dataBill.invoice_line_ids.map((line) => {
+                            return Number(line.product_id);
+                        })
+                    );
+                    //obtengo las lineas que tienen productos existentes
+                    const linesToAdd = dataBill.invoice_line_ids.filter((line) =>
+                        productResponse.data.foundIds.includes(Number(line.product_id))
+                    );
+
+                    console.log(linesToAdd);
+                    //construyo las lineas que deben ir en el body para construir
+                    const productsFound = linesToAdd.map((line) => [0, 0, pickFields(line, INVOICE_LINE_FIELDS)]);
+                    bill.invoice_line_ids = productsFound;
+                    console.log(bill);
+
+                }
+                if (action === 'replace') {
+                    //si hay lineas las elimino
+                    if (lineIds.length > 0) {
+                        const deleted = await this.updateBillLines(id, 2, lineIds);
+                        if (deleted.statusCode !== 200) {
+                            return deleted;
+                        }
+                    }
+                } else if (action === 'update') {
+                    //si viene update ceirfico el tamaño de las linas y las actualizo
+                    await this.verifyBillLines(id, pickFields(dataBill.invoice_line_ids, INVOICE_LINE_FIELDS));
+                }
             }
 
             const response = await odooConector.executeOdooRequest(
@@ -231,7 +241,7 @@ const billService = {
                 };
             }
             return {
-                statusCode: 201,
+                statusCode: 200,
                 message: "Factura actualizada con éxito",
                 data: response.data,
             };
@@ -242,6 +252,49 @@ const billService = {
                 message: "Error al actualizar factura",
                 error: error.message,
             };
+        }
+    },
+    async verifyBillLines(id, lines) {
+        try {
+            const billExists = await this.getOneBill(id);
+            if (billExists.statusCode !== 200) {
+                return {
+                    statusCode: billExists.statusCode,
+                    message: billExists.message,
+                    data: billExists.data,
+                };
+            }
+
+            const lineIds = billExists.data.invoice_line_ids;
+
+            if (lines.length !== lineIds.length || lines.length === 0) {
+                return {
+                    statusCode: 400,
+                    message: "La cantidad de lineas no coincide con las existentes",
+                };
+            }
+
+            const productsIds = await productService.validListId(lines.map((line) => line.product_id));
+
+            if (productsIds.statusCode !== 200 || productsIds.data.foundIds.length !== lines.length) {
+                return {
+                    statusCode: 400,
+                    message: "Los productos no son válidos",
+                };
+            }
+
+            const response = await this.updateBillLines(id, 1, lines);
+            if (response.statusCode !== 200) {
+                return response;
+            }
+            return {
+                statusCode: 200,
+                message: "Líneas de factura actualizadas con éxito",
+                data: response.data,
+            };
+
+        } catch (error) {
+
         }
     },
     //eliminar una factura
@@ -697,7 +750,69 @@ const billService = {
                 error: error.message
             };
         }
-    }
+    },
+    async updateBillLines(id, action, lines) {
+        try {
+            //verificamos que la orden de compra exista
+            const billExists = await this.getOneBill(id);
+            if (billExists.statusCode !== 200) {
+                return { statusCode: billExists.statusCode, message: billExists.message, data: billExists.data };
+            }
+            //validamos la acción a realizar
+            const validActions = [1, 2, 3, 5, 6];
+            if (!validActions.includes(action)) {
+                return { statusCode: 400, message: 'Acción no válida. Use 1(Actualizar), 2 (eliminar), 3 (desconectar), 5 (eliminar todas), o 6 (reemplazar).' };
+            }
+
+            let lineCommands = [];
+            //verificamos que si la accion requiere lineas, de ids, o de información, estas existan
+            if (action === 2 || action === 3) {
+                if (!lines || !Array.isArray(lines) || lines.length === 0) {
+                    return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de líneas para las acciones 2 o 3.' };
+                }
+            }
+
+            //construimos la accion a realizar, pasandole las variables correspondientes a cada accion
+            let actions = [action, ...lines];
+            if (action === 5) {
+                //accion 5 (eliminar todas las lineas) no requiere mas parametros
+                actions = [action];
+            } else if (action === 2) {
+                //creamos un array con la accion 2 (eliminar) y el id de la linea que vamos a eliminar
+                actions = lines.map((line) => { return [2, line] });
+            } else if (action === 1) {
+                //creamos un array con la accion 1 (actualizar), el id de la linea que vamos a actualizar y la informacion con la que vamos a actualizarla
+                actions = lines.map((line, index) => { return [1, billExists.data.invoice_line_ids[Number(index)], line] });
+            }
+
+            console.log('Actions for updatePurchaseOrderLines:', actions);
+            const response = await odooConector.executeOdooRequest("account.move", "write", {
+                ids: [Number(id)],
+                vals: {
+                    invoice_line_ids: actions
+                }
+            });
+            console.log('Response from updatePurchaseOrderLines:', response);
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al actualizar líneas de orden de compra', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al actualizar líneas de orden de compra', data: response.data };
+            }
+
+
+
+            return { statusCode: 200, message: 'Líneas de orden de compra actualizadas con éxito', data: response.data };
+
+        } catch (error) {
+            console.error("Error updating purchase order lines:", error);
+            return {
+                statusCode: 500,
+                message: 'Error al actualizar líneas de orden de compra',
+                error: error.message
+            };
+        }
+    },
 };
 
 module.exports = billService;

@@ -120,6 +120,17 @@ const billController = {
             console.error('Error en billController.applyCreditNoteToInvoice:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al aplicar nota de crédito a la factura', error: error.message });
         }
+    },
+    async verifyBillLines(req, res) {
+        try {
+            const { id } = req.params;
+            const { invoice_line_ids } = req.body;
+            const result = await billService.verifyBillLines(id, invoice_line_ids);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.verifyBillLines:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al verificar líneas de la factura', error: error.message });
+        }
     }
 }
 
