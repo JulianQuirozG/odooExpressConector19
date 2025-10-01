@@ -55,13 +55,13 @@ const saleService = {
         try {
             // Validar el ID de la venta
             if (isNaN(Number(id))) return { statusCode: 400, message: 'ID de venta inválido', data: [] };
-            
+
             // Obtener una orden de venta por ID
             const response = await odooConector.executeOdooRequest(
                 "sale.order",
                 "search_read",
                 {
-                    
+
                     domain: [["state", "in", ["sale", "done"]], ["id", "=", id]],
                     limit: 1
                 }
@@ -141,19 +141,28 @@ const saleService = {
             const bill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
             if (bill.statusCode !== 201) return bill;
 
+
+            //Actualizamos la factura validar los campos personalizados
+            const updatePurchaseBill = await billService.updateBill(bill.data.id, { invoice_line_ids: dataCompra.order_line }, 'update');
+            if (updatePurchaseBill.statusCode !== 200) return updatePurchaseBill;
+
             //Confirmar factura de la orden de compra
             const confirmBill = await billService.confirmBill(bill.data.id);
             if (confirmBill.statusCode !== 200) return confirmBill;
 
             //Regresar la informacion de la orden de venta final con orden de compra
             const sale = await this.getSaleById(quotation.data.id);
-
             if (sale.statusCode !== 200) return sale;
+
+            const billDetails = await billService.getOneBill(bill.data.id);
+            if (billDetails.statusCode !== 200) return billDetails;
+
             return {
                 statusCode: 201,
                 data: {
                     saleOrder: sale.data[0],
-                    purchaseOrder: updatePurchaseOrder.data
+                    purchaseOrder: updatePurchaseOrder.data,
+                    purchaseBill: billDetails.data
                 },
                 message: 'Venta creada con éxito',
             };
