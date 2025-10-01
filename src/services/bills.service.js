@@ -12,7 +12,7 @@ const partnerService = require("./partner.service");
 
 const billService = {
     //obtener todas las facturas
-    async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref","amount_untaxed_in_currency_signed" ,"state"]) {
+    async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"]) {
         try {
             const response = await odooConector.executeOdooRequest(
                 "account.move",
@@ -58,7 +58,6 @@ const billService = {
                 "search_read",
                 {
                     domain: domainFinal,
-                    fields: [...BILL_FIELDS, "invoice_line_ids"],
                     limit: 1,
                 }
             );
@@ -601,6 +600,42 @@ const billService = {
             return {
                 statusCode: 500,
                 message: "Error al crear pago",
+                error: error.message,
+            };
+        }
+    },
+    async listOutstandingCredits(invoiceId) {
+        try {
+            const billExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            if (billExists.statusCode !== 200) {
+                return {
+                    statusCode: billExists.statusCode,
+                    message: billExists.message,
+                    data: billExists.data,
+                };
+            }
+
+            //ahora obtengo los datos del campo "invoice_outstanding_credits_debits_widget" donde se listan los pagos
+            const outstandingCredits = billExists.data.invoice_outstanding_credits_debits_widget;
+
+            if (!outstandingCredits) {
+                return {
+                    statusCode: 200,
+                    message: "Notas de crédito pendientes obtenidas con éxito",
+                    data: [],
+                };
+            }
+            
+            return {
+                statusCode: 200,
+                message: "Notas de crédito pendientes obtenidas con éxito",
+                data: outstandingCredits.content,
+            };
+        } catch (error) {
+            console.log("Error en billService.listOutstanding_credits:", error);
+            return {
+                statusCode: 500,
+                message: "Error al obtener notas de credito pendientes",
                 error: error.message,
             };
         }
