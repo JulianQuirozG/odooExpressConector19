@@ -13,5 +13,7 @@ const router = express.Router();
     router.post('/debit-note/:id', billController.debitNote);
     router.post('/credit-note/:id', billController.creditNote);
     router.post('/payment/:invoiceId', billController.createPayment);
+    router.get('/outstanding-credits/:invoiceId', billController.listOutstandingCredits);
+    router.post('/apply-credits/:invoiceId', billController.applyCreditNote);
 
 module.exports = router;

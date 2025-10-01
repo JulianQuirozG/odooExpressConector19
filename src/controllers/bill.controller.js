@@ -6,7 +6,7 @@ const billController = {
         try {
             const result = await billService.getBills();
             res.status(result.statusCode).json(result);
-        }catch (error) {
+        } catch (error) {
             console.error('Error en billController.getBills:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al obtener facturas', error: error.message });
         }
@@ -31,7 +31,7 @@ const billController = {
         }
     },
     async updateBill(req, res) {
-        try{
+        try {
             const { id } = req.params;
             const result = await billService.updateBill(id, req.body);
             res.status(result.statusCode).json(result);
@@ -51,7 +51,7 @@ const billController = {
         }
     },
     async confirmBill(req, res) {
-        try{
+        try {
             const { id } = req.params;
             const result = await billService.confirmBill(id);
             res.status(result.statusCode).json(result);
@@ -61,31 +61,31 @@ const billController = {
         }
     },
     async resetToDraftBill(req, res) {
-        try{
+        try {
             const { id } = req.params;
             const result = await billService.resetToDraftBill(id);
             res.status(result.statusCode).json(result);
         } catch (error) {
             console.error('Error en billController.resetToDraftBill:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al reestablecer factura a borrador', error: error.message });
-        }   
+        }
     },
     async debitNote(req, res) {
-        try{
+        try {
             const { id } = req.params;
-            const result = await billService.createDebitNote(id,req.body);
+            const result = await billService.createDebitNote(id, req.body);
             res.status(result.statusCode).json(result);
         } catch (error) {
             console.error('Error en billController.debitNote:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al crear nota de débito', error: error.message });
-        }   
+        }
     },
     async creditNote(req, res) {
-        try{
+        try {
             const { id } = req.params;
-            const result = await billService.createCreditNote(id,req.body);
+            const result = await billService.createCreditNote(id, req.body);
             res.status(result.statusCode).json(result);
-        }catch (error) {
+        } catch (error) {
             console.error('Error en billController.creditNote:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al crear nota de crédito', error: error.message });
         }
@@ -98,6 +98,27 @@ const billController = {
         } catch (error) {
             console.error('Error en billController.createPayment:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al crear pago', error: error.message });
+        }
+    },
+    async listOutstandingCredits(req, res) {
+        try {
+            const { invoiceId } = req.params;
+            const result = await billService.listOutstandingCredits(invoiceId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.listOutstandingCredits:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener notas de crédito pendientes', error: error.message });
+        }
+    },
+    async applyCreditNote(req, res) {
+        try {
+            const { invoiceId } = req.params;
+            const { creditNoteId } = req.body;
+            const result = await billService.applyCreditNote(invoiceId, creditNoteId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.applyCreditNoteToInvoice:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al aplicar nota de crédito a la factura', error: error.message });
         }
     }
 }

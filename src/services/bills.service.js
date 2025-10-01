@@ -12,7 +12,7 @@ const partnerService = require("./partner.service");
 
 const billService = {
     //obtener todas las facturas
-    async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref","amount_untaxed_in_currency_signed" ,"state"]) {
+    async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"]) {
         try {
             const response = await odooConector.executeOdooRequest(
                 "account.move",
@@ -58,7 +58,6 @@ const billService = {
                 "search_read",
                 {
                     domain: domainFinal,
-                    fields: [...BILL_FIELDS, "invoice_line_ids"],
                     limit: 1,
                 }
             );
@@ -546,7 +545,7 @@ const billService = {
 
             // Validar y ajustar el monto
             if (paymentDatas.amount <= 0) return { statusCode: 400, message: "El monto del pago debe ser positivo", data: [] };
-            
+
 
             const wizardData = {
                 payment_date: paymentDatas.date || new Date().toISOString().split("T")[0],
@@ -615,6 +614,81 @@ const billService = {
                 statusCode: 500,
                 message: "Error al crear pago",
                 error: error.message,
+            };
+        }
+    },
+    async listOutstandingCredits(invoiceId) {
+        try {
+            const billExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            if (billExists.statusCode !== 200) {
+                return {
+                    statusCode: billExists.statusCode,
+                    message: billExists.message,
+                    data: billExists.data,
+                };
+            }
+
+            //ahora obtengo los datos del campo "invoice_outstanding_credits_debits_widget" donde se listan los pagos
+            const outstandingCredits = billExists.data.invoice_outstanding_credits_debits_widget;
+
+            if (!outstandingCredits) {
+                return {
+                    statusCode: 200,
+                    message: "Notas de crédito pendientes obtenidas con éxito",
+                    data: [],
+                };
+            }
+
+            return {
+                statusCode: 200,
+                message: "Notas de crédito pendientes obtenidas con éxito",
+                data: outstandingCredits.content,
+            };
+        } catch (error) {
+            console.log("Error en billService.listOutstanding_credits:", error);
+            return {
+                statusCode: 500,
+                message: "Error al obtener notas de credito pendientes",
+                error: error.message,
+            };
+        }
+    },
+    async applyCreditNote(invoiceId, creditMoveId) {
+        try {
+            const outstandingCredits = await this.listOutstandingCredits(invoiceId);
+            const creditToApply = outstandingCredits.data.find(credit => credit.id === creditMoveId);
+            console.log(creditToApply);
+            if (!creditToApply) {
+                return {
+                    statusCode: 404,
+                    message: "La nota de crédito no se encuentra entre las pendientes",
+                    data: null
+                };
+            }
+
+            const response = await odooConector.executeOdooRequest(
+                'account.move',
+                'js_assign_outstanding_line',
+                { args: [Number(invoiceId), Number(creditMoveId)] });
+
+            if (!response.success) {
+                if (response.error) {
+                    return {
+                        statusCode: 500,
+                        message: "Error al aplicar nota de crédito",
+                        error: response.message
+                    };
+                }
+                return { statusCode: 400, message: "Error al aplicar nota de crédito", data: response.data };
+            }
+            return { statusCode: 200, message: "Nota de crédito aplicada con éxito", data: response.data };
+
+        } catch (error) {
+            console.log("Error en billService.applyCreditNote:", error);
+            return {
+                statusCode: 500,
+                message: "Error al aplicar nota de crédito",
+                error: error.message
             };
         }
     }
