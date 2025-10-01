@@ -349,6 +349,7 @@ const purchaseOrderService = {
                     return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de líneas para las acciones 2 o 3.' };
                 }
             }
+            console.log('Updating purchase order lines with action:', action, 'and lines:', lines);
 
             let actions = [action, ...lines];
             if (action === 5) {
@@ -356,7 +357,7 @@ const purchaseOrderService = {
             } else if (action === 2) {
                 actions = lines.map((line) => { return [2, line] });
             } else if (action === 1) {
-                actions = lines.map((line, index) => { return [1, purchaseOrderExists.data[0].order_line[Number(index)], line] });
+                actions = lines.map((line, index) => { return [1, purchaseOrderExists.data.order_line[Number(index)], line] });
             }
 
             console.log('Actions for updatePurchaseOrderLines:', actions);
