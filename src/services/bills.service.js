@@ -196,15 +196,16 @@ const billService = {
                         productResponse.data.foundIds.includes(Number(line.product_id))
                     );
 
+
+
+                }
+                if (action === 'replace') {
+                    //si hay lineas las elimino
                     console.log(linesToAdd);
                     //construyo las lineas que deben ir en el body para construir
                     const productsFound = linesToAdd.map((line) => [0, 0, pickFields(line, INVOICE_LINE_FIELDS)]);
                     bill.invoice_line_ids = productsFound;
                     console.log(bill);
-
-                }
-                if (action === 'replace') {
-                    //si hay lineas las elimino
                     if (lineIds.length > 0) {
                         const deleted = await this.updateBillLines(id, 2, lineIds);
                         if (deleted.statusCode !== 200) {
@@ -213,7 +214,8 @@ const billService = {
                     }
                 } else if (action === 'update') {
                     //si viene update ceirfico el tamaño de las linas y las actualizo
-                    await this.verifyBillLines(id, pickFields(dataBill.invoice_line_ids, INVOICE_LINE_FIELDS));
+                    console.log('Verificando lineas a actualizar', dataBill.invoice_line_ids.map((line) => { return pickFields(line, INVOICE_LINE_FIELDS); }));
+                    await this.verifyBillLines(id, dataBill.invoice_line_ids.map((line) => { return pickFields(line, INVOICE_LINE_FIELDS); }));
                 }
             }
 
