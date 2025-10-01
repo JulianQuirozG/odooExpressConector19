@@ -189,6 +189,7 @@ const purchaseOrderService = {
                     return { statusCode: partnerExist.statusCode, message: partnerExist.message, data: partnerExist.data };
                 }
             }
+            console.log("Datos a actualizar:", data);
 
 
             const purchaseOrderExists = await this.getPurchaseOrderById(id);
@@ -216,6 +217,7 @@ const purchaseOrderService = {
                 if (action === 'replace') {
                     //eliminar todas las rows existentes y agrega las nuevas
                     purchaseOrder.order_line = filterLines.map((line) => { return [0, 0, pickFields(line, SALE_ORDER_FIELDS)] });
+                    console.log('Reemplazando todas las líneas con las nuevas líneas', purchaseOrder.order_line);
                     if (purchaseOrder.order_line.length <= 1) {
                         console.log('Eliminando todas las líneas existentes antes de agregar la nueva línea', purchaseOrderExists.data[0].order_line);
                         console.log((await this.updatePurchaseOrderLines(id, 2, purchaseOrderExists.data[0].order_line)).data); // Elimina todas las líneas existentes
@@ -224,6 +226,7 @@ const purchaseOrderService = {
 
                 } else if (action === 'update') {
                     // Actualiza las líneas existentes con las nueva información, los tamaños de las rows deber ser iguales para poder verificar
+                    console.log('Actualizando las líneas existentes con las nuevas líneas', filterLines);
                     await this.verifyAndUpdatePurchaseOrderLines(id, filterLines);
                 }
 
