@@ -655,8 +655,11 @@ const billService = {
     },
     async applyCreditNote(invoiceId, creditMoveId) {
         try {
+            //Consultar notas de credito del cliente
             const outstandingCredits = await this.listOutstandingCredits(invoiceId);
             const creditToApply = outstandingCredits.data.find(credit => credit.id === creditMoveId);
+
+
             console.log(creditToApply);
             if (!creditToApply) {
                 return {
@@ -669,7 +672,10 @@ const billService = {
             const response = await odooConector.executeOdooRequest(
                 'account.move',
                 'js_assign_outstanding_line',
-                { args: [Number(invoiceId), Number(creditMoveId)] });
+                {
+                    ids: Number(invoiceId),
+                    line_id: Number(creditMoveId)
+                });
 
             if (!response.success) {
                 if (response.error) {

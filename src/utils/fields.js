@@ -101,8 +101,8 @@ const PRODUCT_FIELDS = [
     "name", "default_code", "type",            // 'product', 'consu', 'service'
     "list_price", "standard_price", "categ_id", "uom_id", "uom_po_id", "barcode",
     "sale_ok", "purchase_ok", "active", "description", "image_1920", "company_id",
-    "taxes_id", "supplier_taxes_id", "weight", "volume", "tracking","service_to_purchase","l10n_co_dian_mandate_contract",
-    "property_account_income_id","property_account_expense_id","property_stock_account_input","purchase_method"
+    "taxes_id", "supplier_taxes_id", "weight", "volume", "tracking", "service_to_purchase", "l10n_co_dian_mandate_contract",
+    "property_account_income_id", "property_account_expense_id", "property_stock_account_input", "purchase_method"
 ];
 
 const PRODUCT_FIELDS_BILL = [
@@ -128,18 +128,18 @@ const INVOICE_LINE_FIELDS = [
     // ...otros campos de línea si los necesitas
 ];
 
-const QUOTATION_LINES_FIELDS = ["partner_id","order_line"];
+const QUOTATION_LINES_FIELDS = ["partner_id", "order_line"];
 
 const PURCHASE_ORDER_FIELDS = [
     // BÁSICOS
     "partner_id",
-    "currency_id", 
+    "currency_id",
     "company_id",
-    
+
     // FECHAS
     "date_order",
     "date_planned",
-    
+
     // CONFIGURACIONES
     "locked",
     "priority",
@@ -148,31 +148,34 @@ const PURCHASE_ORDER_FIELDS = [
     "reminder_date_before_receipt",
     "picking_type_id",
     "dest_address_id",
-    
+
     // INFORMACIÓN ADICIONAL
     "note",
     "user_id",
     "origin",
-    
+
     // TÉRMINOS COMERCIALES
     "incoterm_id",
     "incoterm_location",
     "payment_term_id",
     "fiscal_position_id",
-    
+
     // ESTADOS Y CONTROL
     "state",
     "invoice_status",
-    "receipt_reminder_email"
+    "receipt_reminder_email",
+
+    //NUEVAS CAMPOS ESTUDIO
+    "x_studio_rad_rndc"
 ];
 
 const SALE_ORDER_FIELDS = [
     // PARTNER Y DIRECCIONES
     "partner_id",
-    "partner_invoice_id", 
+    "partner_invoice_id",
     "partner_shipping_id",
     "company_id",
-    
+
     "name",              // ✅ OBLIGATORIO - Descripción
     "product_qty",       // ✅ OBLIGATORIO - Cantidad
     "price_unit",        // ✅ OBLIGATORIO - Precio unitario
@@ -181,6 +184,8 @@ const SALE_ORDER_FIELDS = [
     "product_id",        // ✅ OBLIGATORIO - ID del producto
     "discount",
     "propagate_cancel",
+    "x_studio_rad_rndc",
+    "x_studio_n_remesa",
 
 ];
 
