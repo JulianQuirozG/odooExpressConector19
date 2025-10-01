@@ -545,7 +545,7 @@ const billService = {
 
             // Validar y ajustar el monto
             if (paymentDatas.amount <= 0) return { statusCode: 400, message: "El monto del pago debe ser positivo", data: [] };
-            
+
 
             const wizardData = {
                 payment_date: paymentDatas.date || new Date().toISOString().split("T")[0],
@@ -638,7 +638,7 @@ const billService = {
                     data: [],
                 };
             }
-            
+
             return {
                 statusCode: 200,
                 message: "Notas de crédito pendientes obtenidas con éxito",
@@ -650,6 +650,45 @@ const billService = {
                 statusCode: 500,
                 message: "Error al obtener notas de credito pendientes",
                 error: error.message,
+            };
+        }
+    },
+    async applyCreditNote(invoiceId, creditMoveId) {
+        try {
+            const outstandingCredits = await this.listOutstandingCredits(invoiceId);
+            const creditToApply = outstandingCredits.data.find(credit => credit.id === creditMoveId);
+            console.log(creditToApply);
+            if (!creditToApply) {
+                return {
+                    statusCode: 404,
+                    message: "La nota de crédito no se encuentra entre las pendientes",
+                    data: null
+                };
+            }
+
+            const response = await odooConector.executeOdooRequest(
+                'account.move',
+                'js_assign_outstanding_line',
+                { args: [Number(invoiceId), Number(creditMoveId)] });
+
+            if (!response.success) {
+                if (response.error) {
+                    return {
+                        statusCode: 500,
+                        message: "Error al aplicar nota de crédito",
+                        error: response.message
+                    };
+                }
+                return { statusCode: 400, message: "Error al aplicar nota de crédito", data: response.data };
+            }
+            return { statusCode: 200, message: "Nota de crédito aplicada con éxito", data: response.data };
+
+        } catch (error) {
+            console.log("Error en billService.applyCreditNote:", error);
+            return {
+                statusCode: 500,
+                message: "Error al aplicar nota de crédito",
+                error: error.message
             };
         }
     }

@@ -109,6 +109,17 @@ const billController = {
             console.error('Error en billController.listOutstandingCredits:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al obtener notas de crédito pendientes', error: error.message });
         }
+    },
+    async applyCreditNote(req, res) {
+        try {
+            const { invoiceId } = req.params;
+            const { creditNoteId } = req.body;
+            const result = await billService.applyCreditNote(invoiceId, creditNoteId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.applyCreditNoteToInvoice:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al aplicar nota de crédito a la factura', error: error.message });
+        }
     }
 }
 
