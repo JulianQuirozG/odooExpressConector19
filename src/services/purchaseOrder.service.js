@@ -421,7 +421,7 @@ const purchaseOrderService = {
             }
 
             //verificamos que la lista de lineas a verificar correspondan en size
-            if ((!lines || lines.length === 0) || lines.length !== purchaseOrderExists.data[0].order_line.length) {
+            if ((!lines || lines.length === 0) || lines.length !== purchaseOrderExists.data.order_line.length) {
                 return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de líneas para verificar y actualizar.' };
             }
 
