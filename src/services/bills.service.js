@@ -52,7 +52,7 @@ const billService = {
     //obtener una factura por id
     async getOneBill(id, domain = []) {
         try {
-            const domainFinal = [['id', '=', id], ...domain];
+            const domainFinal = [['id', '=', Number(id)], ...domain];
             const response = await odooConector.executeOdooRequest(
                 "account.move",
                 "search_read",
@@ -520,7 +520,18 @@ const billService = {
     // Crear un pago para una factura de una factura confirmada
     async createPayment(invoiceId, paymentDatas) {
         try {
+            //Verificar que el id sea valido
+            if (!invoiceId || isNaN(Number(invoiceId))) {
+                return {
+                    statusCode: 400,
+                    message: "ID de factura inválido",
+                    data: null,
+                };
+            }
+
+            // Verificar que la factura exista y esté confirmada
             const billExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            console.log(billExists);
             if (billExists.statusCode !== 200) {
                 return {
                     statusCode: billExists.statusCode,
@@ -529,20 +540,22 @@ const billService = {
                 };
             }
 
+            // Obtener el monto residual de la factura
             const invoice = billExists.data;
             const residual = invoice.amount_residual;
 
             // Validar y ajustar el monto
-            if (paymentDatas.amount && paymentDatas.amount > residual) {
-                paymentDatas.amount = residual;
-            }
+            if (paymentDatas.amount <= 0) return { statusCode: 400, message: "El monto del pago debe ser positivo", data: [] };
+            
 
             const wizardData = {
                 payment_date: paymentDatas.date || new Date().toISOString().split("T")[0],
                 communication: paymentDatas.memo || `Pago de ${invoice.name}`,
                 amount: paymentDatas.amount || residual,
                 journal_id: paymentDatas.journal_id || false,
-                payment_method_line_id: Number(paymentDatas.payment_method_line_id) || false
+                payment_method_line_id: Number(paymentDatas.payment_method_line_id) || false,
+                communication: invoice.payment_reference || ""
+
             };
             console.log("Datos del wizard de pago:", wizardData);
             // Crear el wizard con la estructura correcta
