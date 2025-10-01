@@ -183,6 +183,7 @@ const purchaseOrderService = {
      */
     async updatePurchaseOrder(id, data, action = 'replace') {
         try {
+            // Validar que el ID de cliente exista
             if (data.partner_id) {
                 const partnerExist = await partnerService.getOnePartner(data.partner_id);
                 if (partnerExist.statusCode !== 200) {
@@ -191,12 +192,13 @@ const purchaseOrderService = {
             }
             console.log("Datos a actualizar:", data);
 
-
+            // Verificar que la orden de compra exista
             const purchaseOrderExists = await this.getPurchaseOrderById(id);
             if (purchaseOrderExists.statusCode !== 200) {
                 return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
             }
 
+            // obtengo los datos de la orden a actualizar
             const purchaseOrder = pickFields(data, PURCHASE_ORDER_FIELDS);
             let NotFoundProducts = [];
 
@@ -214,13 +216,17 @@ const purchaseOrderService = {
                 //filtra las lineas que no existen en odoo
                 NotFoundProducts = data.order_line.filter((line) => { return !productExist.data.foundIds.includes(line.product_id) });
 
+                //si el action es replace elimina todas las lineas existentes y agrega las nuevas
                 if (action === 'replace') {
-                    //eliminar todas las rows existentes y agrega las nuevas
+
+                    //filtra las lineas a que crear por los ids de produccto que si existen
                     purchaseOrder.order_line = filterLines.map((line) => { return [0, 0, pickFields(line, SALE_ORDER_FIELDS)] });
                     console.log('Reemplazando todas las líneas con las nuevas líneas', purchaseOrder.order_line);
+
+                    //si la orden de compra tiene una sola linea o mas, elimina todas las lineas existentes antes de agregar las nuevas
                     if (purchaseOrder.order_line.length <= 1) {
                         console.log('Eliminando todas las líneas existentes antes de agregar la nueva línea', purchaseOrderExists.data[0].order_line);
-                        console.log((await this.updatePurchaseOrderLines(id, 2, purchaseOrderExists.data[0].order_line)).data); // Elimina todas las líneas existentes
+                        await this.updatePurchaseOrderLines(id, 2, purchaseOrderExists.data.order_line); // Elimina todas las líneas existentes
 
                     }
 
@@ -233,7 +239,7 @@ const purchaseOrderService = {
             }
             console.log('purchaseOrder to update:', JSON.stringify(purchaseOrder));
 
-
+            // Realizar la actualización en Odoo
             const response = await odooConector.executeOdooRequest("purchase.order", "write", {
                 ids: [Number(id)],
                 vals: purchaseOrder
@@ -335,15 +341,19 @@ const purchaseOrderService = {
      */
     async updatePurchaseOrderLines(id, action, lines) {
         try {
+            //verificamos que la orden de compra exista
             const purchaseOrderExists = await this.getPurchaseOrderById(id);
             if (purchaseOrderExists.statusCode !== 200) {
                 return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
             }
+            //validamos la acción a realizar
             const validActions = [1, 2, 3, 5, 6];
             if (!validActions.includes(action)) {
                 return { statusCode: 400, message: 'Acción no válida. Use 2 (eliminar), 3 (desconectar), 5 (eliminar todas), o 6 (reemplazar).' };
             }
+
             let lineCommands = [];
+            //verificamos que si la accion requiere lineas, de ids, o de información, estas existan
             if (action === 2 || action === 3) {
                 if (!lines || !Array.isArray(lines) || lines.length === 0) {
                     return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de líneas para las acciones 2 o 3.' };
@@ -351,12 +361,16 @@ const purchaseOrderService = {
             }
             console.log('Updating purchase order lines with action:', action, 'and lines:', lines);
 
+            //construimos la accion a realizar, pasandole las variables correspondientes a cada accion
             let actions = [action, ...lines];
             if (action === 5) {
+                //accion 5 (eliminar todas las lineas) no requiere mas parametros
                 actions = [action];
             } else if (action === 2) {
+                //creamos un array con la accion 2 (eliminar) y el id de la linea que vamos a eliminar
                 actions = lines.map((line) => { return [2, line] });
             } else if (action === 1) {
+                //creamos un array con la accion 1 (actualizar), el id de la linea que vamos a actualizar y la informacion con la que vamos a actualizarla
                 actions = lines.map((line, index) => { return [1, purchaseOrderExists.data.order_line[Number(index)], line] });
             }
 
@@ -415,6 +429,7 @@ const purchaseOrderService = {
      */
     async verifyAndUpdatePurchaseOrderLines(id, lines = []) {
         try {
+            //verificamos que la orden de compra exista
             const purchaseOrderExists = await this.getPurchaseOrderById(id);
             if (purchaseOrderExists.statusCode !== 200) {
                 return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
@@ -424,9 +439,10 @@ const purchaseOrderService = {
             if ((!lines || lines.length === 0) || lines.length !== purchaseOrderExists.data.order_line.length) {
                 return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de líneas para verificar y actualizar.' };
             }
-
+            //envio el id, la acción 1 (actualizar) y la informacion con la que voy a actualizar las lineas
             const response = await this.updatePurchaseOrderLines(id, 1, lines);
 
+            //verifico la respuesta de la actualización
             if (response.statusCode !== 200) {
                 return { statusCode: response.statusCode, message: response.message, data: response.data };
             }
@@ -531,7 +547,7 @@ const purchaseOrderService = {
                 }
                 return { statusCode: newBill.statusCode, message: newBill.message, data: newBill.data };
             }
-            
+
             const bill = await billService.getOneBill(newBill.data.res_id);
 
             return { statusCode: 201, message: 'Factura creada con éxito', data: bill.data };

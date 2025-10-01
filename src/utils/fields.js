@@ -119,6 +119,8 @@ const BILL_FIELDS = [
 ];
 
 const INVOICE_LINE_FIELDS = [
+    "x_studio_rad_rndc",
+    "x_studio_n_remesa",
     "product_id",      // ID del producto
     "name",            // Descripción de la línea
     "quantity",        // Cantidad
