@@ -356,7 +356,7 @@ const purchaseOrderService = {
             } else if (action === 2) {
                 actions = lines.map((line) => { return [2, line] });
             } else if (action === 1) {
-                actions = lines.map((line, index) => { return [1, purchaseOrderExists.data[0].order_line[Number(index)], line] });
+                actions = lines.map((line, index) => { return [1, purchaseOrderExists.data.order_line[Number(index)], line] });
             }
 
             console.log('Actions for updatePurchaseOrderLines:', actions);
@@ -420,7 +420,7 @@ const purchaseOrderService = {
             }
 
             //verificamos que la lista de lineas a verificar correspondan en size
-            if ((!lines || lines.length === 0) || lines.length !== purchaseOrderExists.data[0].order_line.length) {
+            if ((!lines || lines.length === 0) || lines.length !== purchaseOrderExists.data.order_line.length) {
                 return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de líneas para verificar y actualizar.' };
             }
 
