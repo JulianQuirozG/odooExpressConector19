@@ -115,7 +115,7 @@ const PRODUCT_FIELDS_BILL = [
 const BILL_FIELDS = [
     "move_type", "partner_id", "invoice_date", "invoice_date_due", "ref",
     "currency_id", "company_id", "journal_id", "narration", "payment_reference",
-    "payment_reference", "invoice_origin", "state", "partner_bank_id", "invoice_vendor_bill_id"
+    "payment_reference", "invoice_origin", "state", "partner_bank_id", "invoice_vendor_bill_id", "amount_residual"
 ];
 
 const INVOICE_LINE_FIELDS = [
@@ -211,5 +211,6 @@ module.exports = {
     QUOTATION_FIELDS,
     QUOTATION_LINES,
     SALE_ORDER_FIELDS,
-    PURCHASE_ORDER_FIELDS
+    PURCHASE_ORDER_FIELDS,
+
 };
