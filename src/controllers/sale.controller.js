@@ -24,6 +24,17 @@ const saleController = {
         }
     },
 
+    async createBillFromSalesOrder(req, res) {
+        const { saleOrderId } = req.body;
+        try {
+            const result = await saleService.createBillFromSalesOrder(saleOrderId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error al crear la factura desde la orden de venta', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al crear factura desde orden de venta', error: error.message });
+        }
+    },
+
     //controlador para crear una venta
     async createSale(req, res) {
         const saleData = req.body;
