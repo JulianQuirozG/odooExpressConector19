@@ -234,11 +234,8 @@ const saleService = {
             //console.log('createBillFromSalesOrder', createBillFromSalesOrder);
             if (createBillFromSalesOrder.statusCode !== 201) return createBillFromSalesOrder;
 
-            //editar los campos de remesa y numero de radicado
-            console.log('dataVenta.order_line', dataVenta);
-            console.log('updateSaleBillccccc',  dataVenta.order_line, "id", createBillFromSalesOrder.data.id);
+            //actualizar la factura de venta con los campos personalizados
             const updateSaleBill = await billService.updateBill(createBillFromSalesOrder.data.id, { invoice_line_ids: dataVenta.order_line }, 'update');
-            
             if (updateSaleBill.statusCode !== 200) return updateSaleBill;
 
             //confirmar la factura de venta
@@ -249,9 +246,7 @@ const saleService = {
             const saleBillDetails = await billService.getOneBill(createBillFromSalesOrder.data.id);
             if (saleBillDetails.statusCode !== 200) return saleBillDetails;
 
-            console.log('data venta', data.dataVenta);
-            console.log('data compra', data.dataCompra);
-            return {    
+            return {
                 statusCode: 201,
                 data: {
                     saleOrder: sale.data[0],
