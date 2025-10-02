@@ -29,7 +29,7 @@ const partnerService = {
         try {
             const response = await odooConector.executeOdooRequest('res.partner', 'search_read', {
                 domain: [['id', '=', id]],
-                fields: ['name', 'email', 'phone','bank_ids'],
+
                 limit: 1
             });
             if (!response.success) {
