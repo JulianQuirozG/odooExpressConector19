@@ -98,9 +98,10 @@ const quotationService = {
     //crear una cotización
     async createQuotation(dataQuotation) {
         try {
+            const data = {...dataQuotation};
             //verifico que el partner exista
             const partnerResponse = await partnerService.getOnePartner(
-                dataQuotation.partner_id
+                data.partner_id
             );
             if (partnerResponse.statusCode !== 200) {
                 return {
@@ -111,12 +112,12 @@ const quotationService = {
             }
 
             //Verifico que los productos existan
-            if (dataQuotation.order_line && dataQuotation.order_line.length > 0) {
+            if (data.order_line && data.order_line.length > 0) {
                 const productResponse = await productService.validListId(
-                    dataQuotation.order_line.map((line) => Number(line.product_id))
+                    data.order_line.map((line) => Number(line.product_id))
                 );
 
-                dataQuotation.order_line = dataQuotation.order_line.filter((line) =>
+                data.order_line = data.order_line.filter((line) =>
                     productResponse.data.foundIds.includes(Number(line.product_id))
                 );
 
@@ -130,8 +131,8 @@ const quotationService = {
             }
 
             //preparo los datos de los productos
-            dataQuotation.order_line = dataQuotation.order_line
-                ? dataQuotation.order_line.map((line) => {
+            data.order_line = data.order_line
+                ? data.order_line.map((line) => {
                     return [0, 0, line];
                 })
                 : [];
@@ -141,7 +142,7 @@ const quotationService = {
                 "sale.order",
                 "create",
                 {
-                    vals_list: dataQuotation,
+                    vals_list: data,
                 }
             );
 
