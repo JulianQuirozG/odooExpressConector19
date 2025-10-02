@@ -3,7 +3,8 @@ const { createQuotationSchema } = require('../Quotation/createQuotation.schema')
 
 
 const createSaleSchema = z.object({
-  dataVenta: z.object(createQuotationSchema)
+  dataVenta: z.object(createQuotationSchema),
+  dataCompra: z.object(createQuotationSchema)
 }).strict();
 
 module.exports = createSaleSchema;
