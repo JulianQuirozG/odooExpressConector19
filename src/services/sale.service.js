@@ -249,7 +249,7 @@ const saleService = {
             return {
                 statusCode: 201,
                 data: {
-                    saleOrder: sale.data[0],
+                    saleOrder: sale.data,
                     purchaseOrder: updatePurchaseOrder.data,
                     purchaseBill: billDetails.data,
                     saleBill: saleBillDetails.data
