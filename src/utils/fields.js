@@ -36,7 +36,13 @@ const CLIENT_FIELDS = [
     "invoice_edi_format",
     "peppol_eas",
     "peppol_endpoint",
-    "comment"
+    "comment",
+    "l10n_co_edi_obligation_type_ids",
+    "l10n_co_edi_large_taxpayer",
+    "property_account_receivable_id",
+    "property_account_payable_id",
+    "property_purchase_currency_id"
+
 
     // ...otros campos de cliente
 ];
@@ -94,7 +100,13 @@ const PROVIDER_FIELDS = [
     "invoice_edi_format",
     "peppol_eas",
     "peppol_endpoint",
-    "comment"
+    "comment",
+    "l10n_co_edi_obligation_type_ids",
+    "l10n_co_edi_large_taxpayer",
+    "property_account_receivable_id",
+    "property_account_payable_id",
+    "property_purchase_currency_id"
+
 ];
 
 const PRODUCT_FIELDS = [

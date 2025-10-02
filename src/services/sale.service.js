@@ -133,7 +133,14 @@ const saleService = {
             const response = await odooConector.executeOdooRequest(
                 "sale.advance.payment.inv",
                 "create_invoices",
-                { ids: wizardId }
+                {
+                    ids: wizardId ,
+                    context: {
+                        active_model: 'sale.order',
+                        active_ids: ids,
+                        active_id: ids[0]
+                    }
+                }
             );
 
             console.log('response', response);
@@ -149,7 +156,7 @@ const saleService = {
             return {
                 statusCode: 201,
                 message: 'Factura creada desde la orden de venta',
-                data: bill.data 
+                data: bill.data
             };
 
 
