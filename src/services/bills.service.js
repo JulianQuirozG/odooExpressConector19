@@ -219,6 +219,7 @@ const billService = {
                 }
             }
 
+            //Actualizo la factura
             const response = await odooConector.executeOdooRequest(
                 "account.move",
                 "write",
@@ -242,10 +243,14 @@ const billService = {
                     data: response.data,
                 };
             }
+
+            //Regreso la factura actualizada
+            const updateBill = await this.getOneBill(id);
+            if(updateBill.statusCode !== 200) return updateBill;
             return {
                 statusCode: 200,
                 message: "Factura actualizada con éxito",
-                data: response.data,
+                data: updateBill.data,
             };
         } catch (error) {
             console.log("Error en billService.updateBill:", error);
@@ -507,6 +512,7 @@ const billService = {
     //Crear una nota de credito a partir de una factura confirmada
     async createCreditNote(id, dataCredit) {
         try {
+            // Verificar que la factura exista y esté confirmada
             const billExists = await this.getOneBill(id, [['state', '=', 'posted']]);
             if (billExists.statusCode !== 200) {
                 return {
@@ -516,13 +522,13 @@ const billService = {
                 };
             }
 
-            // Crear el wizard de nota de débito
+            // Crear el wizard de nota de credito
             const wizardData = {
                 move_ids: [Number(id)],
-                reason: dataCredit.reason || "Nota de crédito",
+                reason: "Anulación",
+                "l10n_co_edi_description_code_credit": "2",
                 date: dataCredit.date || new Date().toISOString().split("T")[0],
                 journal_id: dataCredit.journal_id || false,
-                //refund_method: 'refund' // 'refund', 'cancel', 'modify'
             };
 
             const wizardResponse = await odooConector.executeOdooRequest(
@@ -541,6 +547,7 @@ const billService = {
                 };
             }
 
+            //Crear la nota de credito
             const creditNoteResponse = await odooConector.executeOdooRequest(
                 "account.move.reversal",
                 "reverse_moves",
@@ -557,6 +564,24 @@ const billService = {
                 };
             }
 
+
+            const creditNoteId = creditNoteResponse.data.res_id;
+
+            //Consigo las lineas de la factura original
+            const lines = await this.getLinesByBillId(id);
+            if (lines.statusCode !== 200) {
+                return lines;
+            }
+
+            //Actualizo los productos de la nota credito con los productos de la factura original
+            const updatedCreditNote = await this.updateBill(creditNoteId, {
+                invoice_line_ids: lines.data
+            }, 'update');
+            if (updatedCreditNote.statusCode !== 200) {
+                return updatedCreditNote;
+            }
+
+            //Regreso la nota credito creada
             return {
                 statusCode: 201,
                 message: "Nota de crédito creada con éxito",
@@ -815,6 +840,37 @@ const billService = {
             };
         }
     },
+    async getLinesByBillId(id) {
+        try {
+            //Verificar que la factura exista
+            const bill = await this.getOneBill(id);
+            if (bill.statusCode !== 200) {
+                return bill;
+            }
+
+            //Buscar las lineas de esa factura
+            const lines = await odooConector.executeOdooRequest('account.move.line', 'search_read', { domain: [['id', 'in', bill.data.invoice_line_ids]], fields: INVOICE_LINE_FIELDS });
+            if (!lines.success) {
+                if (lines.error) {
+                    return { statusCode: 500, message: 'Error al obtener líneas de orden de compra', error: lines.message };
+                }
+                return { statusCode: 400, message: 'Error al obtener líneas de orden de compra', data: lines.data };
+            }
+
+            //Formateo las lineas para que el product_id sea solo el id y no un array con id y nombre
+            lines.data = lines.data.map(line => line.product_id = line.product_id[0]);
+
+            //Regreso las lineas obtenidas
+            return { statusCode: 200, message: 'Líneas de orden de compra obtenidas con éxito', data: lines.data };
+        } catch (error) {
+            console.error("Error getting lines by bill ID:", error);
+            return {
+                statusCode: 500,
+                message: 'Error al obtener líneas de orden de compra',
+                error: error.data
+            };
+        }
+    }
 };
 
 module.exports = billService;

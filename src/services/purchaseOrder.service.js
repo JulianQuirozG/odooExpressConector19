@@ -359,6 +359,7 @@ const purchaseOrderService = {
                     return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de líneas para las acciones 2 o 3.' };
                 }
             }
+            console.log('Updating purchase order lines with action:', action, 'and lines:', lines);
 
             //construimos la accion a realizar, pasandole las variables correspondientes a cada accion
             let actions = [action, ...lines];
