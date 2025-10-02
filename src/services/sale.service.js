@@ -141,7 +141,6 @@ const saleService = {
             const bill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
             if (bill.statusCode !== 201) return bill;
 
-
             //Actualizamos la factura validar los campos personalizados
             const updatePurchaseBill = await billService.updateBill(bill.data.id, { invoice_line_ids: dataCompra.order_line }, 'update');
             if (updatePurchaseBill.statusCode !== 200) return updatePurchaseBill;
