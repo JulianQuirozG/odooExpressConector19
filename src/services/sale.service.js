@@ -128,7 +128,14 @@ const saleService = {
             const response = await odooConector.executeOdooRequest(
                 "sale.advance.payment.inv",
                 "create_invoices",
-                { ids: wizardId }
+                {
+                    ids: wizardId ,
+                    context: {
+                        active_model: 'sale.order',
+                        active_ids: ids,
+                        active_id: ids[0]
+                    }
+                }
             );
 
             console.log('response', response);
@@ -144,7 +151,7 @@ const saleService = {
             return {
                 statusCode: 201,
                 message: 'Factura creada desde la orden de venta',
-                data: bill.data 
+                data: bill.data
             };
 
 
@@ -191,6 +198,7 @@ const saleService = {
             const quotation = await quotationService.createQuotation(dataVenta);
             if (quotation.statusCode !== 201) return quotation;
             console.log('Cotización creada:', dataVenta);
+
             //confirmar cotizacion 
             const confirmQuotation = await quotationService.confirmQuotation(quotation.data.id);
             if (confirmQuotation.statusCode !== 200) return confirmQuotation;
