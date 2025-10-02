@@ -505,6 +505,7 @@ const billService = {
     //Crear una nota de credito a partir de una factura confirmada
     async createCreditNote(id, dataCredit) {
         try {
+            // Verificar que la factura exista y esté confirmada
             const billExists = await this.getOneBill(id, [['state', '=', 'posted']]);
             if (billExists.statusCode !== 200) {
                 return {
@@ -514,13 +515,13 @@ const billService = {
                 };
             }
 
-            // Crear el wizard de nota de débito
+            // Crear el wizard de nota de credito
             const wizardData = {
                 move_ids: [Number(id)],
-                reason: dataCredit.reason || "Nota de crédito",
+                reason: "Anulación",
+                "l10n_co_edi_description_code_credit": "2",
                 date: dataCredit.date || new Date().toISOString().split("T")[0],
                 journal_id: dataCredit.journal_id || false,
-                //refund_method: 'refund' // 'refund', 'cancel', 'modify'
             };
 
             const wizardResponse = await odooConector.executeOdooRequest(
@@ -539,6 +540,7 @@ const billService = {
                 };
             }
 
+            //Crear la nota de credito
             const creditNoteResponse = await odooConector.executeOdooRequest(
                 "account.move.reversal",
                 "reverse_moves",
@@ -555,6 +557,13 @@ const billService = {
                 };
             }
 
+            //Actualizar los campos de la nota credito con los campos de la factura original
+            //const creditNoteId = creditNoteResponse.data.res_id;
+            //const updatedCreditNote = await this.updateBill(creditNoteId, {
+              //  "l10n_co_edi_description_code_credit": "2",
+            //});
+
+            //Regreso la nota credito creada
             return {
                 statusCode: 201,
                 message: "Nota de crédito creada con éxito",
