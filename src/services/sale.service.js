@@ -75,13 +75,84 @@ const saleService = {
             return {
                 statusCode: 200,
                 message: 'Detalle de la venta',
-                data: response.data
+                data: response.data[0]
             };
         } catch (error) {
             console.error('Error al obtener la venta por ID desde Odoo', error);
             return {
                 statusCode: 500,
                 message: 'Error al obtener venta',
+                error: error.message
+            };
+        }
+    },
+
+    async createBillFromSalesOrder(salesOrderIds) {
+        try {
+            // Validar los IDs de las órdenes de venta
+            if (!salesOrderIds || salesOrderIds.length === 0) {
+                return { statusCode: 400, message: 'IDs de órdenes de venta inválidos', data: [] };
+            }
+
+            // Crear facturas desde las órdenes de venta
+            const getSaleOrder = await this.getSaleById(salesOrderIds[0]);
+
+            if (getSaleOrder.statusCode !== 200) return getSaleOrder;
+
+            //mapear los ids a numeros
+            const ids = Number(salesOrderIds[0]);
+
+            const vals = {
+                advance_payment_method: "all"
+            }
+
+            //ejecuto el wizard para traer toda la info y crear la factura
+            const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
+                vals_list: [{
+                    sale_order_ids: [4, ids],
+                    advance_payment_method: 'delivered',
+                    consolidated_billing: 'true',
+                    // amount / fixed_amount NO se usan en 'delivered'
+                }]
+            });
+
+            console.log('wizardCreate', wizardCreate);
+
+            if (!wizardCreate.success) {
+                return { statusCode: 500, message: 'Error creando wizard facturación', error: wizardCreate.data };
+            }
+
+            const wizardId = wizardCreate.data[0];
+            console.log('wizardId', wizardId);
+            //creo la factura
+            const response = await odooConector.executeOdooRequest(
+                "sale.advance.payment.inv",
+                "create_invoices",
+                { ids: wizardId }
+            );
+
+            console.log('response', response);
+
+            if (response.error) return { statusCode: 500, message: 'Error al crear factura desde orden de venta', error: response.message };
+            if (!response.success) return { statusCode: 400, message: 'Error al crear factura desde orden de venta', data: response.data };
+
+            console.log('response.data.res_id', response.data.res_id);
+            const bill = await billService.getOneBill(response.data.res_id);
+            console.log('bill', bill.data);
+            if (bill.statusCode !== 200) return bill;
+
+            return {
+                statusCode: 201,
+                message: 'Factura creada desde la orden de venta',
+                data: bill.data 
+            };
+
+
+        } catch (error) {
+            console.error('Error al crear factura desde orden de venta en Odoo', error);
+            return {
+                statusCode: 500,
+                message: 'Error al crear factura desde orden de venta',
                 error: error.message
             };
         }
@@ -115,11 +186,11 @@ const saleService = {
         try {
             //preparamos la informacion de la venta y de la compra
             const { dataVenta, dataCompra } = data;
-
+            console.log('dataVenta amters de lña cot', dataVenta);
             //crear cotizacion
             const quotation = await quotationService.createQuotation(dataVenta);
             if (quotation.statusCode !== 201) return quotation;
-
+            console.log('Cotización creada:', dataVenta);
             //confirmar cotizacion 
             const confirmQuotation = await quotationService.confirmQuotation(quotation.data.id);
             if (confirmQuotation.statusCode !== 200) return confirmQuotation;
@@ -153,15 +224,34 @@ const saleService = {
             const sale = await this.getSaleById(quotation.data.id);
             if (sale.statusCode !== 200) return sale;
 
+            //traer el detalle de la factura de compra
             const billDetails = await billService.getOneBill(bill.data.id);
             if (billDetails.statusCode !== 200) return billDetails;
+
+            //crear la factura de venta
+            const createBillFromSalesOrder = await this.createBillFromSalesOrder([quotation.data.id]);
+            //console.log('createBillFromSalesOrder', createBillFromSalesOrder);
+            if (createBillFromSalesOrder.statusCode !== 201) return createBillFromSalesOrder;
+
+            //actualizar la factura de venta con los campos personalizados
+            const updateSaleBill = await billService.updateBill(createBillFromSalesOrder.data.id, { invoice_line_ids: dataVenta.order_line }, 'update');
+            if (updateSaleBill.statusCode !== 200) return updateSaleBill;
+
+            //confirmar la factura de venta
+            const confirmSaleBill = await billService.confirmBill(createBillFromSalesOrder.data.id);
+            if (confirmSaleBill.statusCode !== 200) return confirmSaleBill;
+
+            //regresar toda la informacion
+            const saleBillDetails = await billService.getOneBill(createBillFromSalesOrder.data.id);
+            if (saleBillDetails.statusCode !== 200) return saleBillDetails;
 
             return {
                 statusCode: 201,
                 data: {
                     saleOrder: sale.data,
                     purchaseOrder: updatePurchaseOrder.data,
-                    purchaseBill: billDetails.data
+                    purchaseBill: billDetails.data,
+                    saleBill: saleBillDetails.data
                 },
                 message: 'Venta creada con éxito',
             };
