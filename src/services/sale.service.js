@@ -87,11 +87,6 @@ const saleService = {
         }
     },
 
-    /**
-     * Crea una factura a partir de una o varias órdenes de venta.
-     * @param {Array<number>} salesOrderIds - IDs de las órdenes de venta.
-     * @returns {Promise<Object>} Resultado de la creación de la factura.
-     */
     async createBillFromSalesOrder(salesOrderIds) {
         try {
             // Validar los IDs de las órdenes de venta
@@ -107,6 +102,7 @@ const saleService = {
             //mapear los ids a numeros
             const ids = Number(salesOrderIds[0]);
 
+            console.log('ids', ids);
             //ejecuto el wizard para traer toda la info y crear la factura
             const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
                 vals_list: [{
@@ -199,6 +195,7 @@ const saleService = {
             //crear cotizacion
             const quotation = await quotationService.createQuotation(dataVenta);
             if (quotation.statusCode !== 201) return quotation;
+            console.log('Cotización creada:', dataVenta);
 
             //confirmar cotizacion 
             const confirmQuotation = await quotationService.confirmQuotation(quotation.data.id);
@@ -210,7 +207,6 @@ const saleService = {
             if (purchaseOrder.statusCode !== 200) return purchaseOrder;
 
             //actualizar orden de compra 
-            console.log('dataCompra', dataCompra);
             const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrderId, dataCompra, 'update');
             if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
 
@@ -221,6 +217,7 @@ const saleService = {
             //Crear factura de la orden de compra
             const bill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
             if (bill.statusCode !== 201) return bill;
+
 
             //Actualizamos la factura validar los campos personalizados
             const updatePurchaseBill = await billService.updateBill(bill.data.id, { invoice_line_ids: dataCompra.order_line }, 'update');
@@ -238,9 +235,9 @@ const saleService = {
             const billDetails = await billService.getOneBill(bill.data.id);
             if (billDetails.statusCode !== 200) return billDetails;
 
-            console.log("orden de venta ",quotation.data.id);
             //crear la factura de venta
             const createBillFromSalesOrder = await this.createBillFromSalesOrder([quotation.data.id]);
+            //console.log('createBillFromSalesOrder', createBillFromSalesOrder);
             if (createBillFromSalesOrder.statusCode !== 201) return createBillFromSalesOrder;
 
             //actualizar la factura de venta con los campos personalizados
