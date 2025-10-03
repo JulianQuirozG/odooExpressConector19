@@ -934,6 +934,7 @@ const billService = {
             customer.type_organization_id = bill_customer.data.is_company ? 1 : 2;
 
             //municipio
+            //if(!bill_customer.data.city_id) return { statusCode: 400, message: "El cliente no tiene ciudad" };
             const city = await odooConector.executeOdooRequest("res.city", "search_read", { domain: [['id', '=', bill_customer.data.city_id[0]]] });
             if (city.data.length !== 0) customer.municipality_id = (await paramsMunicipalitiesRepository.getMunicipalityByCode(city.data[0].l10n_co_edi_code)).data[0].id;
 
@@ -943,6 +944,7 @@ const billService = {
 
             //Tipo de responsabilidad
             const obligation_id = bill_customer.data.l10n_co_edi_obligation_type_ids;
+            if(obligation_id.length === 0) return { statusCode: 400, message: "El cliente no tiene tipo de responsabilidad" };
             const obligation_type = (await odooConector.executeOdooRequest("l10n_co_edi.type_code", "search_read", { domain: [['id', '=', obligation_id[0]]] })).data[0].id;
             customer.type_liability_id = obligation_type;
 
