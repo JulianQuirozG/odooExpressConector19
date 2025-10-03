@@ -12,7 +12,10 @@ const productService = require("./products.service");
 const partnerService = require("./partner.service");
 const { updateBill } = require("../controllers/bill.controller");
 const { journalService } = require("./journal.service");
-
+const paramsTypeDocumentRepository = require("../Repository/params_type_document/params_type_document.repository");
+const paramsTypeDocumentIdentificationRepository = require("../Repository/params_type_document_identification.repository/params_type_document_identification.repository");
+const paramsMunicipalitiesRepository = require("../Repository/params_municipalities/params_municipalities.repository");
+const { json } = require("zod");
 const billService = {
     //obtener todas las facturas
     async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"]) {
@@ -881,40 +884,72 @@ const billService = {
 
             //Obtengo todos los datos de la factura
             const bill = await this.getOneBill(billId);
-
             if (bill.statusCode !== 200) return bill;
-            //extraigo los datos que necesito del nombre y la fecha de la factura
-            // el formato de la fecha es "2023-10-05 14:30:00"
-            // el formato del nombre es "FV/2023/0001"
 
-            const time = bill.data.l10n_co_dian_post_time.split(' ');
-            const number = bill.data.name.split('/');
+            console.log(bill.data);
+            //Fecha y hora de la factura
+            const post_time = bill.data.l10n_co_dian_post_time.split(' ');
+            const date = post_time[0];//
+            const time = post_time[1];//
 
-            console.log(...time)
-            console.log(...number)
+            //consecutivo y prefix de la factura
+            const bill_name = bill.data.name.split('/');
+            const number = bill_name[2];//
+            const prefix = bill_name[0];//
 
-            let typedocument = 1;
+            //tipo de documento
+            const move_type = bill.data.l10n_co_edi_type;
+            const { data } = await paramsTypeDocumentRepository.getTypeDocumentByCode(move_type);
+            const type_document_id = data[0]; //
 
-            if (bill.data.move_type === 'out_refund') {
-                typedocument = 4; //Factura de venta
-            }
-            if (bill.data.move_type === 'out_debit') {
-                typedocument = 5; //Factura de devolución
-            }
+            // //Obtengo los datos del cliente
+            const bill_customer = await partnerService.getOnePartner(bill.data.partner_id[0]);
+            let customer = {}; //
+
+            //documento del cliente
+            const vat = bill_customer.data.vat.split('-');
+            customer.identification_number = vat[0];
+            customer.dv = vat[1];
+
+            //nombre, telefono, direccion y email del cliente
+            customer.name = bill_customer.data.name;
+            customer.phone = bill_customer.data.phone;
+            customer.email = bill_customer.data.email;
+            customer.address = bill_customer.data.address;
+
+            //registro mercantil
+            //customer.merchant_registration = 
+
+
+            //tipo de documento de identificacion 
+            const customer_l10n_latam_identification_type_id = bill_customer.data.l10n_latam_identification_type_id;
+            const type_document_identification_id = await paramsTypeDocumentIdentificationRepository.getTypeDocumentByCode(customer_l10n_latam_identification_type_id[0]);
+            customer.type_document_identification_id = type_document_identification_id.data[0].id; //
+
+            //tipo de organizacion
+            customer.type_organization_id = bill_customer.data.is_company ? 1 : 2;
+
+            //municipio
+            const city = await odooConector.executeOdooRequest("res.city", "search_read", { domain: [['id', '=', bill_customer.data.city_id[0]]] });
+            customer.municipality_id = (await paramsMunicipalitiesRepository.getMunicipalityByCode(city.data[0].l10n_co_edi_code)).data[0].id;
+            // //extraigo los datos que necesito del nombre y la fecha de la factura
+            // // el formato de la fecha es "2023-10-05 14:30:00"
+            // // el formato del nombre es "FV/2023/0001"
+
 
 
             //obtengo los datos del cliente
-            const customer = await partnerService.getOnePartner(bill.data.partner_id[0]);
-            if (customer.statusCode !== 200) return customer;
+            // const customer = await partnerService.getOnePartner(bill.data.partner_id[0]);
+            // if (customer.statusCode !== 200) return customer;
 
-            const partner = customer.data;
-            console.log(partner);
-            const identification = partner.vat.split('-');
-            //regimen 1 = IVA, 2 = NO IVA
-            let regimen = 1;
-            if (partner.l10n_co_edi_fiscal_regimen === "49") {
-                regimen = 2;
-            }
+            // const partner = customer.data;
+            // console.log(partner);
+            // const identification = partner.vat.split('-');
+            // //regimen 1 = IVA, 2 = NO IVA
+            // let regimen = 1;
+            // if (partner.l10n_co_edi_fiscal_regimen === "49") {
+            //     regimen = 2;
+            // }
 
             //tipo de responsabilidad /
             /** 
@@ -924,35 +959,35 @@ const billService = {
             112	Régimen Simple de Tributación – SIMPLE	O-47
             117	No responsable	R-99-PN
             */
-            let liability = null;
-            if (partner.l10n_co_edi_obligation_type_ids[0] === 1) {
-                liability = 112;
-            }
-            if (partner.l10n_co_edi_obligation_type_ids[0] === 2) {
-                liability = 117;
-            }
-            if (partner.l10n_co_edi_obligation_type_ids[0] === 3) {
-                liability = 7;
-            }
-            if (partner.l10n_co_edi_obligation_type_ids[0] === 4) {
-                liability = 9;
-            }
-            if (partner.l10n_co_edi_obligation_type_ids[0] === 5) {
-                liability = 14;
-            }
+            // let liability = null;
+            // if (partner.l10n_co_edi_obligation_type_ids[0] === 1) {
+            //     liability = 112;
+            // }
+            // if (partner.l10n_co_edi_obligation_type_ids[0] === 2) {
+            //     liability = 117;
+            // }
+            // if (partner.l10n_co_edi_obligation_type_ids[0] === 3) {
+            //     liability = 7;
+            // }
+            // if (partner.l10n_co_edi_obligation_type_ids[0] === 4) {
+            //     liability = 9;
+            // }
+            // if (partner.l10n_co_edi_obligation_type_ids[0] === 5) {
+            //     liability = 14;
+            // }
 
             //tipo de organización
             /** 
             1	Persona Jurídica y asimiladas	1
             2	Persona Natural y asimiladas	2
             */
-            let organization = null;
+            // let organization = null;
 
-            if (partner.is_company) {
-                organization = 1;
-            } else {
-                organization = 2;
-            }
+            // if (partner.is_company) {
+            //     organization = 1;
+            // } else {
+            //     organization = 2;
+            // }
 
             /**
              * 
@@ -988,28 +1023,30 @@ const billService = {
                 "display_name": "PEP (Permiso Especial de Permanencia)",
              */
 
-            let identity = null;
-            if (partner.l10n_latam_identification_type_id == 2) {
-                identity = 7;
-            }
-            if (partner.l10n_latam_identification_type_id == 4) {
-                identity = 6;
-            }
-            if (partner.l10n_latam_identification_type_id == 5) {
-                identity = 3;
-            }
-            if (partner.l10n_latam_identification_type_id == 7) {
-                identity = 2;
-            }
-            if (partner.l10n_latam_identification_type_id == 8) {
-                identity = 4;
-            }
-            if (partner.l10n_latam_identification_type_id == 9) {
-                identity = 5;
-            }
-            if (partner.l10n_latam_identification_type_id == 10) {
-                identity = 11;
-            }
+            // let identity = null;
+            // const identificationType = partner.l10n_latam_identification_type_id[0];
+            // console.log("Partner Identification Type ID:", partner.l10n_latam_identification_type_id);
+            // if (identificationType == 2) {
+            //     identity = 7;
+            // }
+            // if (identificationType   == 4) {
+            //     identity = 6;
+            // }
+            // if (identificationType == 5) {
+            //     identity = 3;
+            // }
+            // if (identificationType == 7) {
+            //     identity = 2;
+            // }
+            // if (identificationType == 8) {
+            //     identity = 4;
+            // }
+            // if (identificationType == 9) {
+            //     identity = 5;
+            // }
+            // if (identificationType == 10) {
+            //     identity = 11;
+            // }
 
 
 
@@ -1029,12 +1066,12 @@ const billService = {
                     description: line.product_id[1],
                     price_amount: line.price_total,
                     base_quantity: line.quantity,
-                    unit_measure_id: 26,
+                    unit_measure_id: 19,
                     invoiced_quantity: line.quantity,
                     line_extension_amount: line.price_subtotal,
                     free_of_charge_indicator: false,
-                    type_item_identification_id: 999,//evaluar
-                    is_RNDC: "true",
+                    type_item_identification_id: 4,
+                    is_RNDC: true,
                     RNDC_consignment_number: line.x_studio_rad_rndc || "",
                     internal_consignment_number: line.x_studio_n_remesa || "",
                     value_consignment: "0",
@@ -1054,41 +1091,42 @@ const billService = {
             jsonDian.number = number[2];
             jsonDian.prefix = number[0];
 
-            jsonDian.customer = {
-                dv: identification[1],
-                name: partner.name || "",
-                email: partner.email || "",
-                phone: partner.phone || "",
-                address: partner.street || "",
-                //regimen
-                type_regime_id: regimen,
-                //municipalidad FALTAAAAAA
-                municipality_id: 439,
-                //tipo de contribuyente
-                type_liability_id: liability || "",
-                //tipo de organizacion
-                type_organization_id: organization || "",
-                identification_number: identification[0],
-                merchant_registration: "0000000",
-                //tipo de documento de identificacion
-                type_document_identification_id: identity //FALTA
-            }
-            jsonDian.joi
+            jsonDian.customer = customer;
+            // jsonDian.customer = {
+            //     dv: identification[1],
+            //     name: partner.name || "",
+            //     email: partner.email || "",
+            //     phone: partner.phone || "",
+            //     address: partner.street || "",
+            //     //regimen
+            //     type_regime_id: regimen,
+            //     //municipalidad FALTAAAAAA
+            //     municipality_id: 439,
+            //     //tipo de contribuyente
+            //     type_liability_id: liability || "",
+            //     //tipo de organizacion
+            //     type_organization_id: organization || "",
+            //     identification_number: identification[0],
+            //     merchant_registration: "0000000",
+            //     //tipo de documento de identificacion
+            //     type_document_identification_id: identity //FALTA
+            // }
+            // jsonDian.joi
 
-            jsonDian.sendmail = partner.followup_remainder_type === 'automatic';
+            //jsonDian.sendmail = partner.followup_remainder_type === 'automatic';
             //jsonDian.foot_note = "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL PIE DE PAGINA";
             //jsonDian.head_note = "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL ENCABEZADO DE PAGINA";
             jsonDian.payment_form = {
                 payment_form_id: 2,
                 duration_measure: "30", //FALTA
-                payment_due_date: "2023-04-04", //CALCULAR
+                payment_due_date: bill.data.invoice_date_due, //CALCULAR
                 payment_method_id: 75 //PREGUNTAR
             };
             jsonDian.invoice_lines = linesProduct;
 
 
             //lineas de totales
-            jsonDian.type_document_id = typedocument;//FALTA
+            //jsonDian.type_document_id = typedocument;//FALTA
             jsonDian.resolution_number = journal.l10n_co_edi_dian_authorization_number; //FALTA
             jsonDian.legal_monetary_totals = {
                 payable_amount: bill.data.amount_untaxed,
@@ -1098,6 +1136,11 @@ const billService = {
                 allowance_total_amount: bill.data.amount_total
             }
 
+            jsonDian.date = date;
+            jsonDian.time = time;
+            jsonDian.number = number;
+            jsonDian.prefix = prefix;
+            jsonDian.type_document_id = type_document_id.id;
 
             return {
                 statusCode: 200,

@@ -8,8 +8,8 @@ const orderLineSchema =
     price_unit: z.number().min(0).optional(),
     tax_ids: z.array(z.number().min(1)).optional(),
     name: z.string().min(2).max(100).optional(),
-    x_studio_rad_rndc: z.string().min(1).optional(), // Campo personalizado
-    x_studio_n_remesa: z.string().min(1).optional(), // Campo personalizado
+    x_studio_rad_rndc: z.string().optional(),   
+    x_studio_n_remesa: z.string().optional()
   });
 
 const createQuotationSchema = z.object({
@@ -21,4 +21,4 @@ const createQuotationSchema = z.object({
   order_line: z.array(orderLineSchema).min(1, { message: 'Debe haber al menos una línea de pedido' }),
 }).strict();
 
-module.exports = { createQuotationSchema };
+module.exports = { createQuotationSchema, orderLineSchema };
