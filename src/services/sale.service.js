@@ -102,18 +102,16 @@ const saleService = {
             //mapear los ids a numeros
             const ids = Number(salesOrderIds[0]);
 
-            const vals = {
-                advance_payment_method: "all"
-            }
-
+            console.log('ids', ids);
             //ejecuto el wizard para traer toda la info y crear la factura
             const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
                 vals_list: [{
-                    sale_order_ids: [4, ids],
+                    sale_order_ids: [[4, ids]],
                     advance_payment_method: 'delivered',
                     consolidated_billing: 'true',
                     // amount / fixed_amount NO se usan en 'delivered'
-                }]
+                }],
+                context: { active_model: 'sale.order', active_ids: ids, active_id: ids[0] }
             });
 
             console.log('wizardCreate', wizardCreate);
@@ -129,7 +127,7 @@ const saleService = {
                 "sale.advance.payment.inv",
                 "create_invoices",
                 {
-                    ids: wizardId ,
+                    ids: wizardId,
                     context: {
                         active_model: 'sale.order',
                         active_ids: ids,

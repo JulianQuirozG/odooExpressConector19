@@ -131,6 +131,16 @@ const billController = {
             console.error('Error en billController.verifyBillLines:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al verificar líneas de la factura', error: error.message });
         }
+    },
+    async getBillDianJson(req, res) {
+        try {
+            const { id } = req.params;
+            const result = await billService.createJsonDian(id);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.getBillDianJson:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener JSON DIAN de la factura', error: error.message });
+        }
     }
 }
 

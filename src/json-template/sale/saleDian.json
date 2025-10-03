@@ -1,0 +1,60 @@
+{
+    "date": "2023-04-04",
+    "time": "04:08:12",
+    "notes": "ESTA ES UNA NOTA DE PRUEBA",
+    "number": 990000001,
+    "prefix": "SETP",
+    "customer": {
+        "dv": 0,
+        "name": "BERCODE SAS",
+        "email": "soporte@nextpyme.plus",
+        "phone": "3017882489",
+        "address": "CLL 18A 11 20",
+        "type_regime_id": 1,
+        "municipality_id": 439,
+        "type_liability_id": 117,
+        "type_organization_id": 1,
+        "identification_number": 901249232,
+        "merchant_registration": "0000000-00",
+        "type_document_identification_id": 3
+    },
+    "sendmail": false,
+    "foot_note": "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL PIE DE PAGINA",
+    "head_note": "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL ENCABEZADO DE PAGINA",
+    "payment_form": {
+        "payment_form_id": 2,
+        "duration_measure": "30",
+        "payment_due_date": "2023-04-04",
+        "payment_method_id": 30
+    },
+    "sendmailtome": false,
+    "invoice_lines": [
+        {
+            "code": "COMISION",
+            "notes": "ESTA ES UNA PRUEBA DE NOTA DE DETALLE DE LINEA.",
+            "description": "COMISION POR SERVICIOS",
+            "price_amount": "1000000.00",
+            "base_quantity": "1",
+            "unit_measure_id": 70,
+            "invoiced_quantity": "1",
+            "line_extension_amount": "1000000.00",
+            "free_of_charge_indicator": false,
+            "type_item_identification_id": 4,
+            "is_RNDC": "true",
+            "RNDC_consignment_number": 95000912001,
+            "internal_consignment_number": "REM000001",
+            "value_consignment": "60000",
+            "unit_measure_consignment_id": "767",
+            "quantity_consignment": "200"
+        }
+    ],
+    "type_document_id": 1,
+    "resolution_number": "18760000001",
+    "legal_monetary_totals": {
+        "payable_amount": "1000000.00",
+        "tax_exclusive_amount": "1000000.00",
+        "tax_inclusive_amount": "1000000.00",
+        "line_extension_amount": "1000000.00",
+        "allowance_total_amount": "1000000.00"
+    }
+}
