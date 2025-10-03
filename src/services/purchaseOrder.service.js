@@ -210,7 +210,7 @@ const purchaseOrderService = {
                 if (productExist.statusCode !== 200) {
                     return { statusCode: productExist.statusCode, message: productExist.message, data: productExist.data };
                 }
-
+                console.log('productExist', productExist.data);
                 //filtra las lineas que si existen en odoo
                 const filterLines = data.order_line.filter((line) => { return productExist.data.foundIds.includes(line.product_id) });
                 //filtra las lineas que no existen en odoo
@@ -231,6 +231,7 @@ const purchaseOrderService = {
                     }
 
                 } else if (action === 'update') {
+                    console.log('Actualizando líneas existentes', filterLines);
                     // Actualiza las líneas existentes con las nueva información, los tamaños de las rows deber ser iguales para poder verificar
                     console.log('Actualizando las líneas existentes con las nuevas líneas', filterLines);
                     await this.verifyAndUpdatePurchaseOrderLines(id, filterLines);

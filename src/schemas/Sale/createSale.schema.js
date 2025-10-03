@@ -11,4 +11,4 @@ const createSaleSchema = z.object({
   })
 }).strict();
 
-module.exports = createSaleSchema;
+module.exports = { createSaleSchema };

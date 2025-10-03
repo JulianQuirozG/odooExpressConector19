@@ -6,6 +6,7 @@ const {
     PRODUCT_FIELDS_BILL,
     INVOICE_LINE_FIELDS,
 } = require("../utils/fields");
+const jsonDatabase = require('../json-template/database.json')
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 const productService = require("./products.service");
@@ -17,6 +18,7 @@ const paramsTypeDocumentIdentificationRepository = require("../Repository/params
 const paramsMunicipalitiesRepository = require("../Repository/params_municipalities/params_municipalities.repository");
 const paramsPaymentMethodsRepository = require("../Repository/params_payment_methods/params_payment_methods.repository");
 const { json } = require("zod");
+const { getUnitMeasureByCode, createUnitMeasure } = require("../Repository/param_unit_measures/params_unit_measures");
 const billService = {
     //obtener todas las facturas
     async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"]) {
@@ -932,6 +934,7 @@ const billService = {
             customer.type_organization_id = bill_customer.data.is_company ? 1 : 2;
 
             //municipio
+            //if(!bill_customer.data.city_id) return { statusCode: 400, message: "El cliente no tiene ciudad" };
             const city = await odooConector.executeOdooRequest("res.city", "search_read", { domain: [['id', '=', bill_customer.data.city_id[0]]] });
             if (city.data.length !== 0) customer.municipality_id = (await paramsMunicipalitiesRepository.getMunicipalityByCode(city.data[0].l10n_co_edi_code)).data[0].id;
 
@@ -941,6 +944,7 @@ const billService = {
 
             //Tipo de responsabilidad
             const obligation_id = bill_customer.data.l10n_co_edi_obligation_type_ids;
+            if(obligation_id.length === 0) return { statusCode: 400, message: "El cliente no tiene tipo de responsabilidad" };
             const obligation_type = (await odooConector.executeOdooRequest("l10n_co_edi.type_code", "search_read", { domain: [['id', '=', obligation_id[0]]] })).data[0].id;
             customer.type_liability_id = obligation_type;
 
@@ -994,32 +998,49 @@ const billService = {
 
             const lines = await this.getLinesByBillId(bill.data.id, 'full');
             if (lines.statusCode !== 200) return lines;
+            console.log(lines.data);
+            //Tomo las lineas y construyo lo invoice_lines
 
-            const linesProduct = lines.data.map(line => {
-                return {
+            // for (line of jsonDatabase.unit_measures){
+            //     await createUnitMeasure(line.id,line.name,line.code);
+            // }
 
-                    code: line.product_id[0],
-                    notes: line.name || "",
-                    description: line.product_id[1],
-                    price_amount: line.price_total,
-                    base_quantity: line.quantity,
-                    unit_measure_id: 19,
-                    invoiced_quantity: line.quantity,
-                    line_extension_amount: line.price_subtotal,
-                    free_of_charge_indicator: false,
-                    type_item_identification_id: 4,
-                    is_RNDC: true,
-                    RNDC_consignment_number: line.x_studio_rad_rndc || "",
-                    internal_consignment_number: line.x_studio_n_remesa || "",
-                    value_consignment: "0",
-                    unit_measure_consignment_id: 26,
-                    quantity_consignment: line.quantity || 0,//evaluar
-                    allowance_charges: {}
+            const linesProduct = [];
+            for (const line of lines.data) {
+                //obtengo la unidad de medida
 
+                const unitMeassure = await odooConector.executeOdooRequest("uom.uom", "search_read", { domain: [['id', '=', line.product_uom_id[0]]] });
+                console.log("unit_measure", unitMeassure.data[0].l10n_co_edi_ubl);
+                const identificador = unitMeassure.data[0].l10n_co_edi_ubl;
+                const unit_measure_id = await getUnitMeasureByCode(identificador);
+
+                console.log("unit_measure_id", unit_measure_id);
+
+                console.log(unit_measure_id);
+                let lines2 = {};
+
+                lines2.code = line.product_id[0];
+                lines2.notes = line.name || "";
+                lines2.description = line.product_id[1];
+                lines2.price_amount = line.price_unit;
+                lines2.base_quantity = line.quantity;
+                lines2.unit_measure_id = Number(unit_measure_id.data[0].id);
+                lines2.invoiced_quantity = line.quantity;
+                lines2.line_extension_amount = line.price_total;
+                lines2.free_of_charge_indicator = false; //de donde saco esto
+                lines2.type_item_identification_id = 4; // FALTA
+                if (bill.data.l10n_co_edi_operation_type === '12') {
+                    lines2.is_RNDC = bill.data.l10n_co_edi_operation_type === '12'; //Si es de tipo transporte es true
+                    lines2.RNDC_consignment_number = line.x_studio_rad_rndc || "";
+                    lines2.internal_consignment_number = line.x_studio_n_remesa || "";
+                    lines2.value_consignment = "0"; //FALTA
+                    lines2.unit_measure_consignment_id = Number(unit_measure_id.data[0].id);  //FALTA
+                    lines2.quantity_consignment = line.quantity;
                 }
 
-            });
-
+                console.log(lines2);
+                linesProduct.push(lines2);
+            }
             //construyo el json para la dian
 
             jsonDian.date = date;

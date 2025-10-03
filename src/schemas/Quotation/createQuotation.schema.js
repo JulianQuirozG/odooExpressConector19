@@ -1,6 +1,6 @@
 const { z } = require('zod');
 
-const orderLineSchema = z.array(
+const orderLineSchema =
   z.object({
     product_id: z.number().min(1),
     product_uom_qty: z.number().min(0).optional(),
@@ -10,15 +10,15 @@ const orderLineSchema = z.array(
     name: z.string().min(2).max(100).optional(),
     x_studio_rad_rndc: z.string().optional(),   
     x_studio_n_remesa: z.string().optional()
-  })
-);
+  });
 
 const createQuotationSchema = z.object({
   partner_id: z.number().min(1),
-  date_order: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }),
-  validity_date: z.string().refine(val => !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }),
+  date_order: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }).optional(),
+  date_planned : z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }).optional(),
+  validity_date: z.string().refine(val => !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }).optional(),
   payment_term_id: z.number().min(1),
-  order_line: orderLineSchema.optional(),
-});
+  order_line: z.array(orderLineSchema).min(1, { message: 'Debe haber al menos una línea de pedido' }),
+}).strict();
 
 module.exports = { createQuotationSchema, orderLineSchema };
