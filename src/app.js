@@ -39,7 +39,7 @@ app.use('/api/payment-method', paymentMethodRoutes);
 app.use('/api/currency', currencyRoutes);
 
 // Initialize the database connection
-/** 
+
 (async () => {
   const db = await DbConfig.init(config.database);
   if (!db.success) {
@@ -48,7 +48,7 @@ app.use('/api/currency', currencyRoutes);
     console.log('Connected to MySQL database');
   }
 })();
-*/
+
 
 // Ruta por defecto
 app.get('/', (req, res) => {
