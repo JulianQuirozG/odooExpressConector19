@@ -36,7 +36,13 @@ const CLIENT_FIELDS = [
     "invoice_edi_format",
     "peppol_eas",
     "peppol_endpoint",
-    "comment"
+    "comment",
+    "l10n_co_edi_obligation_type_ids",
+    "l10n_co_edi_large_taxpayer",
+    "property_account_receivable_id",
+    "property_account_payable_id",
+    "property_purchase_currency_id"
+
 
     // ...otros campos de cliente
 ];
@@ -94,14 +100,21 @@ const PROVIDER_FIELDS = [
     "invoice_edi_format",
     "peppol_eas",
     "peppol_endpoint",
-    "comment"
+    "comment",
+    "l10n_co_edi_obligation_type_ids",
+    "l10n_co_edi_large_taxpayer",
+    "property_account_receivable_id",
+    "property_account_payable_id",
+    "property_purchase_currency_id"
+
 ];
 
 const PRODUCT_FIELDS = [
     "name", "default_code", "type",            // 'product', 'consu', 'service'
     "list_price", "standard_price", "categ_id", "uom_id", "uom_po_id", "barcode",
     "sale_ok", "purchase_ok", "active", "description", "image_1920", "company_id",
-    "taxes_id", "supplier_taxes_id", "weight", "volume", "tracking",
+    "taxes_id", "supplier_taxes_id", "weight", "volume", "tracking", "service_to_purchase", "l10n_co_dian_mandate_contract",
+    "property_account_income_id", "property_account_expense_id", "property_stock_account_input", "purchase_method"
 ];
 
 const PRODUCT_FIELDS_BILL = [
@@ -114,10 +127,12 @@ const PRODUCT_FIELDS_BILL = [
 const BILL_FIELDS = [
     "move_type", "partner_id", "invoice_date", "invoice_date_due", "ref",
     "currency_id", "company_id", "journal_id", "narration", "payment_reference",
-    "payment_reference", "invoice_origin", "state", "partner_bank_id", "invoice_vendor_bill_id"
+    "payment_reference", "invoice_origin", "state", "partner_bank_id", "invoice_vendor_bill_id", "amount_residual"
 ];
 
 const INVOICE_LINE_FIELDS = [
+    "x_studio_rad_rndc",
+    "x_studio_n_remesa",
     "product_id",      // ID del producto
     "name",            // Descripción de la línea
     "quantity",        // Cantidad
@@ -127,7 +142,66 @@ const INVOICE_LINE_FIELDS = [
     // ...otros campos de línea si los necesitas
 ];
 
+const QUOTATION_LINES_FIELDS = ["partner_id", "order_line"];
 
+const PURCHASE_ORDER_FIELDS = [
+    // BÁSICOS
+    "partner_id",
+    "currency_id",
+    "company_id",
+
+    // FECHAS
+    "date_order",
+    "date_planned",
+
+    // CONFIGURACIONES
+    "locked",
+    "priority",
+    "partner_ref",
+    "receipt_reminder_email",
+    "reminder_date_before_receipt",
+    "picking_type_id",
+    "dest_address_id",
+
+    // INFORMACIÓN ADICIONAL
+    "note",
+    "user_id",
+    "origin",
+
+    // TÉRMINOS COMERCIALES
+    "incoterm_id",
+    "incoterm_location",
+    "payment_term_id",
+    "fiscal_position_id",
+
+    // ESTADOS Y CONTROL
+    "state",
+    "invoice_status",
+    "receipt_reminder_email",
+
+    //NUEVAS CAMPOS ESTUDIO
+    "x_studio_rad_rndc"
+];
+
+const SALE_ORDER_FIELDS = [
+    // PARTNER Y DIRECCIONES
+    "partner_id",
+    "partner_invoice_id",
+    "partner_shipping_id",
+    "company_id",
+
+    "name",              // ✅ OBLIGATORIO - Descripción
+    "product_qty",       // ✅ OBLIGATORIO - Cantidad
+    "price_unit",        // ✅ OBLIGATORIO - Precio unitario
+    "product_uom_id",    // ✅ OBLIGATORIO - Unidad de medida
+    "date_planned",      // ✅ OBLIGATORIO - Fecha planeada
+    "product_id",        // ✅ OBLIGATORIO - ID del producto
+    "discount",
+    "propagate_cancel",
+    "x_studio_rad_rndc",
+    "x_studio_n_remesa",
+
+];
 
 const QUOTATION_LINES = [
     0, 0,
@@ -140,12 +214,8 @@ const QUOTATION_LINES = [
     }
 ];
 
-const QUOTATION_FIELDS = {
-    partner_id: 15,                       // ✅ Cliente (obligatorio)
-    order_line: [                          // ✅ Líneas de productos (obligatorio)
-        QUOTATION_LINES
-    ]
-};
+const QUOTATION_FIELDS = ["partner_id",
+    "order_line"];
 
 module.exports = {
     CLIENT_FIELDS,
@@ -158,5 +228,8 @@ module.exports = {
     BANK_ACCOUNT_PARTNER_FIELDS,
     PRODUCT_FIELDS_BILL,
     QUOTATION_FIELDS,
-    QUOTATION_LINES
+    QUOTATION_LINES,
+    SALE_ORDER_FIELDS,
+    PURCHASE_ORDER_FIELDS,
+
 };

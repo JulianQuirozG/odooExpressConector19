@@ -48,16 +48,26 @@ const productService = {
     async createProduct(dataProduct) {
         try {
             const product = pickFields(dataProduct, PRODUCT_FIELDS);
+
+            //si el json viene con seller_ids lo mapeo para verificar si viene con los paramatros para crear a los proveedores
+            if(dataProduct.seller_ids?.length > 0){
+                //cada vendedor debe ser un array con la estructura [0, 0, {vals}], para que al crear el registro se creen las lines de proveedores
+                product.seller_ids = dataProduct.seller_ids.map((seller) => { return [0, 0, seller]});
+            }
+            
             const response = await odooConector.executeOdooRequest('product.template', 'create', {
                 vals_list: [product]
             });
+
             if (!response.success) {
                 if (response.error) {
                     return { statusCode: 500, message: 'Error al crear producto', error: response.message };
                 }
                 return { statusCode: 400, message: 'Error al crear producto', data: response.data };
             }
+
             return { statusCode: 201, message: 'Producto creado con éxito', data: response.data };
+        
         } catch (error) {
             console.log('Error en productService.createProduct:', error);
             return { statusCode: 500, message: 'Error al crear producto', error: error.message };

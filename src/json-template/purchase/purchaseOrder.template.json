@@ -1,0 +1,48 @@
+{
+    "locked": false,
+    "priority": "0",
+    "partner_id": 24,
+    "partner_ref": false,
+    "currency_id": 8,
+    "company_id": 1,
+    "date_order": "2025-09-30 14:25:02",
+    "date_planned": "2025-09-30 14:25:02",
+    "receipt_reminder_email": false,
+    "reminder_date_before_receipt": 1,
+    "picking_type_id": 1,
+    "dest_address_id": false,
+    "order_line": [
+        [
+            0,
+            "virtual_19",
+            {
+                "display_type": false,
+                "technical_price_unit": 150000,
+                "sequence": 10,
+                "product_id": 7,
+                "name": "SARDINATA FLETE",
+                "date_planned": "2025-09-30 14:25:02",
+                "move_dest_ids": [],
+                "propagate_cancel": true,
+                "product_qty": 1,
+                "qty_received_manual": 0,
+                "qty_received": 0,
+                "product_uom_id": 16,
+                "price_unit": 150000,
+                "tax_ids": [
+                    [
+                        5
+                    ]
+                ],
+                "discount": 0
+            }
+        ]
+    ],
+    "note": false,
+    "user_id": 2,
+    "origin": false,
+    "incoterm_id": false,
+    "incoterm_location": false,
+    "payment_term_id": 4,
+    "fiscal_position_id": false
+}
