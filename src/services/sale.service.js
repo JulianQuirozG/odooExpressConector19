@@ -207,6 +207,7 @@ const saleService = {
             if (purchaseOrder.statusCode !== 200) return purchaseOrder;
 
             //actualizar orden de compra 
+            console.log('dataCompra', dataCompra);
             const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrderId, dataCompra, 'update');
             if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
 
