@@ -107,10 +107,6 @@ const saleService = {
             //mapear los ids a numeros
             const ids = Number(salesOrderIds[0]);
 
-            const vals = {
-                advance_payment_method: "all"
-            }
-
             //ejecuto el wizard para traer toda la info y crear la factura
             const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
                 vals_list: [{
