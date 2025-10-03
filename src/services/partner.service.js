@@ -9,7 +9,6 @@ const partnerService = {
     async getPartners(partnerFields = ['name', 'email', 'phone'], domain = []) {
         try {
             const response = await odooConector.executeOdooRequest('res.partner', 'search_read', {
-                fields: partnerFields,
                 domain: domain
             });
             if (!response.success) {
@@ -29,7 +28,6 @@ const partnerService = {
         try {
             const response = await odooConector.executeOdooRequest('res.partner', 'search_read', {
                 domain: [['id', '=', id]],
-
                 limit: 1
             });
             if (!response.success) {

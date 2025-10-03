@@ -25,7 +25,6 @@ const journalService = {
         try {
             const response = await odooConector.executeOdooRequest('account.journal', 'search_read', {
                 domain: [['id', '=', id]],
-                fields: ['name', 'code', 'type'],
                 limit: 1
             });
             if (!response.success) {
