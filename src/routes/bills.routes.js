@@ -22,5 +22,6 @@ router.post('/payment/:invoiceId', billController.createPayment);
 router.get('/outstanding-credits/:invoiceId', billController.listOutstandingCredits);
 router.post('/apply-credits/:invoiceId', billController.applyCreditNote);
 router.put('/verify-lines/:id', billController.verifyBillLines);
+router.get('/dian-json/:id', billController.getBillDianJson);
 
 module.exports = router;

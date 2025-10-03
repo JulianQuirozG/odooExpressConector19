@@ -1,4 +1,5 @@
 const { da } = require("zod/locales");
+const dianRequest = require('../json-template/sale/saleDian.json')
 const {
     BILL_FIELDS,
     PRODUCT_FIELDS,
@@ -10,6 +11,7 @@ const { pickFields } = require("../utils/util");
 const productService = require("./products.service");
 const partnerService = require("./partner.service");
 const { updateBill } = require("../controllers/bill.controller");
+const { journalService } = require("./journal.service");
 
 const billService = {
     //obtener todas las facturas
@@ -246,7 +248,7 @@ const billService = {
 
             //Regreso la factura actualizada
             const updateBill = await this.getOneBill(id);
-            if(updateBill.statusCode !== 200) return updateBill;
+            if (updateBill.statusCode !== 200) return updateBill;
             return {
                 statusCode: 200,
                 message: "Factura actualizada con éxito",
@@ -840,7 +842,7 @@ const billService = {
             };
         }
     },
-    async getLinesByBillId(id) {
+    async getLinesByBillId(id, action = 'id') {
         try {
             //Verificar que la factura exista
             const bill = await this.getOneBill(id);
@@ -849,7 +851,7 @@ const billService = {
             }
 
             //Buscar las lineas de esa factura
-            const lines = await odooConector.executeOdooRequest('account.move.line', 'search_read', { domain: [['id', 'in', bill.data.invoice_line_ids]], fields: INVOICE_LINE_FIELDS });
+            const lines = await odooConector.executeOdooRequest('account.move.line', 'search_read', { domain: [['id', 'in', bill.data.invoice_line_ids]] });
             if (!lines.success) {
                 if (lines.error) {
                     return { statusCode: 500, message: 'Error al obtener líneas de orden de compra', error: lines.message };
@@ -858,7 +860,9 @@ const billService = {
             }
 
             //Formateo las lineas para que el product_id sea solo el id y no un array con id y nombre
-            lines.data = lines.data.map(line => line.product_id = line.product_id[0]);
+            if (action === 'id') {
+                lines.data = lines.data.map(line => line.product_id = line.product_id[0]);
+            }
 
             //Regreso las lineas obtenidas
             return { statusCode: 200, message: 'Líneas de orden de compra obtenidas con éxito', data: lines.data };
@@ -870,6 +874,246 @@ const billService = {
                 error: error.data
             };
         }
+    },
+    async createJsonDian(billId) {
+        try {
+            const jsonDian = { ...dianRequest };
+
+            //Obtengo todos los datos de la factura
+            const bill = await this.getOneBill(billId);
+
+            if (bill.statusCode !== 200) return bill;
+            //extraigo los datos que necesito del nombre y la fecha de la factura
+            // el formato de la fecha es "2023-10-05 14:30:00"
+            // el formato del nombre es "FV/2023/0001"
+
+            const time = bill.data.l10n_co_dian_post_time.split(' ');
+            const number = bill.data.name.split('/');
+
+            console.log(...time)
+            console.log(...number)
+
+            let typedocument = 1;
+
+            if (bill.data.move_type === 'out_refund') {
+                typedocument = 4; //Factura de venta
+            }
+            if (bill.data.move_type === 'out_debit') {
+                typedocument = 5; //Factura de devolución
+            }
+
+
+            //obtengo los datos del cliente
+            const customer = await partnerService.getOnePartner(bill.data.partner_id[0]);
+            if (customer.statusCode !== 200) return customer;
+
+            const partner = customer.data;
+            console.log(partner);
+            const identification = partner.vat.split('-');
+            //regimen 1 = IVA, 2 = NO IVA
+            let regimen = 1;
+            if (partner.l10n_co_edi_fiscal_regimen === "49") {
+                regimen = 2;
+            }
+
+            //tipo de responsabilidad /
+            /** 
+            7	Gran contribuyente	O-13
+            9	Autorretenedor	O-15
+            14	Agente de retención en el impuesto sobre las ventas	O-23
+            112	Régimen Simple de Tributación – SIMPLE	O-47
+            117	No responsable	R-99-PN
+            */
+            let liability = null;
+            if (partner.l10n_co_edi_obligation_type_ids[0] === 1) {
+                liability = 112;
+            }
+            if (partner.l10n_co_edi_obligation_type_ids[0] === 2) {
+                liability = 117;
+            }
+            if (partner.l10n_co_edi_obligation_type_ids[0] === 3) {
+                liability = 7;
+            }
+            if (partner.l10n_co_edi_obligation_type_ids[0] === 4) {
+                liability = 9;
+            }
+            if (partner.l10n_co_edi_obligation_type_ids[0] === 5) {
+                liability = 14;
+            }
+
+            //tipo de organización
+            /** 
+            1	Persona Jurídica y asimiladas	1
+            2	Persona Natural y asimiladas	2
+            */
+            let organization = null;
+
+            if (partner.is_company) {
+                organization = 1;
+            } else {
+                organization = 2;
+            }
+
+            /**
+             * 
+             *   1	Registro civil	11
+             *   2	Tarjeta de identidad	12
+             *   3	Cédula de ciudadanía	13
+             *   4	Tarjeta de extranjería	21
+             *   5	Cédula de extranjería	22
+             *   6	NIT	31
+             *   7	Pasaporte	41
+             *   8	Documento de identificación extranjero	42
+             *   9	NIT de otro país	50
+             *   10	NUIP *	91
+             *   11	PEP	47
+             * 
+             * 
+             * 
+                "id": 4,
+                "display_name": "NIT",
+                "id": 5,
+                "display_name": "Cédula de ciudadanía",
+                "id": 6,
+                "display_name": "Registro Civil",
+                "id": 7,
+                "display_name": "Tarjeta de Identidad",
+                "id": 8,
+                "display_name": "Tarjeta de extranjería",
+                "id": 9,
+                "display_name": "Cédula de extranjería",
+                "id": 2,
+                "display_name": "Passport",
+                "id": 10,
+                "display_name": "PEP (Permiso Especial de Permanencia)",
+             */
+
+            let identity = null;
+            if (partner.l10n_latam_identification_type_id == 2) {
+                identity = 7;
+            }
+            if (partner.l10n_latam_identification_type_id == 4) {
+                identity = 6;
+            }
+            if (partner.l10n_latam_identification_type_id == 5) {
+                identity = 3;
+            }
+            if (partner.l10n_latam_identification_type_id == 7) {
+                identity = 2;
+            }
+            if (partner.l10n_latam_identification_type_id == 8) {
+                identity = 4;
+            }
+            if (partner.l10n_latam_identification_type_id == 9) {
+                identity = 5;
+            }
+            if (partner.l10n_latam_identification_type_id == 10) {
+                identity = 11;
+            }
+
+
+
+            const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
+            if (journalData.statusCode !== 200) return journalData;
+            const journal = journalData.data;
+
+
+            const lines = await this.getLinesByBillId(bill.data.id, 'full');
+            if (lines.statusCode !== 200) return lines;
+
+            const linesProduct = lines.data.map(line => {
+                return {
+
+                    code: line.product_id[0],
+                    notes: line.name || "",
+                    description: line.product_id[1],
+                    price_amount: line.price_total,
+                    base_quantity: line.quantity,
+                    unit_measure_id: 26,
+                    invoiced_quantity: line.quantity,
+                    line_extension_amount: line.price_subtotal,
+                    free_of_charge_indicator: false,
+                    type_item_identification_id: 999,//evaluar
+                    is_RNDC: "true",
+                    RNDC_consignment_number: line.x_studio_rad_rndc || "",
+                    internal_consignment_number: line.x_studio_n_remesa || "",
+                    value_consignment: "0",
+                    unit_measure_consignment_id: 26,
+                    quantity_consignment: line.quantity || 0,//evaluar
+                    allowance_charges: {}
+
+                }
+
+            });
+
+            //armo el json con los datos de la factura
+
+            jsonDian.date = time[0];
+            jsonDian.time = time[1];
+            jsonDian.notes = ""; //FALTA
+            jsonDian.number = number[2];
+            jsonDian.prefix = number[0];
+
+            jsonDian.customer = {
+                dv: identification[1],
+                name: partner.name || "",
+                email: partner.email || "",
+                phone: partner.phone || "",
+                address: partner.street || "",
+                //regimen
+                type_regime_id: regimen,
+                //municipalidad FALTAAAAAA
+                municipality_id: 439,
+                //tipo de contribuyente
+                type_liability_id: liability || "",
+                //tipo de organizacion
+                type_organization_id: organization || "",
+                identification_number: identification[0],
+                merchant_registration: "0000000",
+                //tipo de documento de identificacion
+                type_document_identification_id: identity //FALTA
+            }
+            jsonDian.joi
+
+            jsonDian.sendmail = partner.followup_remainder_type === 'automatic';
+            //jsonDian.foot_note = "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL PIE DE PAGINA";
+            //jsonDian.head_note = "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL ENCABEZADO DE PAGINA";
+            jsonDian.payment_form = {
+                payment_form_id: 2,
+                duration_measure: "30", //FALTA
+                payment_due_date: "2023-04-04", //CALCULAR
+                payment_method_id: 75 //PREGUNTAR
+            };
+            jsonDian.invoice_lines = linesProduct;
+
+
+            //lineas de totales
+            jsonDian.type_document_id = typedocument;//FALTA
+            jsonDian.resolution_number = journal.l10n_co_edi_dian_authorization_number; //FALTA
+            jsonDian.legal_monetary_totals = {
+                payable_amount: bill.data.amount_untaxed,
+                tax_exclusive_amount: bill.data.amount_untaxed,
+                tax_inclusive_amount: bill.data.amount_untaxed,
+                line_extension_amount: 0,
+                allowance_total_amount: bill.data.amount_total
+            }
+
+
+            return {
+                statusCode: 200,
+                message: 'JSON para DIAN creado con éxito',
+                data: jsonDian
+            };
+
+        } catch (error) {
+            console.error('Error al crear el JSON para DIAN', error);
+            return {
+                statusCode: 500,
+                message: 'Error al crear JSON DIAN',
+                error: error.message
+            };
+        }
+
     }
 };
 
