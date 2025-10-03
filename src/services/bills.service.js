@@ -15,6 +15,7 @@ const { journalService } = require("./journal.service");
 const paramsTypeDocumentRepository = require("../Repository/params_type_document/params_type_document.repository");
 const paramsTypeDocumentIdentificationRepository = require("../Repository/params_type_document_identification.repository/params_type_document_identification.repository");
 const paramsMunicipalitiesRepository = require("../Repository/params_municipalities/params_municipalities.repository");
+const paramsPaymentMethodsRepository = require("../Repository/params_payment_methods/params_payment_methods.repository");
 const { json } = require("zod");
 const billService = {
     //obtener todas las facturas
@@ -886,7 +887,6 @@ const billService = {
             const bill = await this.getOneBill(billId);
             if (bill.statusCode !== 200) return bill;
 
-            console.log(bill.data);
             //Fecha y hora de la factura
             const post_time = bill.data.l10n_co_dian_post_time.split(' ');
             const date = post_time[0];//
@@ -900,6 +900,7 @@ const billService = {
             //tipo de documento
             const move_type = bill.data.l10n_co_edi_type;
             const { data } = await paramsTypeDocumentRepository.getTypeDocumentByCode(move_type);
+            if (data.length < 1) return { statusCode: 404, message: "El tipo de documento no está configurado en la tabla de parámetros" };
             const type_document_id = data[0]; //
 
             // //Obtengo los datos del cliente
@@ -912,10 +913,11 @@ const billService = {
             customer.dv = vat[1];
 
             //nombre, telefono, direccion y email del cliente
+            if (!bill_customer.data.name) return { statusCode: 400, message: "El cliente no tiene nombre" };
             customer.name = bill_customer.data.name;
-            customer.phone = bill_customer.data.phone;
-            customer.email = bill_customer.data.email;
-            customer.address = bill_customer.data.address;
+            if (bill_customer.data.phone) customer.phone = bill_customer.data.phone;
+            if (bill_customer.data.email) customer.email = bill_customer.data.email;
+            if (bill_customer.data.address) customer.address = bill_customer.data.address;
 
             //registro mercantil
             //customer.merchant_registration = 
@@ -931,128 +933,63 @@ const billService = {
 
             //municipio
             const city = await odooConector.executeOdooRequest("res.city", "search_read", { domain: [['id', '=', bill_customer.data.city_id[0]]] });
-            customer.municipality_id = (await paramsMunicipalitiesRepository.getMunicipalityByCode(city.data[0].l10n_co_edi_code)).data[0].id;
-            // //extraigo los datos que necesito del nombre y la fecha de la factura
-            // // el formato de la fecha es "2023-10-05 14:30:00"
-            // // el formato del nombre es "FV/2023/0001"
+            if (city.data.length !== 0) customer.municipality_id = (await paramsMunicipalitiesRepository.getMunicipalityByCode(city.data[0].l10n_co_edi_code)).data[0].id;
+
+            //tipo de regimen
+            const fiscal_regimen = bill_customer.data.l10n_co_edi_fiscal_regimen;
+            customer.type_regime_id = (fiscal_regimen === "49") ? 2 : 1;
+
+            //Tipo de responsabilidad
+            const obligation_id = bill_customer.data.l10n_co_edi_obligation_type_ids;
+            const obligation_type = (await odooConector.executeOdooRequest("l10n_co_edi.type_code", "search_read", { domain: [['id', '=', obligation_id[0]]] })).data[0].id;
+            customer.type_liability_id = obligation_type;
+
+            //Forma de pago
+            const payment_form = {}
+
+            //Id de la forma de pago
+            //Si eligio la opcion de pagar en otra fecha es credito
+            payment_form.id = 2;
+
+            //Si no es pago inmediato, es credito
+            if (bill.data.invoice_payment_term_id[0] == 1) payment_form.id = 1;
+
+            //Metodo de pago id
+            const payment_id = bill.data.l10n_co_edi_payment_option_id[0];
+            const payment_method = (await odooConector.executeOdooRequest("l10n_co_edi.payment.option", "search_read", { domain: [['id', '=', payment_id]] }));
+
+            const payment_method_id = (await paramsPaymentMethodsRepository.getPaymentMethodByCode(payment_method.data[0].code));
+            if (payment_method_id.data.length < 1) return { statusCode: 404, message: "El método de pago no está configurado en la tabla de parámetros" };
+            payment_form.method_payment_id = payment_method_id.data[0].id;
 
 
+            //fecha de pago
+            payment_form.due_date = bill.data.invoice_date_due;
 
-            //obtengo los datos del cliente
-            // const customer = await partnerService.getOnePartner(bill.data.partner_id[0]);
-            // if (customer.statusCode !== 200) return customer;
+            //Duracion del pago (Calculado en dias dependiendo la fecha de la factura y la feca del pago)
+            const invoice_date = new Date(bill.data.invoice_date);
+            const invoice_date_due = new Date(bill.data.invoice_date_due);
 
-            // const partner = customer.data;
-            // console.log(partner);
-            // const identification = partner.vat.split('-');
-            // //regimen 1 = IVA, 2 = NO IVA
-            // let regimen = 1;
-            // if (partner.l10n_co_edi_fiscal_regimen === "49") {
-            //     regimen = 2;
-            // }
-
-            //tipo de responsabilidad /
-            /** 
-            7	Gran contribuyente	O-13
-            9	Autorretenedor	O-15
-            14	Agente de retención en el impuesto sobre las ventas	O-23
-            112	Régimen Simple de Tributación – SIMPLE	O-47
-            117	No responsable	R-99-PN
-            */
-            // let liability = null;
-            // if (partner.l10n_co_edi_obligation_type_ids[0] === 1) {
-            //     liability = 112;
-            // }
-            // if (partner.l10n_co_edi_obligation_type_ids[0] === 2) {
-            //     liability = 117;
-            // }
-            // if (partner.l10n_co_edi_obligation_type_ids[0] === 3) {
-            //     liability = 7;
-            // }
-            // if (partner.l10n_co_edi_obligation_type_ids[0] === 4) {
-            //     liability = 9;
-            // }
-            // if (partner.l10n_co_edi_obligation_type_ids[0] === 5) {
-            //     liability = 14;
-            // }
-
-            //tipo de organización
-            /** 
-            1	Persona Jurídica y asimiladas	1
-            2	Persona Natural y asimiladas	2
-            */
-            // let organization = null;
-
-            // if (partner.is_company) {
-            //     organization = 1;
-            // } else {
-            //     organization = 2;
-            // }
-
-            /**
-             * 
-             *   1	Registro civil	11
-             *   2	Tarjeta de identidad	12
-             *   3	Cédula de ciudadanía	13
-             *   4	Tarjeta de extranjería	21
-             *   5	Cédula de extranjería	22
-             *   6	NIT	31
-             *   7	Pasaporte	41
-             *   8	Documento de identificación extranjero	42
-             *   9	NIT de otro país	50
-             *   10	NUIP *	91
-             *   11	PEP	47
-             * 
-             * 
-             * 
-                "id": 4,
-                "display_name": "NIT",
-                "id": 5,
-                "display_name": "Cédula de ciudadanía",
-                "id": 6,
-                "display_name": "Registro Civil",
-                "id": 7,
-                "display_name": "Tarjeta de Identidad",
-                "id": 8,
-                "display_name": "Tarjeta de extranjería",
-                "id": 9,
-                "display_name": "Cédula de extranjería",
-                "id": 2,
-                "display_name": "Passport",
-                "id": 10,
-                "display_name": "PEP (Permiso Especial de Permanencia)",
-             */
-
-            // let identity = null;
-            // const identificationType = partner.l10n_latam_identification_type_id[0];
-            // console.log("Partner Identification Type ID:", partner.l10n_latam_identification_type_id);
-            // if (identificationType == 2) {
-            //     identity = 7;
-            // }
-            // if (identificationType   == 4) {
-            //     identity = 6;
-            // }
-            // if (identificationType == 5) {
-            //     identity = 3;
-            // }
-            // if (identificationType == 7) {
-            //     identity = 2;
-            // }
-            // if (identificationType == 8) {
-            //     identity = 4;
-            // }
-            // if (identificationType == 9) {
-            //     identity = 5;
-            // }
-            // if (identificationType == 10) {
-            //     identity = 11;
-            // }
+            //Calculo la diferencia en milisegundos
+            const diferenciaMs = invoice_date_due - invoice_date;
+            const dias = Math.round(diferenciaMs / (1000 * 60 * 60 * 24));
+            payment_form.duration_measure = dias;
 
 
+            // totales
+            const legal_monetary_totals = {
+                payable_amount: bill.data.amount_untaxed,
+                tax_exclusive_amount: bill.data.amount_untaxed,
+                tax_inclusive_amount: bill.data.amount_untaxed,
+                line_extension_amount: 0,
+                allowance_total_amount: bill.data.amount_total
+            }
 
+
+            //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
             if (journalData.statusCode !== 200) return journalData;
-            const journal = journalData.data;
+            const resolution_number = journalData.data.l10n_co_edi_dian_authorization_number;
 
 
             const lines = await this.getLinesByBillId(bill.data.id, 'full');
@@ -1083,64 +1020,27 @@ const billService = {
 
             });
 
-            //armo el json con los datos de la factura
-
-            jsonDian.date = time[0];
-            jsonDian.time = time[1];
-            jsonDian.notes = ""; //FALTA
-            jsonDian.number = number[2];
-            jsonDian.prefix = number[0];
-
-            jsonDian.customer = customer;
-            // jsonDian.customer = {
-            //     dv: identification[1],
-            //     name: partner.name || "",
-            //     email: partner.email || "",
-            //     phone: partner.phone || "",
-            //     address: partner.street || "",
-            //     //regimen
-            //     type_regime_id: regimen,
-            //     //municipalidad FALTAAAAAA
-            //     municipality_id: 439,
-            //     //tipo de contribuyente
-            //     type_liability_id: liability || "",
-            //     //tipo de organizacion
-            //     type_organization_id: organization || "",
-            //     identification_number: identification[0],
-            //     merchant_registration: "0000000",
-            //     //tipo de documento de identificacion
-            //     type_document_identification_id: identity //FALTA
-            // }
-            // jsonDian.joi
-
-            //jsonDian.sendmail = partner.followup_remainder_type === 'automatic';
-            //jsonDian.foot_note = "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL PIE DE PAGINA";
-            //jsonDian.head_note = "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL ENCABEZADO DE PAGINA";
-            jsonDian.payment_form = {
-                payment_form_id: 2,
-                duration_measure: "30", //FALTA
-                payment_due_date: bill.data.invoice_date_due, //CALCULAR
-                payment_method_id: 75 //PREGUNTAR
-            };
-            jsonDian.invoice_lines = linesProduct;
-
-
-            //lineas de totales
-            //jsonDian.type_document_id = typedocument;//FALTA
-            jsonDian.resolution_number = journal.l10n_co_edi_dian_authorization_number; //FALTA
-            jsonDian.legal_monetary_totals = {
-                payable_amount: bill.data.amount_untaxed,
-                tax_exclusive_amount: bill.data.amount_untaxed,
-                tax_inclusive_amount: bill.data.amount_untaxed,
-                line_extension_amount: 0,
-                allowance_total_amount: bill.data.amount_total
-            }
+            //construyo el json para la dian
 
             jsonDian.date = date;
             jsonDian.time = time;
             jsonDian.number = number;
             jsonDian.prefix = prefix;
+
+            jsonDian.customer = customer;
+
+
+            jsonDian.payment_form = payment_form;
+
+            jsonDian.invoice_lines = linesProduct;
+
             jsonDian.type_document_id = type_document_id.id;
+            jsonDian.resolution_number = resolution_number;
+            jsonDian.legal_monetary_totals = legal_monetary_totals;
+
+
+
+
 
             return {
                 statusCode: 200,
