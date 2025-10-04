@@ -19,6 +19,7 @@ const paramsMunicipalitiesRepository = require("../Repository/params_municipalit
 const paramsPaymentMethodsRepository = require("../Repository/params_payment_methods/params_payment_methods.repository");
 const { json } = require("zod");
 const { getUnitMeasureByCode, createUnitMeasure } = require("../Repository/param_unit_measures/params_unit_measures");
+const { createTax, getTaxByCode } = require("../Repository/param_taxes/params_unit_measures");
 const billService = {
     //obtener todas las facturas
     async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"]) {
@@ -998,7 +999,7 @@ const billService = {
 
             const lines = await this.getLinesByBillId(bill.data.id, 'full');
             if (lines.statusCode !== 200) return lines;
-            console.log(lines.data);
+            console.log("lines::", lines.data);
             //Tomo las lineas y construyo lo invoice_lines
 
             // for (line of jsonDatabase.unit_measures){
@@ -1037,6 +1038,38 @@ const billService = {
                     lines2.unit_measure_consignment_id = Number(unit_measure_id.data[0].id);  //FALTA
                     lines2.quantity_consignment = line.quantity;
                 }
+                tax_totals = [];
+                if(line.tax_ids.length === 0) return { statusCode: 400, message: `La linea ${line.id} no tiene impuestos`};
+
+                for (const tax of line.tax_ids) {
+                    let tax_line = {};
+                    //console.log("tax::", tax);
+                    //obtengo los datos del impuesto
+                    const taxData = await odooConector.executeOdooRequest("account.tax", "search_read", { domain: [['id', '=', Number(tax)]] });
+                    //console.log(taxData.data.length);
+                    if (taxData?.data.length === 0) return { statusCode: 400, message: `El impuesto ${tax} de la linea ${line.id} no es válido` };
+
+                    const taxTypeData = await odooConector.executeOdooRequest("l10n_co_edi.tax.type", "search_read", { domain: [['id', '=', taxData.data[0].l10n_co_edi_type[0]]] });
+                    if (taxTypeData.data.length === 0) return { statusCode: 400, message: `El tipo de impuesto ${taxData.data[0].l10n_co_edi_type[0]} del impuesto ${tax} de la linea ${line.id} no es válido` };
+
+                    const tax_id = await getTaxByCode(taxTypeData.data[0].code);
+                    console.log("tax_id::", tax_id);
+                    if (tax_id.data[0].length === 0) return { statusCode: 404, message: `El tipo de impuesto con código ${taxTypeData.data[0].code} no está configurado en la tabla de parámetros` };
+
+                    console.log("taxData::", taxData.data[0]);
+                    console.log("taxTypeData::", taxTypeData.data[0]);
+
+                    tax_line.tax_id = tax_id.data[0].id;
+                    tax_line.tax_amount = taxData.data[0].amount===0 ? 0 : line.price_subtotal * (taxData.data[0].amount/100);
+                    tax_line.percent = taxData.data[0].amount;
+                    tax_line.taxable_amount = line.price_subtotal;
+
+
+                    tax_totals.push({...tax_line});
+
+                }
+
+                lines2.tax_totals = tax_totals;
 
                 console.log(lines2);
                 linesProduct.push(lines2);

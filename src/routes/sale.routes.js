@@ -15,7 +15,7 @@ const { validateData } = require("../middleware/createSale.muddleware");
 router.get('/', saleController.getSales);
 router.get('/:id', saleController.getSaleById);
 router.post('/create-bill', saleController.createBillFromSalesOrder);
-router.post('/', validateBody(createSaleSchema), validateData, saleController.createSale);
+router.post('/',  validateData, saleController.createSale);
 
 
 module.exports = router;
