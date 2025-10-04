@@ -188,7 +188,7 @@ const billService = {
             }
             //verifico al partner si viene en el body
             const bill = pickFields(dataBill, BILL_FIELDS);
-
+            let linesToAdd = [];
             if (dataBill.invoice_line_ids && dataBill.invoice_line_ids.length >= 0) {
                 const lineIds = billExists.data.invoice_line_ids;
 
@@ -202,7 +202,7 @@ const billService = {
                         })
                     );
                     //obtengo las lineas que tienen productos existentes
-                    const linesToAdd = dataBill.invoice_line_ids.filter((line) =>
+                    linesToAdd = dataBill.invoice_line_ids.filter((line) =>
                         productResponse.data.foundIds.includes(Number(line.product_id))
                     );
 
@@ -891,7 +891,8 @@ const billService = {
             const bill = await this.getOneBill(billId); //Solo facturas confirmadas y firmadas
             if (bill.statusCode !== 200) return bill;
 
-            if(bill.state === 'draft' ) return { statusCode: 400, message: "La factura debe estar en estado post para generar el JSON" };
+            console.log("-------------------------", bill);
+            if (bill.state == 'draft') return { statusCode: 400, message: "La factura debe estar en estado post para generar el JSON" };
             //Fecha y hora de la factura
             const post_time = bill.data.l10n_co_dian_post_time.split(' ');
             const date = post_time[0];//
@@ -913,7 +914,8 @@ const billService = {
             let customer = {}; //
 
             //sendEmail
-            const sendEmail = bill_customer.data.followup_reminder_type == "automatic";
+            console.log("send email", bill_customer.data.followup_reminder_type);
+            const sendEmail = bill_customer.data.followup_reminder_type === "automatic";
             //documento del cliente
             const vat = bill_customer.data.vat.split('-');
             customer.identification_number = vat[0];
@@ -927,13 +929,13 @@ const billService = {
             if (bill_customer.data.address) customer.address = bill_customer.data.address;
 
             //registro mercantil
-            //customer.merchant_registration = 
+            customer.commercial_registration = bill_customer.data.x_studio_registro_mercantil || "0000000";
 
 
             //tipo de documento de identificacion 
             const customer_l10n_latam_identification_type_id = bill_customer.data.l10n_latam_identification_type_id;
             const type_document_identification_id = await paramsTypeDocumentIdentificationRepository.getTypeDocumentByCode(customer_l10n_latam_identification_type_id[0]);
-            if(type_document_identification_id.data.length > 0) customer.type_document_identification_id = type_document_identification_id.data[0].id; //
+            if (type_document_identification_id.data.length > 0) customer.type_document_identification_id = type_document_identification_id.data[0].id; //
 
             //tipo de organizacion
             customer.type_organization_id = bill_customer.data.is_company ? 1 : 2;
@@ -993,14 +995,14 @@ const billService = {
                 tax_inclusive_amount: bill.data.amount_untaxed,
                 line_extension_amount: 0,
                 allowance_total_amount: bill.data.amount_total,
-                payable_amount: bill.data.amount_total,
+                charge_total_amount: bill.data.amount_total,
             }
 
 
             //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
             if (journalData.statusCode !== 200) return journalData;
-            if(!journalData.data.l10n_co_edi_dian_authorization_number) return { statusCode: 400, message: "El diario no tiene configurado un  número de resolución DIAN" };
+            if (!journalData.data.l10n_co_edi_dian_authorization_number) return { statusCode: 400, message: "El diario no tiene configurado un  número de resolución DIAN" };
             const resolution_number = journalData.data.l10n_co_edi_dian_authorization_number;
 
             //impuestos totales
@@ -1016,10 +1018,10 @@ const billService = {
             for (const line of lines.data) {
                 //obtengo la unidad de medida
                 const unitMeassure = await odooConector.executeOdooRequest("uom.uom", "search_read", { domain: [['id', '=', line.product_uom_id[0]]] });
-                if(unitMeassure.error) return { statusCode: 500, message: "Error al obtener la unidad de medida", error: unitMeassure.message };
-                if(!unitMeassure.success) return { statusCode: 400, message: "Error al obtener la unidad de medida", data: unitMeassure.data };
+                if (unitMeassure.error) return { statusCode: 500, message: "Error al obtener la unidad de medida", error: unitMeassure.message };
+                if (!unitMeassure.success) return { statusCode: 400, message: "Error al obtener la unidad de medida", data: unitMeassure.data };
                 if (unitMeassure.data.length === 0) return { statusCode: 404, message: `La unidad de medida ${line.product_uom_id[0]} de la linea ${line.id} no existe` };
-                
+
                 const identificador = unitMeassure.data[0].l10n_co_edi_ubl;
                 //busco la unidad de medida en la tabla de parametros
                 const unit_measure_id = await getUnitMeasureByCode(identificador);
@@ -1038,9 +1040,9 @@ const billService = {
                 lines2.free_of_charge_indicator = false; //de donde saco esto
                 lines2.type_item_identification_id = 4; //Esteban me dijo que siempre es 4
                 if (bill.data.l10n_co_edi_operation_type === '12') {
-                    lines2.is_RNDC = true; 
-                    if(!line.x_studio_rad_rndc) return { statusCode: 400, message: `La linea ${line.id} no tiene número de radicado RNDC` };
-                    if(!line.x_studio_n_remesa) return { statusCode: 400, message: `La linea ${line.id} no tiene número de remesa interna` };
+                    lines2.is_RNDC = true;
+                    if (!line.x_studio_rad_rndc) return { statusCode: 400, message: `La linea ${line.id} no tiene número de radicado RNDC` };
+                    if (!line.x_studio_n_remesa) return { statusCode: 400, message: `La linea ${line.id} no tiene número de remesa interna` };
                     lines2.RNDC_consignment_number = line.x_studio_rad_rndc || "";
                     lines2.internal_consignment_number = line.x_studio_n_remesa || "";
                     lines2.value_consignment = 0; //FALTA
@@ -1075,13 +1077,13 @@ const billService = {
                     //Agregar la cantidad de los impuestos
                     if (tax_totals_map.has(tax)) {
                         // Ya existe, sumar valores
-                        const existing = tax_totals_map.get(tax_line.percent);
+                        const existing = tax_totals_map.get(tax);
                         existing.tax_amount += tax_line.tax_amount;
                         existing.taxable_amount += tax_line.taxable_amount;
-                        tax_totals_map.set(tax_line.percent, existing);
+                        tax_totals_map.set(tax, existing);
                     } else {
                         // Nuevo impuesto
-                        tax_totals_map.set(tax_line.percent, {
+                        tax_totals_map.set(tax, {
                             tax_id: tax_line.tax_id,
                             tax_amount: tax_line.tax_amount,
                             percent: tax_line.percent,
@@ -1120,7 +1122,7 @@ const billService = {
             jsonDian.legal_monetary_totals = legal_monetary_totals;
             jsonDian.tax_totals = tax_totals_bill;
 
-            jsonDian.sendEmail = sendEmail;
+            jsonDian.sendmail = sendEmail;
 
 
 
