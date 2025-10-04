@@ -891,7 +891,8 @@ const billService = {
             const bill = await this.getOneBill(billId); //Solo facturas confirmadas y firmadas
             if (bill.statusCode !== 200) return bill;
 
-            if(bill.state === 'draft' ) return { statusCode: 400, message: "La factura debe estar en estado post para generar el JSON" };
+            console.log("-------------------------", bill);
+            if(bill.state == 'draft' ) return { statusCode: 400, message: "La factura debe estar en estado post para generar el JSON" };
             //Fecha y hora de la factura
             const post_time = bill.data.l10n_co_dian_post_time.split(' ');
             const date = post_time[0];//
@@ -927,7 +928,7 @@ const billService = {
             if (bill_customer.data.address) customer.address = bill_customer.data.address;
 
             //registro mercantil
-            //customer.merchant_registration = 
+            customer.commercial_registration = bill_customer.data.x_studio_registro_mercantil || "0000000";
 
 
             //tipo de documento de identificacion 
