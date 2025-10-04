@@ -17,6 +17,7 @@ const CLIENT_FIELDS = [
     "vat",
     "website",
     "category_id",
+    "city_id",
     "company_id",
     "customer_rank",
     "supplier_rank",
@@ -41,7 +42,13 @@ const CLIENT_FIELDS = [
     "l10n_co_edi_large_taxpayer",
     "property_account_receivable_id",
     "property_account_payable_id",
-    "property_purchase_currency_id"
+    "property_purchase_currency_id",
+    "l10n_co_edi_fiscal_regimen",
+    "l10n_co_edi_comercial_name",
+    "property_stock_supplier",
+    "followup_reminder_type",
+    "autopost_bills",
+    "l10n_co_edi_commercial_name"
 
 
     // ...otros campos de cliente
@@ -70,6 +77,7 @@ const PROVIDER_FIELDS = [
     "email",
     "phone",
     "street",
+    "city_id",
     "street2",
     "lang",
     "city",
@@ -105,7 +113,13 @@ const PROVIDER_FIELDS = [
     "l10n_co_edi_large_taxpayer",
     "property_account_receivable_id",
     "property_account_payable_id",
-    "property_purchase_currency_id"
+    "property_purchase_currency_id",
+    "l10n_co_edi_fiscal_regimen",
+    "l10n_co_edi_comercial_name",
+    "property_stock_supplier",
+    "followup_reminder_type",
+    "autopost_bills",
+    "l10n_co_edi_commercial_name",
 
 ];
 
