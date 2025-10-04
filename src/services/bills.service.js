@@ -1010,15 +1010,15 @@ const billService = {
             const tax_totals_map = new Map();
             for (const line of lines.data) {
                 //obtengo la unidad de medida
-
+                console.log("line::", line);
                 const unitMeassure = await odooConector.executeOdooRequest("uom.uom", "search_read", { domain: [['id', '=', line.product_uom_id[0]]] });
-                console.log("unit_measure", unitMeassure.data[0].l10n_co_edi_ubl);
+                //console.log("unit_measure", unitMeassure.data[0].l10n_co_edi_ubl);
                 const identificador = unitMeassure.data[0].l10n_co_edi_ubl;
                 const unit_measure_id = await getUnitMeasureByCode(identificador);
 
-                console.log("unit_measure_id", unit_measure_id);
+                //console.log("unit_measure_id", unit_measure_id);
 
-                console.log(unit_measure_id);
+                //console.log(unit_measure_id);
                 let lines2 = {};
 
                 lines2.code = line.product_id[0];
