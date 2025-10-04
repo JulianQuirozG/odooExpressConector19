@@ -19,8 +19,6 @@
         "type_document_identification_id": 3
     },
     "sendmail": false,
-    "foot_note": "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL PIE DE PAGINA",
-    "head_note": "PRUEBA DE TEXTO LIBRE QUE DEBE POSICIONARSE EN EL ENCABEZADO DE PAGINA",
     "payment_form": {
         "payment_form_id": 2,
         "duration_measure": "30",
