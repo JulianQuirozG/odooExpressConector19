@@ -17,6 +17,7 @@ const paramsTypeDocumentRepository = require("../Repository/params_type_document
 const paramsTypeDocumentIdentificationRepository = require("../Repository/params_type_document_identification.repository/params_type_document_identification.repository");
 const paramsMunicipalitiesRepository = require("../Repository/params_municipalities/params_municipalities.repository");
 const paramsPaymentMethodsRepository = require("../Repository/params_payment_methods/params_payment_methods.repository");
+const paramsLiabilitiesRepository = require("../Repository/param_type_liabilities/param_type_liabilities.repository");
 const { json } = require("zod");
 const { getUnitMeasureByCode, createUnitMeasure } = require("../Repository/param_unit_measures/params_unit_measures");
 const { createTax, getTaxByCode } = require("../Repository/param_taxes/params_unit_measures");
@@ -887,9 +888,10 @@ const billService = {
             const jsonDian = { ...dianRequest };
 
             //Obtengo todos los datos de la factura
-            const bill = await this.getOneBill(billId);
+            const bill = await this.getOneBill(billId); //Solo facturas confirmadas y firmadas
             if (bill.statusCode !== 200) return bill;
 
+            if(bill.state === 'draft' ) return { statusCode: 400, message: "La factura debe estar en estado post para generar el JSON" };
             //Fecha y hora de la factura
             const post_time = bill.data.l10n_co_dian_post_time.split(' ');
             const date = post_time[0];//
@@ -910,6 +912,8 @@ const billService = {
             const bill_customer = await partnerService.getOnePartner(bill.data.partner_id[0]);
             let customer = {}; //
 
+            //sendEmail
+            const sendEmail = bill_customer.data.followup_reminder_type == "automatic";
             //documento del cliente
             const vat = bill_customer.data.vat.split('-');
             customer.identification_number = vat[0];
@@ -929,13 +933,12 @@ const billService = {
             //tipo de documento de identificacion 
             const customer_l10n_latam_identification_type_id = bill_customer.data.l10n_latam_identification_type_id;
             const type_document_identification_id = await paramsTypeDocumentIdentificationRepository.getTypeDocumentByCode(customer_l10n_latam_identification_type_id[0]);
-            customer.type_document_identification_id = type_document_identification_id.data[0].id; //
+            if(type_document_identification_id.data.length > 0) customer.type_document_identification_id = type_document_identification_id.data[0].id; //
 
             //tipo de organizacion
             customer.type_organization_id = bill_customer.data.is_company ? 1 : 2;
 
             //municipio
-            //if(!bill_customer.data.city_id) return { statusCode: 400, message: "El cliente no tiene ciudad" };
             const city = await odooConector.executeOdooRequest("res.city", "search_read", { domain: [['id', '=', bill_customer.data.city_id[0]]] });
             if (city.data.length !== 0) customer.municipality_id = (await paramsMunicipalitiesRepository.getMunicipalityByCode(city.data[0].l10n_co_edi_code)).data[0].id;
 
@@ -946,18 +949,20 @@ const billService = {
             //Tipo de responsabilidad
             const obligation_id = bill_customer.data.l10n_co_edi_obligation_type_ids;
             if (obligation_id.length === 0) return { statusCode: 400, message: "El cliente no tiene tipo de responsabilidad" };
-            const obligation_type = (await odooConector.executeOdooRequest("l10n_co_edi.type_code", "search_read", { domain: [['id', '=', obligation_id[0]]] })).data[0].id;
-            customer.type_liability_id = obligation_type;
+            const obligation_type = (await odooConector.executeOdooRequest("l10n_co_edi.type_code", "search_read", { domain: [['id', '=', obligation_id[0]]] })).data[0];
+            const type_liability = await paramsLiabilitiesRepository.getTypeLiabilitiesByCode(obligation_type.name);
+            if (type_liability.data.length < 1) return { statusCode: 404, message: "El tipo de responsabilidad no está configurado en la tabla de parámetros" };
+            customer.type_liability_id = type_liability.data[0].id;
 
             //Forma de pago
             const payment_form = {}
 
             //Id de la forma de pago
             //Si eligio la opcion de pagar en otra fecha es credito
-            payment_form.id = 2;
+            payment_form.payment_form_id = 2;
 
             //Si no es pago inmediato, es credito
-            if (bill.data.invoice_payment_term_id[0] == 1) payment_form.id = 1;
+            if (bill.data.invoice_payment_term_id[0] == 1) payment_form.payment_form_id = 1;
 
             //Metodo de pago id
             const payment_id = bill.data.l10n_co_edi_payment_option_id[0];
@@ -969,7 +974,7 @@ const billService = {
 
 
             //fecha de pago
-            payment_form.due_date = bill.data.invoice_date_due;
+            payment_form.payment_due_date = bill.data.invoice_date_due;
 
             //Duracion del pago (Calculado en dias dependiendo la fecha de la factura y la feca del pago)
             const invoice_date = new Date(bill.data.invoice_date);
@@ -987,13 +992,15 @@ const billService = {
                 tax_exclusive_amount: bill.data.amount_untaxed,
                 tax_inclusive_amount: bill.data.amount_untaxed,
                 line_extension_amount: 0,
-                allowance_total_amount: bill.data.amount_total
+                allowance_total_amount: bill.data.amount_total,
+                payable_amount: bill.data.amount_total,
             }
 
 
             //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
             if (journalData.statusCode !== 200) return journalData;
+            if(!journalData.data.l10n_co_edi_dian_authorization_number) return { statusCode: 400, message: "El diario no tiene configurado un  número de resolución DIAN" };
             const resolution_number = journalData.data.l10n_co_edi_dian_authorization_number;
 
             //impuestos totales
@@ -1001,24 +1008,22 @@ const billService = {
 
             const lines = await this.getLinesByBillId(bill.data.id, 'full');
             if (lines.statusCode !== 200) return lines;
-            console.log("lines::", lines.data);
+
             //Tomo las lineas y construyo lo invoice_lines
-
-
             const linesProduct = [];
             let tax_totals_bill = [];
             const tax_totals_map = new Map();
             for (const line of lines.data) {
                 //obtengo la unidad de medida
-                console.log("line::", line);
                 const unitMeassure = await odooConector.executeOdooRequest("uom.uom", "search_read", { domain: [['id', '=', line.product_uom_id[0]]] });
-                //console.log("unit_measure", unitMeassure.data[0].l10n_co_edi_ubl);
+                if(unitMeassure.error) return { statusCode: 500, message: "Error al obtener la unidad de medida", error: unitMeassure.message };
+                if(!unitMeassure.success) return { statusCode: 400, message: "Error al obtener la unidad de medida", data: unitMeassure.data };
+                if (unitMeassure.data.length === 0) return { statusCode: 404, message: `La unidad de medida ${line.product_uom_id[0]} de la linea ${line.id} no existe` };
+                
                 const identificador = unitMeassure.data[0].l10n_co_edi_ubl;
                 const unit_measure_id = await getUnitMeasureByCode(identificador);
+                if (unit_measure_id.data.length === 0) return { statusCode: 404, message: `La unidad de medida con código ${identificador} no está configurada en la tabla de parámetros` };
 
-                //console.log("unit_measure_id", unit_measure_id);
-
-                //console.log(unit_measure_id);
                 let lines2 = {};
 
                 lines2.code = line.product_id[0];
@@ -1032,10 +1037,12 @@ const billService = {
                 lines2.free_of_charge_indicator = false; //de donde saco esto
                 lines2.type_item_identification_id = 4; // FALTA
                 if (bill.data.l10n_co_edi_operation_type === '12') {
-                    lines2.is_RNDC = bill.data.l10n_co_edi_operation_type === '12'; //Si es de tipo transporte es true
+                    lines2.is_RNDC = true; 
+                    if(!line.x_studio_rad_rndc) return { statusCode: 400, message: `La linea ${line.id} no tiene número de radicado RNDC` };
+                    if(!line.x_studio_n_remesa) return { statusCode: 400, message: `La linea ${line.id} no tiene número de remesa interna` };
                     lines2.RNDC_consignment_number = line.x_studio_rad_rndc || "";
                     lines2.internal_consignment_number = line.x_studio_n_remesa || "";
-                    lines2.value_consignment = "0"; //FALTA
+                    lines2.value_consignment = 0; //FALTA
                     lines2.unit_measure_consignment_id = Number(unit_measure_id.data[0].id);  //FALTA
                     lines2.quantity_consignment = line.quantity;
                 }
@@ -1045,21 +1052,17 @@ const billService = {
 
                 for (const tax of line.tax_ids) {
                     let tax_line = {};
-                    //console.log("tax::", tax);
+
                     //obtengo los datos del impuesto
                     const taxData = await odooConector.executeOdooRequest("account.tax", "search_read", { domain: [['id', '=', Number(tax)]] });
-                    //console.log(taxData.data.length);
+
                     if (taxData?.data.length === 0) return { statusCode: 400, message: `El impuesto ${tax} de la linea ${line.id} no es válido` };
 
                     const taxTypeData = await odooConector.executeOdooRequest("l10n_co_edi.tax.type", "search_read", { domain: [['id', '=', taxData.data[0].l10n_co_edi_type[0]]] });
                     if (taxTypeData.data.length === 0) return { statusCode: 400, message: `El tipo de impuesto ${taxData.data[0].l10n_co_edi_type[0]} del impuesto ${tax} de la linea ${line.id} no es válido` };
 
                     const tax_id = await getTaxByCode(taxTypeData.data[0].code);
-                    console.log("tax_id::", tax_id);
                     if (tax_id.data[0].length === 0) return { statusCode: 404, message: `El tipo de impuesto con código ${taxTypeData.data[0].code} no está configurado en la tabla de parámetros` };
-
-                    console.log("taxData::", taxData.data[0]);
-                    console.log("taxTypeData::", taxTypeData.data[0]);
 
                     tax_line.tax_id = tax_id.data[0].id;
                     tax_line.tax_amount = taxData.data[0].amount === 0 ? 0 : line.price_subtotal * (taxData.data[0].amount / 100);
@@ -1116,6 +1119,8 @@ const billService = {
             jsonDian.resolution_number = resolution_number;
             jsonDian.legal_monetary_totals = legal_monetary_totals;
             jsonDian.tax_totals = tax_totals_bill;
+
+            jsonDian.sendEmail = sendEmail;
 
 
 
