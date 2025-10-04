@@ -944,7 +944,7 @@ const billService = {
 
             //Tipo de responsabilidad
             const obligation_id = bill_customer.data.l10n_co_edi_obligation_type_ids;
-            if(obligation_id.length === 0) return { statusCode: 400, message: "El cliente no tiene tipo de responsabilidad" };
+            if (obligation_id.length === 0) return { statusCode: 400, message: "El cliente no tiene tipo de responsabilidad" };
             const obligation_type = (await odooConector.executeOdooRequest("l10n_co_edi.type_code", "search_read", { domain: [['id', '=', obligation_id[0]]] })).data[0].id;
             customer.type_liability_id = obligation_type;
 
@@ -995,15 +995,24 @@ const billService = {
             if (journalData.statusCode !== 200) return journalData;
             const resolution_number = journalData.data.l10n_co_edi_dian_authorization_number;
 
+            //impuestos totales
+            const tax_totals = [];
 
             const lines = await this.getLinesByBillId(bill.data.id, 'full');
             if (lines.statusCode !== 200) return lines;
-            console.log(lines.data);
             //Tomo las lineas y construyo lo invoice_lines
 
             // for (line of jsonDatabase.unit_measures){
             //     await createUnitMeasure(line.id,line.name,line.code);
             // }
+
+
+
+                        for(const line of lines.data){
+                console.log("line ",line);
+            }
+            process.exit(0)
+
 
             const linesProduct = [];
             for (const line of lines.data) {
