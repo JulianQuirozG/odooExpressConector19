@@ -15,7 +15,7 @@
         "type_liability_id": 117,
         "type_organization_id": 1,
         "identification_number": 901249232,
-        "merchant_registration": "0000000-00",
+        "merchant_registration": "0000000",
         "type_document_identification_id": 3
     },
     "sendmail": false,
