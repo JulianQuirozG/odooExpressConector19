@@ -1021,6 +1021,7 @@ const billService = {
                 if (unitMeassure.data.length === 0) return { statusCode: 404, message: `La unidad de medida ${line.product_uom_id[0]} de la linea ${line.id} no existe` };
                 
                 const identificador = unitMeassure.data[0].l10n_co_edi_ubl;
+                //busco la unidad de medida en la tabla de parametros
                 const unit_measure_id = await getUnitMeasureByCode(identificador);
                 if (unit_measure_id.data.length === 0) return { statusCode: 404, message: `La unidad de medida con código ${identificador} no está configurada en la tabla de parámetros` };
 
@@ -1035,7 +1036,7 @@ const billService = {
                 lines2.invoiced_quantity = line.quantity;
                 lines2.line_extension_amount = line.price_total;
                 lines2.free_of_charge_indicator = false; //de donde saco esto
-                lines2.type_item_identification_id = 4; // FALTA
+                lines2.type_item_identification_id = 4; //Esteban me dijo que siempre es 4
                 if (bill.data.l10n_co_edi_operation_type === '12') {
                     lines2.is_RNDC = true; 
                     if(!line.x_studio_rad_rndc) return { statusCode: 400, message: `La linea ${line.id} no tiene número de radicado RNDC` };
@@ -1107,7 +1108,6 @@ const billService = {
             jsonDian.time = time;
             jsonDian.number = number;
             jsonDian.prefix = prefix;
-
             jsonDian.customer = customer;
 
 

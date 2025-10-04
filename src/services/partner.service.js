@@ -116,6 +116,9 @@ const partnerService = {
         try {
             const partner = pickFields(dataPartner, CLIENT_FIELDS);
             const response = await this.createPartner(partner);
+            if (response.statusCode !== 201) {
+                return { statusCode: response.statusCode, message: response.message, data: response.data };
+            }
             const BankAccountError = [];
             const BankAccountSuccess = [];
             if (dataPartner.bankAccounts && dataPartner.bankAccounts.length > 0) {
