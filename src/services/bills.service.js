@@ -1,4 +1,4 @@
-const { da } = require("zod/locales");
+const { da, ta } = require("zod/locales");
 const dianRequest = require('../json-template/sale/saleDian.json')
 const {
     BILL_FIELDS,
@@ -1004,31 +1004,10 @@ const billService = {
             console.log("lines::", lines.data);
             //Tomo las lineas y construyo lo invoice_lines
 
-            // for (line of jsonDatabase.unit_measures){
-            //     await createUnitMeasure(line.id,line.name,line.code);
-            // }
-
-
-
-            // let dataJuanes = lines.data.map(line => {
-            //     return{
-            //         taxable_amount: line.price_subtotal,
-            //         percent: 0,/// subtotal * 19 / 100
-
-            //     }
-            // })
-            let repert;
-            for (const line of lines.data) {
-                const iva = line.price_total - line.price_subtotal;
-                let tax = (iva / line.price_subtotal) * 100;
-                // si existen en line dos valores con el impuesto igual suma los valores pe
-
-            }
-
-            process.exit(0)
-
 
             const linesProduct = [];
+            let tax_totals_bill = [];
+            const tax_totals_map = new Map();
             for (const line of lines.data) {
                 //obtengo la unidad de medida
 
@@ -1060,8 +1039,9 @@ const billService = {
                     lines2.unit_measure_consignment_id = Number(unit_measure_id.data[0].id);  //FALTA
                     lines2.quantity_consignment = line.quantity;
                 }
-                tax_totals = [];
-                if(line.tax_ids.length === 0) return { statusCode: 400, message: `La linea ${line.id} no tiene impuestos`};
+                const tax_totals = [];
+                if (line.tax_ids.length === 0) return { statusCode: 400, message: `La linea ${line.id} no tiene impuestos` };
+
 
                 for (const tax of line.tax_ids) {
                     let tax_line = {};
@@ -1082,20 +1062,42 @@ const billService = {
                     console.log("taxTypeData::", taxTypeData.data[0]);
 
                     tax_line.tax_id = tax_id.data[0].id;
-                    tax_line.tax_amount = taxData.data[0].amount===0 ? 0 : line.price_subtotal * (taxData.data[0].amount/100);
+                    tax_line.tax_amount = taxData.data[0].amount === 0 ? 0 : line.price_subtotal * (taxData.data[0].amount / 100);
                     tax_line.percent = taxData.data[0].amount;
                     tax_line.taxable_amount = line.price_subtotal;
 
 
-                    tax_totals.push({...tax_line});
+                    tax_totals.push({ ...tax_line });
+                    console.log("tax_line::", tax_line.percent, tax_totals_map.has(tax_line.percent));
+                    if (tax_totals_map.has(tax_line.percent)) {
+                        // Ya existe, sumar valores
+                        const existing = tax_totals_map.get(tax_line.percent);
+                        existing.tax_amount += tax_line.tax_amount;
+                        existing.taxable_amount += tax_line.taxable_amount;
+                        tax_totals_map.set(tax_line.percent, existing);
+                    } else {
+                        // Nuevo impuesto
+                        tax_totals_map.set(tax_line.percent, {
+                            tax_id: tax_line.tax_id,
+                            tax_amount: tax_line.tax_amount,
+                            percent: tax_line.percent,
+                            taxable_amount: tax_line.taxable_amount
+                        });
+                    }
 
                 }
+
+
 
                 lines2.tax_totals = tax_totals;
 
                 console.log(lines2);
                 linesProduct.push(lines2);
             }
+
+            tax_totals_map.forEach((valor, clave) => {
+                tax_totals_bill.push(valor);
+            })
             //construyo el json para la dian
 
             jsonDian.date = date;
@@ -1113,7 +1115,7 @@ const billService = {
             jsonDian.type_document_id = type_document_id.id;
             jsonDian.resolution_number = resolution_number;
             jsonDian.legal_monetary_totals = legal_monetary_totals;
-
+            jsonDian.tax_totals = tax_totals_bill;
 
 
 
