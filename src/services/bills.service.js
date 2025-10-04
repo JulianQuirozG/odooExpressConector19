@@ -1001,10 +1001,7 @@ const billService = {
 
             const lines = await this.getLinesByBillId(bill.data.id, 'full');
             if (lines.statusCode !== 200) return lines;
-<<<<<<< HEAD
-=======
             console.log("lines::", lines.data);
->>>>>>> 24f6f58905cd08639b8c981d37fd64255d10d5bb
             //Tomo las lineas y construyo lo invoice_lines
 
             // for (line of jsonDatabase.unit_measures){
@@ -1013,9 +1010,21 @@ const billService = {
 
 
 
-                        for(const line of lines.data){
-                console.log("line ",line);
+            // let dataJuanes = lines.data.map(line => {
+            //     return{
+            //         taxable_amount: line.price_subtotal,
+            //         percent: 0,/// subtotal * 19 / 100
+
+            //     }
+            // })
+            let repert;
+            for (const line of lines.data) {
+                const iva = line.price_total - line.price_subtotal;
+                let tax = (iva / line.price_subtotal) * 100;
+                // si existen en line dos valores con el impuesto igual suma los valores pe
+
             }
+
             process.exit(0)
 
 
