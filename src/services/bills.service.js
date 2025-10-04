@@ -1068,8 +1068,8 @@ const billService = {
 
 
                     tax_totals.push({ ...tax_line });
-                    console.log("tax_line::", tax_line.percent, tax_totals_map.has(tax_line.percent));
-                    if (tax_totals_map.has(tax_line.percent)) {
+                    //Agregar la cantidad de los impuestos
+                    if (tax_totals_map.has(tax)) {
                         // Ya existe, sumar valores
                         const existing = tax_totals_map.get(tax_line.percent);
                         existing.tax_amount += tax_line.tax_amount;
