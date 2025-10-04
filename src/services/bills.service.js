@@ -1008,16 +1008,12 @@ const billService = {
 
             const linesProduct = [];
             for (const line of lines.data) {
-                //obtengo la unidad de medida
-                console.log("line::", line);
+                //obtengo la unidad de medida de odoo
                 const unitMeassure = await odooConector.executeOdooRequest("uom.uom", "search_read", { domain: [['id', '=', line.product_uom_id[0]]] });
-                //console.log("unit_measure", unitMeassure.data[0].l10n_co_edi_ubl);
                 const identificador = unitMeassure.data[0].l10n_co_edi_ubl;
+                //busco la unidad de medida en la tabla de parametros
                 const unit_measure_id = await getUnitMeasureByCode(identificador);
 
-                //console.log("unit_measure_id", unit_measure_id);
-
-                //console.log(unit_measure_id);
                 let lines2 = {};
 
                 lines2.code = line.product_id[0];
@@ -1029,13 +1025,13 @@ const billService = {
                 lines2.invoiced_quantity = line.quantity;
                 lines2.line_extension_amount = line.price_total;
                 lines2.free_of_charge_indicator = false; //de donde saco esto
-                lines2.type_item_identification_id = 4; // FALTA
+                lines2.type_item_identification_id = 4; //Esteban me dijo que siempre es 4
                 if (bill.data.l10n_co_edi_operation_type === '12') {
                     lines2.is_RNDC = bill.data.l10n_co_edi_operation_type === '12'; //Si es de tipo transporte es true
                     lines2.RNDC_consignment_number = line.x_studio_rad_rndc || "";
                     lines2.internal_consignment_number = line.x_studio_n_remesa || "";
-                    lines2.value_consignment = "0"; //FALTA
-                    lines2.unit_measure_consignment_id = Number(unit_measure_id.data[0].id);  //FALTA
+                    lines2.value_consignment = "0"; //Esteban dijo que va en 0
+                    lines2.unit_measure_consignment_id = Number(unit_measure_id.data[0].id);
                     lines2.quantity_consignment = line.quantity;
                 }
                 tax_totals = [];
@@ -1080,7 +1076,6 @@ const billService = {
             jsonDian.time = time;
             jsonDian.number = number;
             jsonDian.prefix = prefix;
-
             jsonDian.customer = customer;
 
 
