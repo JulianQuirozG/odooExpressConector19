@@ -470,6 +470,7 @@ const billService = {
                 reason: dataDebit.reason || "Nota de débito",
                 date: dataDebit.date || new Date().toISOString().split("T")[0],
                 journal_id: dataDebit.journal_id || false,
+                l10n_co_edi_description_code_debit: dataDebit.l10n_co_edi_description_code_debit || "1",
             };
 
             const wizardResponse = await odooConector.executeOdooRequest(
@@ -504,6 +505,10 @@ const billService = {
                     error: debitNoteResponse.message,
                 };
             }
+
+            //Actualizar tipo de documento de la nota de debito
+            const debitNoteId = debitNoteResponse.data.res_id;
+            await this.updateBill(debitNoteId, { l10n_co_edi_type: "92" }, 'update');
 
             return {
                 statusCode: 201,
@@ -888,11 +893,9 @@ const billService = {
             const jsonDian = { ...dianRequest };
 
             //Obtengo todos los datos de la factura
-            const bill = await this.getOneBill(billId); //Solo facturas confirmadas y firmadas
+            const bill = await this.getOneBill(billId,  [['state', '=', 'posted']] ); //Solo facturas confirmadas y firmadas
             if (bill.statusCode !== 200) return bill;
 
-            console.log("-------------------------", bill);
-            if (bill.state == 'draft') return { statusCode: 400, message: "La factura debe estar en estado post para generar el JSON" };
             //Fecha y hora de la factura
             const post_time = bill.data.l10n_co_dian_post_time.split(' ');
             const date = post_time[0];//
@@ -974,7 +977,8 @@ const billService = {
             if (payment_method_id.data.length < 1) return { statusCode: 404, message: "El método de pago no está configurado en la tabla de parámetros" };
             payment_form.method_payment_id = payment_method_id.data[0].id;
 
-
+            //Notas de la factura
+            const notes = bill.data.x_studio_notas || "";
             //fecha de pago
             payment_form.payment_due_date = bill.data.invoice_date_due;
 
@@ -1104,8 +1108,9 @@ const billService = {
             tax_totals_map.forEach((valor, clave) => {
                 tax_totals_bill.push(valor);
             })
-            //construyo el json para la dian
 
+
+            //construyo el json para la dian
             jsonDian.date = date;
             jsonDian.time = time;
             jsonDian.number = number;
@@ -1115,15 +1120,31 @@ const billService = {
 
             jsonDian.payment_form = payment_form;
 
-            jsonDian.invoice_lines = linesProduct;
+            if (type_document_id.id == 1) {
+                //Campos de factura de venta
+                jsonDian.invoice_lines = linesProduct;
+                jsonDian.legal_monetary_totals = legal_monetary_totals;
+            } else if (type_document_id.id == 5) {
+                //Campos de nota debito
+                jsonDian.debit_note_lines = linesProduct;
+                jsonDian.discrepancyresponsecode = bill.data.l10n_co_edi_description_code_debit;
+                jsonDian.discrepancynotes = (bill.data.ref.split(', ')[1]);
+                jsonDian.requested_monetary_totals = legal_monetary_totals;
+            }else {
+                //Campos de nota credito
+                jsonDian.credit_note_lines = linesProduct;
+                jsonDian.discrepancyresponsecode = bill.data.l10n_co_edi_description_code_credit;
+                jsonDian.discrepancynotes = (bill.data.ref.split(', ')[1]);
+                jsonDian.legal_monetary_totals = legal_monetary_totals;
+            }
 
             jsonDian.type_document_id = type_document_id.id;
             jsonDian.resolution_number = resolution_number;
-            jsonDian.legal_monetary_totals = legal_monetary_totals;
+
             jsonDian.tax_totals = tax_totals_bill;
 
             jsonDian.sendmail = sendEmail;
-
+            jsonDian.notes = notes;
 
 
 
