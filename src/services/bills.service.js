@@ -7,11 +7,14 @@ const {
     INVOICE_LINE_FIELDS,
 } = require("../utils/fields");
 const jsonDatabase = require('../json-template/database.json')
+
+//Conectors
 const odooConector = require("../utils/odoo.service");
+const nextPymeConnection = require("../services/nextPyme.service");
 const { pickFields } = require("../utils/util");
 const productService = require("./products.service");
 const partnerService = require("./partner.service");
-const { updateBill } = require("../controllers/bill.controller");
+const { updateBill, getBillDianJson } = require("../controllers/bill.controller");
 const { journalService } = require("./journal.service");
 const paramsTypeDocumentRepository = require("../Repository/params_type_document/params_type_document.repository");
 const paramsTypeDocumentIdentificationRepository = require("../Repository/params_type_document_identification.repository/params_type_document_identification.repository");
@@ -392,6 +395,20 @@ const billService = {
                     data: response.data,
                 };
             }
+
+            //Generamos el json para enviar a la dian
+            const jsonDian = await this.createJsonDian(Number(id));
+            if (jsonDian.statusCode !== 200) return jsonDian;
+
+            //Enviamos el json a la dian
+            const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
+            if (dianResponse.statusCode !== 200) return dianResponse;
+
+            //Descargo la factura pdf de la dian
+            console.log(dianResponse.data);
+
+            //Agrego el el pdf a la factura de odoo
+
             return {
                 statusCode: 200,
                 message: "Factura confirmada con éxito",
@@ -929,10 +946,11 @@ const billService = {
             customer.name = bill_customer.data.name;
             if (bill_customer.data.phone) customer.phone = bill_customer.data.phone;
             if (bill_customer.data.email) customer.email = bill_customer.data.email;
-            if (bill_customer.data.address) customer.address = bill_customer.data.address;
-
+            if (bill_customer.data.street || bill_customer.data.street2) customer.address = bill_customer.data.street || bill_customer.data.street2;
+            else return { statusCode: 400, message: "El cliente no tiene dirección", data:[] };
+            
             //registro mercantil
-            customer.commercial_registration = bill_customer.data.x_studio_registro_mercantil || "0000000";
+            customer.merchant_registration = bill_customer.data.x_studio_registro_mercantil || "0000000";
 
 
             //tipo de documento de identificacion 
@@ -992,17 +1010,7 @@ const billService = {
             payment_form.duration_measure = dias;
 
 
-            // totales
-            const legal_monetary_totals = {
-                payable_amount: bill.data.amount_untaxed,
-                tax_exclusive_amount: bill.data.amount_untaxed,
-                tax_inclusive_amount: bill.data.amount_untaxed,
-                line_extension_amount: 0,
-                allowance_total_amount: bill.data.amount_total,
-                charge_total_amount: bill.data.amount_total,
-            }
-
-
+            
             //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
             if (journalData.statusCode !== 200) return journalData;
@@ -1033,14 +1041,14 @@ const billService = {
 
                 let lines2 = {};
 
-                lines2.code = line.product_id[0];
+                lines2.code = String(line.product_id[0]);
                 lines2.notes = line.name || "";
                 lines2.description = line.product_id[1];
-                lines2.price_amount = line.price_unit;
+                lines2.price_amount = line.price_total;
                 lines2.base_quantity = line.quantity;
                 lines2.unit_measure_id = Number(unit_measure_id.data[0].id);
                 lines2.invoiced_quantity = line.quantity;
-                lines2.line_extension_amount = line.price_total;
+                lines2.line_extension_amount = line.price_subtotal;
                 lines2.free_of_charge_indicator = false; //de donde saco esto
                 lines2.type_item_identification_id = 4; //Esteban me dijo que siempre es 4
                 if (bill.data.l10n_co_edi_operation_type === '12') {
@@ -1105,10 +1113,21 @@ const billService = {
                 linesProduct.push(lines2);
             }
 
+            let tax_exclusive_amount = 0;
             tax_totals_map.forEach((valor, clave) => {
                 tax_totals_bill.push(valor);
+                tax_exclusive_amount += valor.taxable_amount;
             })
 
+            // totales
+            const legal_monetary_totals = {
+                payable_amount: bill.data.amount_total,
+                tax_exclusive_amount: tax_exclusive_amount,
+                tax_inclusive_amount: bill.data.amount_total,
+                line_extension_amount: bill.data.amount_untaxed,
+                allowance_total_amount: 0.00,
+                charge_total_amount: 0.00,
+            }
 
             //construyo el json para la dian
             jsonDian.date = date;
