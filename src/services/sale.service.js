@@ -241,7 +241,7 @@ const saleService = {
             if (createBillFromSalesOrder.statusCode !== 201) return createBillFromSalesOrder;
 
             //actualizar la factura de venta con los campos personalizados
-            const updateSaleBill = await billService.updateBill(createBillFromSalesOrder.data.id, { invoice_line_ids: dataVenta.order_line }, 'update');
+            const updateSaleBill = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_operation_type: "12", l10n_co_edi_payment_option_id: 2, invoice_line_ids: dataVenta.order_line }, 'update');
             if (updateSaleBill.statusCode !== 200) return updateSaleBill;
 
             //confirmar la factura de venta
