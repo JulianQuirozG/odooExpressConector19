@@ -1118,12 +1118,13 @@ const billService = {
             jsonDian.customer = customer;
 
 
-            jsonDian.payment_form = payment_form;
+            
 
             if (type_document_id.id == 1) {
                 //Campos de factura de venta
                 jsonDian.invoice_lines = linesProduct;
                 jsonDian.legal_monetary_totals = legal_monetary_totals;
+                jsonDian.payment_form = payment_form;
             } else if (type_document_id.id == 5) {
                 //Campos de nota debito
                 jsonDian.debit_note_lines = linesProduct;
