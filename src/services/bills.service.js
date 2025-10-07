@@ -1329,7 +1329,6 @@ const billService = {
                 //Campos de factura de venta
                 jsonDian.invoice_lines = linesProduct;
                 jsonDian.legal_monetary_totals = legal_monetary_totals;
-                jsonDian.payment_form = payment_form;
                 jsonDian.resolution_number = resolution_number;
             } else if (type_document_id.id == 5) {
                 //Campos de nota debito
@@ -1373,7 +1372,7 @@ const billService = {
 
 
             jsonDian.tax_totals = tax_totals_bill;
-
+            jsonDian.payment_form = payment_form;
             jsonDian.sendmail = sendEmail;
             jsonDian.notes = notes;
 
