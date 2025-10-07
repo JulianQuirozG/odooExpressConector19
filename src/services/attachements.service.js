@@ -1,3 +1,4 @@
+const { type } = require("../schemas/bill.schema");
 const { BILL_FIELDS, PRODUCT_FIELDS } = require("../utils/fields");
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
@@ -5,7 +6,7 @@ const productService = require("./products.service");
 
 const attachementService = {
     //obtener adjuntos por modelo y id
-    async getAttachments(res_model, res_id, attachmentFields = ['name','mimetype', 'file_size', 'res_model', 'res_id','url']) {
+    async getAttachments(res_model, res_id, attachmentFields = ['name', 'mimetype', 'file_size', 'res_model', 'res_id', 'url']) {
         try {
             const domain = [];
             if (res_model) {
@@ -81,10 +82,107 @@ const attachementService = {
 
             const data = {
                 name: file.originalname,
-                datas: file.buffer.toString('base64'),
+                datas: file.buffer.filebase64, // Convertir el buffer a base64
                 res_model: model, // Modelo al que se asocia el adjunto
                 res_id: Number(referenceId), // ID del registro al que se asocia el adjunto
-                mimetype: file.mimetype,
+            }
+
+
+            const response = await odooConector.executeOdooRequest('ir.attachment', 'create', {
+                vals_list: [data]
+            });
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al crears adjunto', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al crear adjunto', data: response.data };
+            }
+            return { statusCode: 201, message: 'Adjunto creado con éxito', data: response.data };
+        } catch (error) {
+            console.log('Error en attachementService.createAttachement:', error);
+            return { statusCode: 500, message: 'Error al crear adjunto', error: error.message };
+        }
+    },
+    async createAttachementXML(model, referenceId, file) {
+        try {
+            //verifico la factura si viene en el body
+            if (!model || !referenceId) {
+                return { statusCode: 400, message: 'No se puede crear el adjunto porque falta el modelo o la referencia' };
+            }
+            const referenceIdResponse = await odooConector.executeOdooRequest(model, 'read', {
+                ids: [Number(referenceId)]
+            });
+
+            if (!referenceIdResponse.success) {
+                if (referenceIdResponse.error) {
+                    return { statusCode: 500, message: 'Error al crear el adjunto', error: referenceIdResponse.message };
+                }
+                return { statusCode: 400, message: 'Error al crear el adjunto', data: referenceIdResponse.data };
+            }
+
+            if (referenceIdResponse.data.length === 0) {
+                return { statusCode: 404, message: 'No se puede crear el adjunto porque la referencia no existe' };
+            }
+
+            // Validar que el archivo esté presente
+            if (!file || !file.originalname) {
+                return { statusCode: 400, message: 'No se ha proporcionado un archivo válido' };
+            }
+
+            const data = {
+                name: file.originalname,
+                datas: typeof file.buffer === 'string' ? file.buffer : Buffer.from(file.buffer).toString('base64'),
+                res_model: model, // Modelo al que se asocia el adjunto
+                res_id: Number(referenceId), // ID del registro al que se asocia el adjunto
+            }
+
+
+            const response = await odooConector.executeOdooRequest('ir.attachment', 'create', {
+                vals_list: [data]
+            });
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al crear adjunto', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al crear adjunto', data: response.data };
+            }
+            return { statusCode: 201, message: 'Adjunto creado con éxito', data: response.data };
+        } catch (error) {
+            console.log('Error en attachementService.createAttachement:', error);
+            return { statusCode: 500, message: 'Error al crear adjunto', error: error.message };
+        }
+    },
+    async createAttachementZIP(model, referenceId, file) {
+        try {
+            //verifico la factura si viene en el body
+            if (!model || !referenceId) {
+                return { statusCode: 400, message: 'No se puede crear el adjunto porque falta el modelo o la referencia' };
+            }
+            const referenceIdResponse = await odooConector.executeOdooRequest(model, 'read', {
+                ids: [Number(referenceId)]
+            });
+
+            if (!referenceIdResponse.success) {
+                if (referenceIdResponse.error) {
+                    return { statusCode: 500, message: 'Error al crear el adjunto', error: referenceIdResponse.message };
+                }
+                return { statusCode: 400, message: 'Error al crear el adjunto', data: referenceIdResponse.data };
+            }
+
+            if (referenceIdResponse.data.length === 0) {
+                return { statusCode: 404, message: 'No se puede crear el adjunto porque la referencia no existe' };
+            }
+
+            // Validar que el archivo esté presente
+            if (!file || !file.originalname) {
+                return { statusCode: 400, message: 'No se ha proporcionado un archivo válido' };
+            }
+
+            const data = {
+                name: file.originalname,
+                datas: file.buffer.filebase64,
+                res_model: model, // Modelo al que se asocia el adjunto
+                res_id: Number(referenceId), // ID del registro al que se asocia el adjunto
             }
 
 
