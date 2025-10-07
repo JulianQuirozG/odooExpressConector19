@@ -22,6 +22,12 @@ module.exports = {
         port: process.env.DB_PORT || 3306,
         connectionLimit: 10
 
+    },
+    nextPyme:
+    {
+        nit: process.env.NIT_EMPRESA || '900373553',
+        apiKey: process.env.NEXTPYME_API_KEY || '0cc6c1bd3fa3bee382ff291379e86cb470b52a00d9c99e89c8ef5ae882dc559c',
+        apiUrl: process.env.NEXTPYME_API_URL || 'https://api.nextpyme.com/v1'
     }
 
 };

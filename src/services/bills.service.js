@@ -24,6 +24,10 @@ const paramsLiabilitiesRepository = require("../Repository/param_type_liabilitie
 const { json } = require("zod");
 const { getUnitMeasureByCode, createUnitMeasure } = require("../Repository/param_unit_measures/params_unit_measures");
 const { createTax, getTaxByCode } = require("../Repository/param_taxes/params_unit_measures");
+const { nextPymeService } = require("./nextPyme.service");
+const attachementService = require("./attachements.service");
+const { path } = require("../app");
+
 const billService = {
     //obtener todas las facturas
     async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"]) {
@@ -364,7 +368,7 @@ const billService = {
         }
     },
     //confirmar una factura
-    async confirmBill(id) {
+    async confirmBill(id, action = 'compra') {
         try {
             const billExists = await this.getOneBill(id, [['state', '!=', 'posted']]);
             if (billExists.statusCode !== 200) {
@@ -395,18 +399,19 @@ const billService = {
                     data: response.data,
                 };
             }
+            if (action === 'venta') {
+                //Generamos el json para enviar a la dian
+                const jsonDian = await this.createJsonDian(Number(id));
+                if (jsonDian.statusCode !== 200) return jsonDian;
 
-            //Generamos el json para enviar a la dian
-            const jsonDian = await this.createJsonDian(Number(id));
-            if (jsonDian.statusCode !== 200) return jsonDian;
+                //Enviamos el json a la dian
+                const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
+                if (dianResponse.statusCode !== 200) return dianResponse;
 
-            //Enviamos el json a la dian
-            const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
-            if (dianResponse.statusCode !== 200) return dianResponse;
+                //Descargo la factura pdf de la dian
+                console.log(dianResponse.data);
 
-            //Descargo la factura pdf de la dian
-            console.log(dianResponse.data);
-
+            }
             //Agrego el el pdf a la factura de odoo
 
             return {
@@ -905,12 +910,76 @@ const billService = {
             };
         }
     },
+
+    async syncDian(id) {
+        try {
+            const jsonDian = await this.createJsonDian(Number(id));
+            if (jsonDian.statusCode !== 200) return jsonDian;
+
+            //Enviamos el json a la dian
+            const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
+            if (dianResponse.statusCode !== 200) return dianResponse;
+
+            //Descargo la factura pdf de la dian
+            console.log(dianResponse.data);
+
+            return { statusCode: 200, message: "Factura sincronizada con éxito", data: dianResponse.data };
+        } catch (error) {
+            console.log("Error en billService.syncDian:", error);
+            return {
+                statusCode: 500,
+                message: "Error al sincronizar con la DIAN",
+                error: error.message,
+            };
+        }
+
+
+    },
+
+    async uploadFilesFromDian(id, pdf, xml, zip) {
+        try {
+            // Validar los archivos
+            if (!pdf || !xml) {
+                return { statusCode: 400, message: 'Archivos inválidos', data: [] };
+            }
+
+            // obtener los archivos desde nextPyme
+            const pdfFile = await nextPymeService.getFileFromDian(pdf);
+            const xmlFile = await nextPymeService.getFileFromDian(xml);
+
+            //const zipFile = await nextPymeService.getFileFromDian(`Attachment-${zip}`);
+
+            console.log('pdfFile', typeof pdfFile);
+            console.log('xmlFile', typeof xmlFile);
+            //console.log('zipFile', typeof zipFile);
+
+            const buffer = Buffer.from(pdfFile.data); // binario
+            const response1 = await attachementService.createAttachement('account.move', Number(id), { originalname: pdf, buffer });
+            if (response1.statusCode !== 201) return response1;
+
+            const response2 = await attachementService.createAttachement('account.move', Number(id), { originalname: xml, buffer: Buffer.from(xmlFile.data) });
+            if (response2.statusCode !== 201) return response2;
+
+
+            return { statusCode: 200, message: 'Archivos obtenidos', data: { pdfFile, xmlFile } };
+
+        }
+        catch (error) {
+            console.error('Error al subir los archivos a la factura en Odoo', error);
+            return {
+                statusCode: 500,
+                message: 'Error al subir los archivos a la factura en Odoo',
+                error: error.message
+            };
+        }
+    },
+
     async createJsonDian(billId) {
         try {
             const jsonDian = { ...dianRequest };
 
             //Obtengo todos los datos de la factura
-            const bill = await this.getOneBill(billId,  [['state', '=', 'posted']] ); //Solo facturas confirmadas y firmadas
+            const bill = await this.getOneBill(billId, [['state', '=', 'posted']]); //Solo facturas confirmadas y firmadas
             if (bill.statusCode !== 200) return bill;
 
             //Fecha y hora de la factura
@@ -947,8 +1016,8 @@ const billService = {
             if (bill_customer.data.phone) customer.phone = bill_customer.data.phone;
             if (bill_customer.data.email) customer.email = bill_customer.data.email;
             if (bill_customer.data.street || bill_customer.data.street2) customer.address = bill_customer.data.street || bill_customer.data.street2;
-            else return { statusCode: 400, message: "El cliente no tiene dirección", data:[] };
-            
+            else return { statusCode: 400, message: "El cliente no tiene dirección", data: [] };
+
             //registro mercantil
             customer.merchant_registration = bill_customer.data.x_studio_registro_mercantil || "0000000";
 
@@ -1010,7 +1079,7 @@ const billService = {
             payment_form.duration_measure = dias;
 
 
-            
+
             //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
             if (journalData.statusCode !== 200) return journalData;
@@ -1137,7 +1206,7 @@ const billService = {
             jsonDian.customer = customer;
 
 
-            
+
 
             if (type_document_id.id == 1) {
                 //Campos de factura de venta
@@ -1150,7 +1219,7 @@ const billService = {
                 jsonDian.discrepancyresponsecode = bill.data.l10n_co_edi_description_code_debit;
                 jsonDian.discrepancynotes = (bill.data.ref.split(', ')[1]);
                 jsonDian.requested_monetary_totals = legal_monetary_totals;
-            }else {
+            } else {
                 //Campos de nota credito
                 jsonDian.credit_note_lines = linesProduct;
                 jsonDian.discrepancyresponsecode = bill.data.l10n_co_edi_description_code_credit;

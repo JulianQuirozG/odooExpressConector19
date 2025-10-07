@@ -5,6 +5,7 @@ const odooConector = require("../utils/odoo.service");
 const quotationService = require("./quotation.service");
 const purchaseOrderService = require("./purchaseOrder.service");
 const billService = require("./bills.service");
+const nextPymeService = require("./nextPyme.service");
 
 const saleService = {
     /**
@@ -244,13 +245,26 @@ const saleService = {
             const updateSaleBill = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_operation_type: "12", l10n_co_edi_payment_option_id: 2, invoice_line_ids: dataVenta.order_line }, 'update');
             if (updateSaleBill.statusCode !== 200) return updateSaleBill;
 
+
+            console.log('createBillFromSalesOrder.data.id', createBillFromSalesOrder.data.id);
+            console.log('updateSaleBill', updateSaleBill);
+
             //confirmar la factura de venta
             const confirmSaleBill = await billService.confirmBill(createBillFromSalesOrder.data.id);
             if (confirmSaleBill.statusCode !== 200) return confirmSaleBill;
 
+            //validar la factura de venta con la dian
+            const validateBillDian = await billService.syncDian(createBillFromSalesOrder.data.id);
+            if (validateBillDian.statusCode !== 200) return validateBillDian;
+
             //regresar toda la informacion
             const saleBillDetails = await billService.getOneBill(createBillFromSalesOrder.data.id);
             if (saleBillDetails.statusCode !== 200) return saleBillDetails;
+
+            //obtenemos el archivo XML, PDF Y ZIP DE LA FACTURA DE VENTA
+            const { urlinvoicexml, urlinvoicepdf } = validateBillDian.data;
+            const files = await billService.uploadFilesFromDian(createBillFromSalesOrder.data.id,urlinvoicepdf, urlinvoicexml);
+            if (files.statusCode !== 200) return files;
 
             return {
                 statusCode: 201,
