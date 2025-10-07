@@ -35,6 +35,22 @@ const nextPymeService = {
         }
     },
 
+    async sendDebitNoteToDian(debitNoteData) {
+        try {
+            const response = await nextPymeConnection.nextPymeRequest('debit-note', 'post', debitNoteData);
+            if(!response.success) {
+                if(response.error) {
+                    return { statusCode: 500, message: 'Error al enviar la nota débito a DIAN', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al enviar la nota débito a DIAN', data: response.data };
+            }
+            return { statusCode: 200, message: 'Nota débito enviada a DIAN', data: response.data };
+        } catch (error) {
+            console.log('Error en nextPymeService.sendDebitNoteToDian:', error);
+            return { statusCode: 500, message: 'Error al enviar la nota débito a DIAN', error: error.message };
+        }
+    },
+
     async getPdfInvoiceFromDian(invoicePdfId) {
         try {
             const response = await nextPymeConnection.nextPymeRequest(`download/${process.env.NIT_EMPRESA}/${invoicePdfId}/BASE64`, 'get');
