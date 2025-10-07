@@ -7,7 +7,6 @@ const nextPymeService = {
     async sendInvoiceToDian(invoiceData) {
         try {
             const response = await nextPymeConnection.nextPymeRequest('invoice-transport', 'post', invoiceData);
-            console.log('Respuesta de nextPyme al enviar factura a DIAN:', response);
             if (!response.success) {
                 if (response.error) {
                     return { statusCode: 500, message: 'Error al enviar la factura a DIAN', error: response.message };
@@ -19,6 +18,40 @@ const nextPymeService = {
             console.log('Error en nextPymeService.sendInvoiceToDian:', error);
             return { statusCode: 500, message: 'Error al enviar la factura a DIAN', error: error.message };
         }
+    },
+
+    async getPdfInvoiceFromDian(invoicePdfId) {
+        try {
+            const response = await nextPymeConnection.nextPymeRequest(`download/${process.env.NIT_EMPRESA}/${invoicePdfId}/BASE64`, 'get');
+            if (!response.success) return { statusCode: 400, message: 'Error al obtener el PDF de la factura desde DIAN', data: response.data };
+            return { statusCode: 200, message: 'PDF de la factura obtenido desde DIAN', data: response.data };
+        } catch (error) {
+            console.log('Error en nextPymeService.getPdfInvoiceFromDian:', error);
+            return { statusCode: 500, message: 'Error al obtener el PDF de la factura desde DIAN', error: error.message };
+        }
+    },
+    async getXmlInvoiceFromDian(invoiceXmlId) {
+        try {
+            const response = await nextPymeConnection.nextPymeRequest(`download/${process.env.NIT_EMPRESA}/${invoiceXmlId}/BASE64`, 'get');
+            if (!response.success) return { statusCode: 400, message: 'Error al obtener el XML de la factura desde DIAN', data: response.data };
+            return { statusCode: 200, message: 'XML de la factura obtenido desde DIAN', data: response.data };
+        } catch (error) {
+            console.log('Error en nextPymeService.getXmlInvoiceFromDian:', error);
+            return { statusCode: 500, message: 'Error al obtener el XML de la factura desde DIAN', error: error.message };
+        }
+    },
+
+    async getXmlZipFromDian(invoiceZipId) {
+        try {
+            const response = await nextPymeConnection.nextPymeRequest(`download/${process.env.NIT_EMPRESA}/ZipAttachm-${invoiceZipId}/BASE64`, 'get');
+            if (!response.success) return { statusCode: 400, message: 'Error al obtener el ZIP de la factura desde DIAN', data: response.data };
+            return { statusCode: 200, message: 'ZIP de la factura obtenido desde DIAN', data: response.data };
+        } catch (error) {
+            console.log('Error en nextPymeService.getXmlZipFromDian:', error);
+            return { statusCode: 500, message: 'Error al obtener el ZIP de la factura desde DIAN', error: error.message };
+        }
+    },
+
     },
     async getFileFromDian(name) {
         try {

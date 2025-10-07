@@ -12,10 +12,15 @@ const jsonDatabase = require('../json-template/database.json')
 const odooConector = require("../utils/odoo.service");
 const nextPymeConnection = require("../services/nextPyme.service");
 const { pickFields } = require("../utils/util");
+
+//Services
 const productService = require("./products.service");
 const partnerService = require("./partner.service");
+const attachmentService = require("./attachements.service");
 const { updateBill, getBillDianJson } = require("../controllers/bill.controller");
 const { journalService } = require("./journal.service");
+
+//Repositories
 const paramsTypeDocumentRepository = require("../Repository/params_type_document/params_type_document.repository");
 const paramsTypeDocumentIdentificationRepository = require("../Repository/params_type_document_identification.repository/params_type_document_identification.repository");
 const paramsMunicipalitiesRepository = require("../Repository/params_municipalities/params_municipalities.repository");
@@ -408,16 +413,33 @@ const billService = {
                 const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
                 if (dianResponse.statusCode !== 200) return dianResponse;
 
-                //Descargo la factura pdf de la dian
-                console.log(dianResponse.data);
+            //Descargo la factura pdf de la dian
+            const pdfResponse = await nextPymeConnection.nextPymeService.getPdfInvoiceFromDian(dianResponse.data.urlinvoicepdf);
+            if (pdfResponse.statusCode !== 200) return pdfResponse;
+
+            const zipResponse = await nextPymeConnection.nextPymeService.getXmlZipFromDian(dianResponse.data.urlinvoicexml.split('-')[1]);
+            console.log(zipResponse,"quii");
+            if (zipResponse.statusCode !== 200) return zipResponse;
+            // //Descargo la factura xml de la dian
+            // const xmlResponse = await nextPymeConnection.nextPymeService.getXmlInvoiceFromDian(dianResponse.data.urlinvoicexml);
+            // if (xmlResponse.statusCode !== 200) return xmlResponse;
 
             }
             //Agrego el el pdf a la factura de odoo
+            const updatedBill = await attachmentService.createAttachement("account.move", Number(id), { originalname: dianResponse.data.urlinvoicepdf, buffer: pdfResponse.data });
+            
+            //Agrego el el xml a la factura de odoo
+            const updatedBillS = await attachmentService.createAttachementXML("account.move", Number(id), { originalname: dianResponse.data.urlinvoicexml, buffer: dianResponse.data.invoicexml });
+
+
+            const updatedBillSZIP = await attachmentService.createAttachementZIP("account.move", Number(id), { originalname: dianResponse.data.urlinvoicepdf.split('.')[0]+".zip", buffer: zipResponse.data });
 
             return {
                 statusCode: 200,
                 message: "Factura confirmada con éxito",
-                data: response.data,
+                data: updatedBill,
+                dataS: updatedBillS,
+                dataSZIP: updatedBillSZIP
             };
         } catch (error) {
             console.log("Error en billService.confirmBill:", error);
