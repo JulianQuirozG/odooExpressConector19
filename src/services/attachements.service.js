@@ -180,7 +180,7 @@ const attachementService = {
 
             const data = {
                 name: file.originalname,
-                datas: file.buffer.filebase64,
+                datas: file.buffer,
                 res_model: model, // Modelo al que se asocia el adjunto
                 res_id: Number(referenceId), // ID del registro al que se asocia el adjunto
             }

@@ -404,40 +404,11 @@ const billService = {
                     data: response.data,
                 };
             }
-            let updatedBill, updatedBillS, updatedBillSZIP;
-            if (action === 'venta') {
-                //Generamos el json para enviar a la dian
-                const jsonDian = await this.createJsonDian(Number(id));
-                if (jsonDian.statusCode !== 200) return jsonDian;
-
-                //Enviamos el json a la dian
-                const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
-                if (dianResponse.statusCode !== 200) return dianResponse;
-
-                //Descargo la factura pdf de la dian
-                const pdfResponse = await nextPymeConnection.nextPymeService.getPdfInvoiceFromDian(dianResponse.data.urlinvoicepdf);
-                if (pdfResponse.statusCode !== 200) return pdfResponse;
-
-                const zipResponse = await nextPymeConnection.nextPymeService.getXmlZipFromDian(dianResponse.data.urlinvoicexml.split('-')[1]);
-                if (zipResponse.statusCode !== 200) return zipResponse;
-
-                //Agrego el el pdf a la factura de odoo
-                updatedBill = await attachmentService.createAttachement("account.move", Number(id), { originalname: dianResponse.data.urlinvoicepdf, buffer: pdfResponse.data });
-
-                //Agrego el el xml a la factura de odoo
-                updatedBillS = await attachmentService.createAttachementXML("account.move", Number(id), { originalname: dianResponse.data.urlinvoicexml, buffer: dianResponse.data.invoicexml });
-
-
-                updatedBillSZIP = await attachmentService.createAttachementZIP("account.move", Number(id), { originalname: dianResponse.data.urlinvoicepdf.split('.')[0] + ".zip", buffer: zipResponse.data });
-            }
-
 
             return {
                 statusCode: 200,
                 message: "Factura confirmada con éxito",
-                data: updatedBill,
-                dataS: updatedBillS,
-                dataSZIP: updatedBillSZIP
+                data: []
             };
         } catch (error) {
             console.log("Error en billService.confirmBill:", error);
@@ -957,15 +928,21 @@ const billService = {
      */
     async syncDian(id) {
         try {
+            //obtenemos el json para enviar a la dian
             const jsonDian = await this.createJsonDian(Number(id));
             if (jsonDian.statusCode !== 200) return jsonDian;
 
-            //Enviamos el json a la dian
-            const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
-            if (dianResponse.statusCode !== 200) return dianResponse;
+            let dianResponse;
+            //Si es factura de venta
+            if (jsonDian.data.type_document_id === 1) dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
 
-            //Descargo la factura pdf de la dian
-            console.log(dianResponse.data);
+            //Si es nota credito
+            if (jsonDian.data.type_document_id === 4) dianResponse = await nextPymeConnection.nextPymeService.sendCreditNoteToDian(jsonDian.data);
+
+            //Si es nota debito
+            if (jsonDian.data.type_document_id === 5) dianResponse = await nextPymeConnection.nextPymeService.sendDebitNoteToDian(jsonDian.data);
+
+            if (dianResponse.statusCode !== 200) return dianResponse;
 
             return { statusCode: 200, message: "Factura sincronizada con éxito", data: dianResponse.data };
         } catch (error) {
@@ -1007,11 +984,15 @@ const billService = {
      */
     async uploadFilesFromDian(id, dianResponse) {
         try {
-
             // obtener el pdf y zip archivos desde nextPyme
             const pdf = dianResponse.urlinvoicepdf;
             const pdfFile = await nextPymeService.getPdfInvoiceFromDian(pdf);
+            console.log("primera", dianResponse);
+            //Si la respuesta  de la dian trae el .zip en base64 se le asigna, si no se busca
+            dianResponse.attacheddocument = (await nextPymeService.getXmlZipFromDian(dianResponse.urlinvoicexml.split('-')[1])).data;
+            if (pdfFile.statusCode !== 200) return pdfFile;
 
+            console.log(dianResponse.attacheddocument);
             //subimos los archivos a la factura de odoo
             const updatedBill = await attachmentService.createAttachement("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf, buffer: pdfFile.data });
             if (updatedBill.statusCode !== 201) return updatedBill;
@@ -1019,7 +1000,7 @@ const billService = {
             const updatedBillS = await attachmentService.createAttachementXML("account.move", Number(id), { originalname: dianResponse.urlinvoicexml, buffer: dianResponse.invoicexml });
             if (updatedBillS.statusCode !== 201) return updatedBillS;
 
-            const updatedBillSZIP = await attachmentService.createAttachementZIP("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf.split('.')[0] + ".zip", buffer: dianResponse.zipinvoicexml });
+            const updatedBillSZIP = await attachmentService.createAttachementZIP("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf.split('.')[0] + ".zip", buffer: dianResponse.attacheddocument.filebase64 });
             if (updatedBillSZIP.statusCode !== 201) return updatedBillSZIP;
 
             return { statusCode: 200, message: 'Archivos obtenidos', data: { updatedBill, updatedBillS, updatedBillSZIP } };
@@ -1291,13 +1272,14 @@ const billService = {
             jsonDian.customer = customer;
 
 
-            
+
 
             if (type_document_id.id == 1) {
                 //Campos de factura de venta
                 jsonDian.invoice_lines = linesProduct;
                 jsonDian.legal_monetary_totals = legal_monetary_totals;
                 jsonDian.payment_form = payment_form;
+                jsonDian.resolution_number = resolution_number;
             } else if (type_document_id.id == 5) {
                 //Campos de nota debito
                 jsonDian.debit_note_lines = linesProduct;
@@ -1324,7 +1306,7 @@ const billService = {
             }
 
             jsonDian.type_document_id = type_document_id.id;
-            jsonDian.resolution_number = resolution_number;
+
 
             jsonDian.tax_totals = tax_totals_bill;
 
