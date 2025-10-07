@@ -51,8 +51,6 @@ const nextPymeService = {
             return { statusCode: 500, message: 'Error al obtener el ZIP de la factura desde DIAN', error: error.message };
         }
     },
-
-    },
     async getFileFromDian(name) {
         try {
             const response = await nextPymeConnection.nextPymeRequest(`download/${config.nextPyme.nit}/${name}`, 'get');
