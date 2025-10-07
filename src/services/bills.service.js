@@ -419,6 +419,41 @@ const billService = {
             };
         }
     },
+    async confirmCreditNote(id) {
+        try {
+
+            //verifico que la nota de credito exista y no este confirmada
+            const billExists = await this.getOneBill(id, [['state', '!=', 'posted']]);
+            if (billExists.statusCode !== 200) return billExists
+
+            //confirmo la nota de credito
+            const bill = await this.confirmBill(id);
+            if (bill.statusCode !== 200) return bill;
+
+            //sincronizo con la dian
+            const responseDian = await this.syncDian(id);
+            if (responseDian.statusCode !== 200) return responseDian;
+            console.log("Respuesta DIAN:", responseDian);
+            //subo los archivos de la dian a ODOO
+            const uploadFiles = await this.uploadFilesFromDian(id, responseDian.data);
+            if (uploadFiles.statusCode !== 200) return uploadFiles;
+
+            return {
+                statusCode: 200,
+                message: "Nota de crédito confirmada con éxito",
+                data: uploadFiles.data
+            }
+
+        } catch (error) {
+            console.log("Error en billService.confirmCreditNote:", error);
+            return {
+                statusCode: 500,
+                message: "Error al confirmar nota de crédito",
+                error: error.message,
+            };
+        }
+    },
+
     //reestablecer una factura a borrador
     async resetToDraftBill(id) {
         try {
@@ -931,7 +966,7 @@ const billService = {
             //obtenemos el json para enviar a la dian
             const jsonDian = await this.createJsonDian(Number(id));
             if (jsonDian.statusCode !== 200) return jsonDian;
-
+            console.log("JSON DIAN generado:", jsonDian.data);
             let dianResponse;
             //Si es factura de venta
             if (jsonDian.data.type_document_id === 1) dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
@@ -986,6 +1021,7 @@ const billService = {
         try {
             // obtener el pdf y zip archivos desde nextPyme
             const pdf = dianResponse.urlinvoicepdf;
+            console.log("Descargando PDF desde NextPyme:", pdf);
             const pdfFile = await nextPymeService.getPdfInvoiceFromDian(pdf);
             console.log("primera", dianResponse);
             //Si la respuesta  de la dian trae el .zip en base64 se le asigna, si no se busca
@@ -1048,6 +1084,21 @@ const billService = {
             const bill = await this.getOneBill(billId, [['state', '=', 'posted']]); //Solo facturas confirmadas y firmadas
             if (bill.statusCode !== 200) return bill;
 
+            let billReference = null;
+            //si tiene una factura de referencia la obtengo
+            if (bill.data.reversed_entry_id && bill.data.reversed_entry_id[0]) {
+                billReference = await this.getOneBill(bill.data.reversed_entry_id[0]);
+                if (billReference.statusCode !== 200) return billReference;
+            }
+
+            //Si es una nota de debito obtengo la factura de origen
+            let debitOrigin = null;
+            if (bill.data.debit_origin_id && bill.data.debit_origin_id[0]) {
+                debitOrigin = await this.getOneBill(Number(bill.data.debit_origin_id[0]));
+                if (debitOrigin.statusCode !== 200) return debitOrigin;
+            }
+
+
             //Fecha y hora de la factura
             const post_time = bill.data.l10n_co_dian_post_time.split(' ');
             const date = post_time[0];//
@@ -1063,7 +1114,7 @@ const billService = {
             const { data } = await paramsTypeDocumentRepository.getTypeDocumentByCode(move_type);
             if (data.length < 1) return { statusCode: 404, message: "El tipo de documento no está configurado en la tabla de parámetros" };
             const type_document_id = data[0]; //
-
+            console.log("Tipo de documento:", type_document_id);
             // //Obtengo los datos del cliente
             const bill_customer = await partnerService.getOnePartner(bill.data.partner_id[0]);
             let customer = {}; //
@@ -1186,7 +1237,7 @@ const billService = {
                 lines2.line_extension_amount = line.price_subtotal;
                 lines2.free_of_charge_indicator = false; //de donde saco esto
                 lines2.type_item_identification_id = 4; //Esteban me dijo que siempre es 4
-                if (bill.data.l10n_co_edi_operation_type === '12') {
+                if (bill.data.l10n_co_edi_operation_type === '12' || (billReference && billReference.data && billReference.data.l10n_co_edi_operation_type === '12') || (debitOrigin && debitOrigin.data && debitOrigin.data.l10n_co_edi_operation_type === '12')) {
                     lines2.is_RNDC = true;
                     if (!line.x_studio_rad_rndc) return { statusCode: 400, message: `La linea ${line.id} no tiene número de radicado RNDC` };
                     if (!line.x_studio_n_remesa) return { statusCode: 400, message: `La linea ${line.id} no tiene número de remesa interna` };
@@ -1268,7 +1319,7 @@ const billService = {
             jsonDian.date = date;
             jsonDian.time = time;
             jsonDian.number = number;
-            jsonDian.prefix = prefix;
+            if (type_document_id.id !== 5) jsonDian.prefix = prefix;
             jsonDian.customer = customer;
 
 
@@ -1282,12 +1333,25 @@ const billService = {
                 jsonDian.resolution_number = resolution_number;
             } else if (type_document_id.id == 5) {
                 //Campos de nota debito
+                jsonDian.number = Number(jsonDian.number);
                 jsonDian.debit_note_lines = linesProduct;
                 jsonDian.discrepancyresponsecode = bill.data.l10n_co_edi_description_code_debit;
                 jsonDian.discrepancynotes = (bill.data.ref.split(', ')[1]);
                 jsonDian.requested_monetary_totals = legal_monetary_totals;
+
+                const getBillReference = await this.getOneBill(Number(bill.data.debit_origin_id[0]));
+                if (getBillReference.statusCode !== 200) return getBillReference;
+
+                const billing_reference = {
+                    number: getBillReference.data.name.split('/')[2],
+                    uuid: getBillReference.data.x_studio_uuid_dian,
+                    issue_date: getBillReference.data.invoice_date
+                };
+
+                jsonDian.billing_reference = billing_reference;
             } else {
                 //Campos de nota credito
+                jsonDian.number = Number(jsonDian.number)
                 jsonDian.credit_note_lines = linesProduct;
                 jsonDian.discrepancyresponsecode = bill.data.l10n_co_edi_description_code_credit;
                 jsonDian.discrepancynotes = (bill.data.ref.split(', ')[1]);

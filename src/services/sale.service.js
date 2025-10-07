@@ -255,8 +255,9 @@ const saleService = {
             if (dianResponse.statusCode !== 200) return dianResponse;
 
             console.log('cufe', dianResponse.data.cufe);
+            console.log('datastas', dianResponse.data);
 
-            const updateSaleBillCufe = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe }, 'update');
+            const updateSaleBillCufe = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe ,x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
             if (updateSaleBillCufe.statusCode !== 200) return updateSaleBillCufe;
 
 
