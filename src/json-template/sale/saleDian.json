@@ -20,6 +20,5 @@
     },
     "sendmail": false,
     "sendmailtome": false,
-    "type_document_id": 1,
-    "resolution_number": "18760000001"
+    "type_document_id": 1
 }

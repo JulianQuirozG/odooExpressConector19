@@ -238,6 +238,7 @@ const saleService = {
 
             //crear la factura de venta
             const createBillFromSalesOrder = await this.createBillFromSalesOrder([quotation.data.id]);
+            
             //console.log('createBillFromSalesOrder', createBillFromSalesOrder);
             if (createBillFromSalesOrder.statusCode !== 201) return createBillFromSalesOrder;
 
@@ -249,7 +250,7 @@ const saleService = {
             const confirmSaleBill = await billService.confirmBill(createBillFromSalesOrder.data.id);
             if (confirmSaleBill.statusCode !== 200) return confirmSaleBill;
 
-            //validar la factura de venta con la dian
+            //validar la factura de venta, nota credito o nota debito con la dian
             const dianResponse = await billService.syncDian(createBillFromSalesOrder.data.id);
             if (dianResponse.statusCode !== 200) return dianResponse;
 
@@ -260,7 +261,7 @@ const saleService = {
 
 
             //Subimos los documentos a odoo
-            const files = await billService.uploadFilesFromDian(createBillFromSalesOrder.data.id, dianResponse.data, dianResponse.data.urlinvoicepdf, dianResponse.data.urlinvoicexml, dianResponse.data.urlinvoicexml.split('-')[1]);
+            const files = await billService.uploadFilesFromDian(createBillFromSalesOrder.data.id, dianResponse.data);
             if (files.statusCode !== 200) return files;
 
             //regresar toda la informacion

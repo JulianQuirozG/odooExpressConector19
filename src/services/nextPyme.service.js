@@ -3,7 +3,6 @@ const nextPymeConnection = require("../utils/nextPyme.service");
 require('dotenv').config();
 
 const nextPymeService = {
-    //obtener todos los diarios
     async sendInvoiceToDian(invoiceData) {
         try {
             const response = await nextPymeConnection.nextPymeRequest('invoice-transport', 'post', invoiceData);
@@ -17,6 +16,22 @@ const nextPymeService = {
         } catch (error) {
             console.log('Error en nextPymeService.sendInvoiceToDian:', error);
             return { statusCode: 500, message: 'Error al enviar la factura a DIAN', error: error.message };
+        }
+    },
+
+    async sendCreditNoteToDian(creditNoteData) {
+        try {
+            const response = await nextPymeConnection.nextPymeRequest('credit-note', 'post', creditNoteData);
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al enviar la nota de crédito a DIAN', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al enviar la nota de crédito a DIAN', data: response.data };
+            }
+            return { statusCode: 200, message: 'Nota de crédito enviada a DIAN', data: response.data };
+        } catch (error) {
+            console.log('Error en nextPymeService.sendCreditNoteToDian:', error);
+            return { statusCode: 500, message: 'Error al enviar la nota de crédito a DIAN', error: error.message };
         }
     },
 
