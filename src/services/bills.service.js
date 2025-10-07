@@ -29,6 +29,10 @@ const paramsLiabilitiesRepository = require("../Repository/param_type_liabilitie
 const { json } = require("zod");
 const { getUnitMeasureByCode, createUnitMeasure } = require("../Repository/param_unit_measures/params_unit_measures");
 const { createTax, getTaxByCode } = require("../Repository/param_taxes/params_unit_measures");
+const { nextPymeService } = require("./nextPyme.service");
+const attachementService = require("./attachements.service");
+const { path } = require("../app");
+
 const billService = {
     //obtener todas las facturas
     async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"]) {
@@ -369,7 +373,7 @@ const billService = {
         }
     },
     //confirmar una factura
-    async confirmBill(id) {
+    async confirmBill(id, action = 'compra') {
         try {
             const billExists = await this.getOneBill(id, [['state', '!=', 'posted']]);
             if (billExists.statusCode !== 200) {
@@ -400,34 +404,36 @@ const billService = {
                     data: response.data,
                 };
             }
+            let updatedBill, updatedBillS, updatedBillSZIP;
+            if (action === 'venta') {
+                //Generamos el json para enviar a la dian
+                const jsonDian = await this.createJsonDian(Number(id));
+                if (jsonDian.statusCode !== 200) return jsonDian;
 
-            //Generamos el json para enviar a la dian
-            const jsonDian = await this.createJsonDian(Number(id));
-            if (jsonDian.statusCode !== 200) return jsonDian;
+                //Enviamos el json a la dian
+                const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
+                if (dianResponse.statusCode !== 200) return dianResponse;
 
-            //Enviamos el json a la dian
-            const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
-            if (dianResponse.statusCode !== 200) return dianResponse;
+                //Descargo la factura pdf de la dian
+                const pdfResponse = await nextPymeConnection.nextPymeService.getPdfInvoiceFromDian(dianResponse.data.urlinvoicepdf);
+                if (pdfResponse.statusCode !== 200) return pdfResponse;
 
-            //Descargo la factura pdf de la dian
-            const pdfResponse = await nextPymeConnection.nextPymeService.getPdfInvoiceFromDian(dianResponse.data.urlinvoicepdf);
-            if (pdfResponse.statusCode !== 200) return pdfResponse;
+                const zipResponse = await nextPymeConnection.nextPymeService.getXmlZipFromDian(dianResponse.data.urlinvoicexml.split('-')[1]);
+                console.log(zipResponse, "quii");
+                if (zipResponse.statusCode !== 200) return zipResponse;
+                // //Descargo la factura xml de la dian
+                // const xmlResponse = await nextPymeConnection.nextPymeService.getXmlInvoiceFromDian(dianResponse.data.urlinvoicexml);
+                // if (xmlResponse.statusCode !== 200) return xmlResponse;
+                //Agrego el el pdf a la factura de odoo
+                updatedBill = await attachmentService.createAttachement("account.move", Number(id), { originalname: dianResponse.data.urlinvoicepdf, buffer: pdfResponse.data });
 
-            const zipResponse = await nextPymeConnection.nextPymeService.getXmlZipFromDian(dianResponse.data.urlinvoicexml.split('-')[1]);
-            console.log(zipResponse,"quii");
-            if (zipResponse.statusCode !== 200) return zipResponse;
-            // //Descargo la factura xml de la dian
-            // const xmlResponse = await nextPymeConnection.nextPymeService.getXmlInvoiceFromDian(dianResponse.data.urlinvoicexml);
-            // if (xmlResponse.statusCode !== 200) return xmlResponse;
-
-            //Agrego el el pdf a la factura de odoo
-            const updatedBill = await attachmentService.createAttachement("account.move", Number(id), { originalname: dianResponse.data.urlinvoicepdf, buffer: pdfResponse.data });
-            
-            //Agrego el el xml a la factura de odoo
-            const updatedBillS = await attachmentService.createAttachementXML("account.move", Number(id), { originalname: dianResponse.data.urlinvoicexml, buffer: dianResponse.data.invoicexml });
+                //Agrego el el xml a la factura de odoo
+                updatedBillS = await attachmentService.createAttachementXML("account.move", Number(id), { originalname: dianResponse.data.urlinvoicexml, buffer: dianResponse.data.invoicexml });
 
 
-            const updatedBillSZIP = await attachmentService.createAttachementZIP("account.move", Number(id), { originalname: dianResponse.data.urlinvoicepdf.split('.')[0]+".zip", buffer: zipResponse.data });
+                updatedBillSZIP = await attachmentService.createAttachementZIP("account.move", Number(id), { originalname: dianResponse.data.urlinvoicepdf.split('.')[0] + ".zip", buffer: zipResponse.data });
+            }
+
 
             return {
                 statusCode: 200,
@@ -927,6 +933,147 @@ const billService = {
             };
         }
     },
+
+    /**
+     * Construye el payload (JSON) requerido por DIAN/NextPyme a partir de una factura (account.move) ya posteada.
+     * Toma datos del cliente, forma de pago, resolución DIAN, líneas, impuestos y totales, ajustando la estructura
+     * según el tipo de documento (factura, nota débito o nota crédito).
+     *
+     * Notas:
+     * - La factura debe estar en estado 'posted'.
+     * - Consulta múltiples modelos en Odoo (account.move, res.partner, res.city, uom.uom, account.tax, l10n_co_edi.*)
+     *   y tablas de parámetros locales (tipos de documento, unidades de medida, impuestos, responsabilidades, etc.).
+     *
+     * @async
+     * @function createJsonDian
+     * @param {number|string} billId ID de la factura (account.move) en Odoo.
+     * @returns {Promise<{statusCode:number, message:string, data?:Record<string, any>, error?:string}>}
+     *          Objeto resultado. En éxito incluye en data el JSON listo para envío a DIAN.
+     *          En error retorna un statusCode, message y opcionalmente error con el detalle.
+     *
+     * @example
+     * // Crear el JSON DIAN de la factura 123
+     * const res = await billService.createJsonDian(123);
+     * if (res.statusCode === 200) {
+     *   // res.data contiene el JSON para DIAN
+     * }
+     */
+    async syncDian(id) {
+        try {
+            const jsonDian = await this.createJsonDian(Number(id));
+            if (jsonDian.statusCode !== 200) return jsonDian;
+
+            //Enviamos el json a la dian
+            const dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
+            if (dianResponse.statusCode !== 200) return dianResponse;
+
+            //Descargo la factura pdf de la dian
+            console.log(dianResponse.data);
+
+            return { statusCode: 200, message: "Factura sincronizada con éxito", data: dianResponse.data };
+        } catch (error) {
+            console.log("Error en billService.syncDian:", error);
+            return {
+                statusCode: 500,
+                message: "Error al sincronizar con la DIAN",
+                error: error.message,
+            };
+        }
+
+
+    },
+
+    /**
+     * Sube a Odoo los archivos de la DIAN (PDF, XML y ZIP) como adjuntos de una factura.
+     * - Descarga el PDF y el ZIP desde NextPyme.
+     * - Adjunta el XML usando el contenido incluido en `dianResponse`.
+     *
+     * Nota: Este método asume que `nextPymeService.getPdfInvoiceFromDian` y
+     * `nextPymeService.getXmlZipFromDian` retornan un objeto con `statusCode`
+     * y `data` (Buffer binario en `data`).
+     *
+     * @async
+     * @function uploadFilesFromDian
+     * @param {number|string} id ID de la factura en Odoo (account.move) a la que se adjuntarán los archivos.
+     * @param {{ urlinvoicepdf: string, urlinvoicexml: string, invoicexml?: Buffer|string }} dianResponse
+     *        Respuesta de NextPyme con las URLs del PDF y XML, y el contenido XML opcional en `invoicexml`.
+     * @param {string} pdf URL o ruta relativa del PDF en el servicio de NextPyme.
+     * @param {string} xml URL o ruta relativa del XML en el servicio de NextPyme.
+     * @param {string} zip Identificador/URL para obtener el ZIP en el servicio de NextPyme.
+     * @returns {Promise<{statusCode:number, message:string, data?:{updatedBill:any, updatedBillS:any, updatedBillSZIP:any}, error?:string}>}
+     *          Resultado de la operación. En éxito incluye los IDs/valores devueltos por Odoo al crear los adjuntos.
+     *          En error retorna `statusCode` y `error` descriptivo.
+     *
+     * @example
+     * // Adjuntar archivos DIAN a la factura 123
+     * await billService.uploadFilesFromDian(
+     *   123,
+     *   { urlinvoicepdf: 'ubl2.1/download/900731971/FACT-001.pdf', urlinvoicexml: 'ubl2.1/download/900731971/FACT-001.xml', invoicexml: '<Invoice>...</Invoice>' },
+     *   'ubl2.1/download/900731971/FACT-001.pdf',
+     *   'ubl2.1/download/900731971/FACT-001.xml',
+     *   'FACT-001.zip-or-uuid'
+     * );
+     */
+    async uploadFilesFromDian(id, dianResponse, pdf, xml, zip) {
+        try {
+            // Validar los archivos
+            if (!pdf || !xml || !zip) {
+                return { statusCode: 400, message: 'Archivos inválidos', data: [] };
+            }
+
+            // obtener el pdf y zip archivos desde nextPyme
+            const pdfFile = await nextPymeService.getPdfInvoiceFromDian(pdf);
+            const zipFile = await nextPymeService.getXmlZipFromDian(zip);
+            //const xmlFile = await nextPymeService.getXmlInvoiceFromDian(xml);
+
+
+            //subimos los archivos a la factura de odoo
+            const updatedBill = await attachmentService.createAttachement("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf, buffer: pdfFile.data });
+            if (updatedBill.statusCode !== 201) return updatedBill;
+
+            const updatedBillS = await attachmentService.createAttachementXML("account.move", Number(id), { originalname: dianResponse.urlinvoicexml, buffer: dianResponse.invoicexml });
+            if (updatedBillS.statusCode !== 201) return updatedBillS;
+
+            const updatedBillSZIP = await attachmentService.createAttachementZIP("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf.split('.')[0] + ".zip", buffer: zipFile.data });
+            if (updatedBillSZIP.statusCode !== 201) return updatedBillSZIP;
+
+            return { statusCode: 200, message: 'Archivos obtenidos', data: { updatedBill, updatedBillS, updatedBillSZIP } };
+
+        }
+        catch (error) {
+            console.error('Error al subir los archivos a la factura en Odoo', error);
+            return {
+                statusCode: 500,
+                message: 'Error al subir los archivos a la factura en Odoo',
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Construye el payload (JSON) requerido por DIAN/NextPyme a partir de una factura (account.move) ya posteada.
+     * Toma datos del cliente, forma de pago, resolución DIAN, líneas, impuestos y totales, ajustando la estructura
+     * según el tipo de documento (factura, nota débito o nota crédito).
+     *
+     * Notas:
+     * - La factura debe estar en estado 'posted'.
+     * - Consulta múltiples modelos en Odoo (account.move, res.partner, res.city, uom.uom, account.tax, l10n_co_edi.*)
+     *   y tablas de parámetros locales (tipos de documento, unidades de medida, impuestos, responsabilidades, etc.).
+     *
+     * @async
+     * @function createJsonDian
+     * @param {number|string} billId ID de la factura (account.move) en Odoo.
+     * @returns {Promise<{statusCode:number, message:string, data?:Record<string, any>, error?:string}>}
+     *          Objeto resultado. En éxito incluye en data el JSON listo para envío a DIAN.
+     *          En error retorna un statusCode, message y opcionalmente error con el detalle.
+     *
+     * @example
+     * // Crear el JSON DIAN de la factura 123
+     * const res = await billService.createJsonDian(123);
+     * if (res.statusCode === 200) {
+     *   // res.data contiene el JSON para DIAN
+     * }
+     */
     async createJsonDian(billId) {
         try {
             const jsonDian = { ...dianRequest };
@@ -1159,7 +1306,7 @@ const billService = {
             jsonDian.customer = customer;
 
 
-
+            
 
             if (type_document_id.id == 1) {
                 //Campos de factura de venta
@@ -1178,6 +1325,17 @@ const billService = {
                 jsonDian.discrepancyresponsecode = bill.data.l10n_co_edi_description_code_credit;
                 jsonDian.discrepancynotes = (bill.data.ref.split(', ')[1]);
                 jsonDian.legal_monetary_totals = legal_monetary_totals;
+
+                const getBillReference = await this.getOneBill(Number(bill.data.reversed_entry_id[0]));
+                if (getBillReference.statusCode !== 200) return getBillReference;
+
+                const related_document = {
+                    number: getBillReference.data.name.split('/')[2],
+                    uuid: getBillReference.data.l10n_co_edi_cufe_cude_ref,
+                    issue_date: getBillReference.data.invoice_date
+                };
+
+                jsonDian.related_document = related_document;
             }
 
             jsonDian.type_document_id = type_document_id.id;

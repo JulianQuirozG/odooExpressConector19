@@ -3,7 +3,7 @@ const config = require('../config/config');
 const NEXTPYME_URL = process.env.NEXTPYME_URL
 const NEXTPYME_API_KEY = process.env.NEXTPYME_API_KEY;
 
-const nextPymeService = {
+const nextPymeConnector = {
 
     // Ejecutar una solicitud en nextPyme
     async nextPymeRequest(url, method, args = {}) {
@@ -49,4 +49,4 @@ const nextPymeService = {
 
 }
 
-module.exports = nextPymeService;
+module.exports = nextPymeConnector;
