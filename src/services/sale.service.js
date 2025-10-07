@@ -260,7 +260,7 @@ const saleService = {
 
 
             //Subimos los documentos a odoo
-            const files = await billService.uploadFilesFromDian(createBillFromSalesOrder.data.id, dianResponse.data, dianResponse.data.urlinvoicepdf, dianResponse.data.urlinvoicexml, dianResponse.data.urlinvoicexml.split('-')[1]);
+            const files = await billService.uploadFilesFromDian(createBillFromSalesOrder.data.id, dianResponse.data);
             if (files.statusCode !== 200) return files;
 
             //regresar toda la informacion
