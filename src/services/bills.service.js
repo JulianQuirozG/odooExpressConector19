@@ -217,17 +217,11 @@ const billService = {
                     linesToAdd = dataBill.invoice_line_ids.filter((line) =>
                         productResponse.data.foundIds.includes(Number(line.product_id))
                     );
-
-
-
                 }
                 if (action === 'replace') {
-                    //si hay lineas las elimino
-                    console.log(linesToAdd);
                     //construyo las lineas que deben ir en el body para construir
                     const productsFound = linesToAdd.map((line) => [0, 0, pickFields(line, INVOICE_LINE_FIELDS)]);
                     bill.invoice_line_ids = productsFound;
-                    console.log(bill);
                     if (lineIds.length > 0) {
                         const deleted = await this.updateBillLines(id, 2, lineIds);
                         if (deleted.statusCode !== 200) {
@@ -236,7 +230,6 @@ const billService = {
                     }
                 } else if (action === 'update') {
                     //si viene update ceirfico el tamaño de las linas y las actualizo
-                    console.log('Verificando lineas a actualizar', dataBill.invoice_line_ids.map((line) => { return pickFields(line, INVOICE_LINE_FIELDS); }));
                     await this.verifyBillLines(id, dataBill.invoice_line_ids.map((line) => { return pickFields(line, INVOICE_LINE_FIELDS); }));
                 }
             }
@@ -972,7 +965,6 @@ const billService = {
             //obtenemos el json para enviar a la dian
             const jsonDian = await this.createJsonDian(Number(id));
             if (jsonDian.statusCode !== 200) return jsonDian;
-            console.log("JSON DIAN generado:", jsonDian.data);
             let dianResponse;
             //Si es factura de venta
             if (jsonDian.data.type_document_id === 1) dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
@@ -1027,14 +1019,12 @@ const billService = {
         try {
             // obtener el pdf y zip archivos desde nextPyme
             const pdf = dianResponse.urlinvoicepdf;
-            console.log("Descargando PDF desde NextPyme:", pdf);
             const pdfFile = await nextPymeService.getPdfInvoiceFromDian(pdf);
-            console.log("primera", dianResponse);
+
             //Si la respuesta  de la dian trae el .zip en base64 se le asigna, si no se busca
             dianResponse.attacheddocument = (await nextPymeService.getXmlZipFromDian(dianResponse.urlinvoicexml.split('-')[1])).data;
             if (pdfFile.statusCode !== 200) return pdfFile;
 
-            console.log(dianResponse.attacheddocument);
             //subimos los archivos a la factura de odoo
             const updatedBill = await attachmentService.createAttachement("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf, buffer: pdfFile.data });
             if (updatedBill.statusCode !== 201) return updatedBill;

@@ -252,12 +252,8 @@ const saleService = {
             const dianResponse = await billService.syncDian(createBillFromSalesOrder.data.id);
             if (dianResponse.statusCode !== 200) return dianResponse;
 
-            console.log('cufe', dianResponse.data.cufe);
-            console.log('datastas', dianResponse.data);
-
             const updateSaleBillCufe = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe ,x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
             if (updateSaleBillCufe.statusCode !== 200) return updateSaleBillCufe;
-
 
             //Subimos los documentos a odoo
             const files = await billService.uploadFilesFromDian(createBillFromSalesOrder.data.id, dianResponse.data);
@@ -266,8 +262,6 @@ const saleService = {
             //regresar toda la informacion
             const saleBillDetails = await billService.getOneBill(createBillFromSalesOrder.data.id);
             if (saleBillDetails.statusCode !== 200) return saleBillDetails;
-
-
 
             return {
                 statusCode: 201,
