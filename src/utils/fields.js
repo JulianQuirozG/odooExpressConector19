@@ -229,7 +229,7 @@ const QUOTATION_LINES = [
 ];
 
 const QUOTATION_FIELDS = ["partner_id",
-    "order_line"];
+    "order_line", "payment_term_id"];
 
 module.exports = {
     CLIENT_FIELDS,

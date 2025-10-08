@@ -220,7 +220,7 @@ const saleService = {
             if (bill.statusCode !== 201) return bill;
 
 
-            //Actualizamos la factura validar los campos personalizados
+            //Actualizamos la factura de compra validando los campos personalizados
             const updatePurchaseBill = await billService.updateBill(bill.data.id, { invoice_line_ids: dataCompra.order_line }, 'update');
             if (updatePurchaseBill.statusCode !== 200) return updatePurchaseBill;
 
@@ -238,12 +238,10 @@ const saleService = {
 
             //crear la factura de venta
             const createBillFromSalesOrder = await this.createBillFromSalesOrder([quotation.data.id]);
-            
-            //console.log('createBillFromSalesOrder', createBillFromSalesOrder);
             if (createBillFromSalesOrder.statusCode !== 201) return createBillFromSalesOrder;
 
             //actualizar la factura de venta con los campos personalizados
-            const updateSaleBill = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_operation_type: "12", l10n_co_edi_payment_option_id: 2, invoice_line_ids: dataVenta.order_line }, 'update');
+            const updateSaleBill = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_operation_type: dataVenta.l10n_co_edi_operation_type, l10n_co_edi_payment_option_id:dataVenta.l10n_co_edi_payment_option_id, invoice_line_ids: dataVenta.order_line }, 'update');
             if (updateSaleBill.statusCode !== 200) return updateSaleBill;
 
             //confirmar la factura de venta
@@ -254,12 +252,8 @@ const saleService = {
             const dianResponse = await billService.syncDian(createBillFromSalesOrder.data.id);
             if (dianResponse.statusCode !== 200) return dianResponse;
 
-            console.log('cufe', dianResponse.data.cufe);
-            console.log('datastas', dianResponse.data);
-
             const updateSaleBillCufe = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe ,x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
             if (updateSaleBillCufe.statusCode !== 200) return updateSaleBillCufe;
-
 
             //Subimos los documentos a odoo
             const files = await billService.uploadFilesFromDian(createBillFromSalesOrder.data.id, dianResponse.data);
@@ -268,8 +262,6 @@ const saleService = {
             //regresar toda la informacion
             const saleBillDetails = await billService.getOneBill(createBillFromSalesOrder.data.id);
             if (saleBillDetails.statusCode !== 200) return saleBillDetails;
-
-
 
             return {
                 statusCode: 201,
