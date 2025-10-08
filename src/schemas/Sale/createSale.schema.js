@@ -7,7 +7,7 @@ const createSaleSchema = z.object({
   dataCompra: z.object({
     partner_id: z.number().min(1),
     date_planned: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }),
-    order_line: orderLineSchema.optional(),
+    order_line: z.array(orderLineSchema).optional(),
   })
 }).strict();
 

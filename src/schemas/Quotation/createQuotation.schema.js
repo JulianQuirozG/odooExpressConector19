@@ -19,6 +19,8 @@ const createQuotationSchema = z.object({
   validity_date: z.string().refine(val => !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }).optional(),
   payment_term_id: z.number().min(1),
   order_line: z.array(orderLineSchema).min(1, { message: 'Debe haber al menos una línea de pedido' }),
+  l10n_co_edi_payment_option_id: z.number(),
+  l10n_co_edi_operation_type: z.string(),
 }).strict();
 
 module.exports = { createQuotationSchema, orderLineSchema };

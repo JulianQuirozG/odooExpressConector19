@@ -98,7 +98,7 @@ const quotationService = {
     //crear una cotización
     async createQuotation(dataQuotation) {
         try {
-            const data = {...dataQuotation};
+            const data = pickFields(dataQuotation, QUOTATION_FIELDS);
             //verifico que el partner exista
             const partnerResponse = await partnerService.getOnePartner(
                 data.partner_id

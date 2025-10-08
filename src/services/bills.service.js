@@ -641,7 +641,7 @@ const billService = {
                 //Datos de la factura
                 l10n_co_edi_payment_option_id: billExists.data.l10n_co_edi_payment_option_id?.[0],
                 invoice_payment_term_id: billExists.data.invoice_payment_term_id?.[0],
-                invoice_date_due: billExists.data.invoice_date_due,
+                invoice_date: billExists.data.invoice_date,
                 //Productos
                 invoice_line_ids: lines.data
             }, 'update');
@@ -1089,7 +1089,7 @@ const billService = {
             //Obtengo todos los datos de la factura
             const bill = await this.getOneBill(billId, [['state', '=', 'posted']]); //Solo facturas confirmadas y firmadas
             if (bill.statusCode !== 200) return bill;
-            console.log("Factura obtenida para crear el json:", bill.data);
+
             let billReference = null;
             //si tiene una factura de referencia la obtengo
             if (bill.data.reversed_entry_id && bill.data.reversed_entry_id[0]) {
@@ -1104,7 +1104,6 @@ const billService = {
                 if (debitOrigin.statusCode !== 200) return debitOrigin;
             }
 
-
             //Fecha y hora de la factura
             const post_time = bill.data.l10n_co_dian_post_time.split(' ');
             const date = post_time[0];//
@@ -1115,50 +1114,60 @@ const billService = {
             const number = bill_name[2];//
             const prefix = bill_name[0];//
 
-            //tipo de documento
+            //tipo de documento de la factura, nota credito o nota debito
             const move_type = bill.data.l10n_co_edi_type;
             const { data } = await paramsTypeDocumentRepository.getTypeDocumentByCode(move_type);
             if (data.length < 1) return { statusCode: 404, message: "El tipo de documento no está configurado en la tabla de parámetros" };
             const type_document_id = data[0]; //
-            console.log("Tipo de documento:", type_document_id);
+
             // //Obtengo los datos del cliente
             const bill_customer = await partnerService.getOnePartner(bill.data.partner_id[0]);
             let customer = {}; //
 
             //sendEmail
-            console.log("send email", bill_customer.data.followup_reminder_type);
             const sendEmail = bill_customer.data.followup_reminder_type === "automatic";
+
+            //tipo de documento de identificacion
+            const customer_l10n_latam_identification_type_id = bill_customer.data.l10n_latam_identification_type_id;
+            const type_document_identification_id = await paramsTypeDocumentIdentificationRepository.getTypeDocumentByCode(customer_l10n_latam_identification_type_id[0]);
+            if (type_document_identification_id.data.length < 1) return { statusCode: 404, message: "El tipo de documento de identificación no está configurado en la tabla de parámetros" };
+            customer.type_document_identification_id = type_document_identification_id.data[0].id;
+
             //documento del cliente
             const vat = bill_customer.data.vat.split('-');
             customer.identification_number = vat[0];
-            customer.dv = vat[1];
+            if(type_document_identification_id.data[0].id == 6) customer.dv = vat[1];
 
             //nombre, telefono, direccion y email del cliente
-            if (!bill_customer.data.name) return { statusCode: 400, message: "El cliente no tiene nombre" };
+            if (!bill_customer.data.name) return { statusCode: 400, message: "El cliente no tiene nombre", data: [] };
+            if (!bill_customer.data.phone) return { statusCode: 400, message: "El cliente no tiene teléfono", data: [] };
+            if (!bill_customer.data.email) return { statusCode: 400, message: "El cliente no tiene email", data: [] };
+            if (!bill_customer.data.street && !bill_customer.data.street2) return { statusCode: 400, message: "El cliente no tiene dirección", data: [] };
+
             customer.name = bill_customer.data.name;
-            if (bill_customer.data.phone) customer.phone = bill_customer.data.phone;
-            if (bill_customer.data.email) customer.email = bill_customer.data.email;
-            if (bill_customer.data.street || bill_customer.data.street2) customer.address = bill_customer.data.street || bill_customer.data.street2;
-            else return { statusCode: 400, message: "El cliente no tiene dirección", data: [] };
+            customer.phone = bill_customer.data.phone;
+            customer.email = bill_customer.data.email;
+            customer.address = bill_customer.data.street || bill_customer.data.street2;
 
             //registro mercantil
             customer.merchant_registration = bill_customer.data.x_studio_registro_mercantil || "0000000";
-
-
-            //tipo de documento de identificacion 
-            const customer_l10n_latam_identification_type_id = bill_customer.data.l10n_latam_identification_type_id;
-            const type_document_identification_id = await paramsTypeDocumentIdentificationRepository.getTypeDocumentByCode(customer_l10n_latam_identification_type_id[0]);
-            if (type_document_identification_id.data.length > 0) customer.type_document_identification_id = type_document_identification_id.data[0].id; //
 
             //tipo de organizacion
             customer.type_organization_id = bill_customer.data.is_company ? 1 : 2;
 
             //municipio
             const city = await odooConector.executeOdooRequest("res.city", "search_read", { domain: [['id', '=', bill_customer.data.city_id[0]]] });
-            if (city.data.length !== 0) customer.municipality_id = (await paramsMunicipalitiesRepository.getMunicipalityByCode(city.data[0].l10n_co_edi_code)).data[0].id;
+            if(city.error) return { statusCode: 500, message: "Error al obtener el municipio del cliente", error: city.message };
+            if (!city.success) return { statusCode: 400, message: "Error al obtener el municipio del cliente", data: city.data };
+            if (city.data.length === 0) return { statusCode: 404, message: "El cliente no tiene municipio o el municipio no existe" };
+
+            const municipality_id = (await paramsMunicipalitiesRepository.getMunicipalityByCode(city.data[0].l10n_co_edi_code)).data[0].id
+            if (!municipality_id) return { statusCode: 404, message: "El municipio no está configurado en la tabla de parámetros" };
+            customer.municipality_id = municipality_id;
 
             //tipo de regimen
             const fiscal_regimen = bill_customer.data.l10n_co_edi_fiscal_regimen;
+            if(!fiscal_regimen) return { statusCode: 400, message: "El cliente no tiene régimen fiscal", data: [] };
             customer.type_regime_id = (fiscal_regimen === "49") ? 2 : 1;
 
             //Tipo de responsabilidad
@@ -1181,6 +1190,7 @@ const billService = {
 
             //Metodo de pago id
             const payment_id = bill.data.l10n_co_edi_payment_option_id[0];
+            if (!payment_id) return { statusCode: 400, message: "La factura no tiene método de pago" };
             const payment_method = (await odooConector.executeOdooRequest("l10n_co_edi.payment.option", "search_read", { domain: [['id', '=', payment_id]] }));
 
             const payment_method_id = (await paramsPaymentMethodsRepository.getPaymentMethodByCode(payment_method.data[0].code));
@@ -1200,8 +1210,6 @@ const billService = {
             const diferenciaMs = invoice_date_due - invoice_date;
             const dias = Math.round(diferenciaMs / (1000 * 60 * 60 * 24));
             payment_form.duration_measure = dias;
-
-
 
             //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
@@ -1263,10 +1271,14 @@ const billService = {
                     //obtengo los datos del impuesto
                     const taxData = await odooConector.executeOdooRequest("account.tax", "search_read", { domain: [['id', '=', Number(tax)]] });
 
-                    if (taxData?.data.length === 0) return { statusCode: 400, message: `El impuesto ${tax} de la linea ${line.id} no es válido` };
+                    if (taxData.error) return { statusCode: 500, message: `Error al obtener el impuesto ${tax} de la linea ${line.id}`, error: taxData.message };
+                    if (!taxData.success) return { statusCode: 400, message: `Error al obtener el impuesto ${tax} de la linea ${line.id}`, data: taxData.data };
+                    if (taxData?.data.length === 0) return { statusCode: 404, message: `El impuesto ${tax} de la linea ${line.id} no existe` };
 
                     const taxTypeData = await odooConector.executeOdooRequest("l10n_co_edi.tax.type", "search_read", { domain: [['id', '=', taxData.data[0].l10n_co_edi_type[0]]] });
-                    if (taxTypeData.data.length === 0) return { statusCode: 400, message: `El tipo de impuesto ${taxData.data[0].l10n_co_edi_type[0]} del impuesto ${tax} de la linea ${line.id} no es válido` };
+                    if (taxTypeData.error) return { statusCode: 500, message: `Error al obtener el tipo de impuesto ${taxData.data[0].l10n_co_edi_type[0]} del impuesto ${tax} de la linea ${line.id}`, error: taxTypeData.message };
+                    if (!taxTypeData.success) return { statusCode: 400, message: `Error al obtener el tipo de impuesto ${taxData.data[0].l10n_co_edi_type[0]} del impuesto ${tax} de la linea ${line.id}`, data: taxTypeData.data };
+                    if (taxTypeData.data.length === 0) return { statusCode: 404, message: `El tipo de impuesto ${taxData.data[0].l10n_co_edi_type[0]} del impuesto ${tax} de la linea ${line.id} no existe` };
 
                     const tax_id = await getTaxByCode(taxTypeData.data[0].code);
                     if (tax_id.data[0].length === 0) return { statusCode: 404, message: `El tipo de impuesto con código ${taxTypeData.data[0].code} no está configurado en la tabla de parámetros` };
@@ -1278,15 +1290,17 @@ const billService = {
 
 
                     tax_totals.push({ ...tax_line });
-                    //Agregar la cantidad de los impuestos
+
+                    //Taxt toal pero de la las lineas
+                    //Verificamos si ya evaluamos el tipo de impuesto
                     if (tax_totals_map.has(tax)) {
-                        // Ya existe, sumar valores
+                        // Si ya lo pasamos sumamos el valor del impuesto y el valor de la base gravable
                         const existing = tax_totals_map.get(tax);
                         existing.tax_amount += tax_line.tax_amount;
                         existing.taxable_amount += tax_line.taxable_amount;
                         tax_totals_map.set(tax, existing);
                     } else {
-                        // Nuevo impuesto
+                        // Registramos el impuesto por primera vez
                         tax_totals_map.set(tax, {
                             tax_id: tax_line.tax_id,
                             tax_amount: tax_line.tax_amount,
@@ -1306,7 +1320,7 @@ const billService = {
                 tax_exclusive_amount += valor.taxable_amount;
             })
 
-            // totales
+            // totales de la factura
             const legal_monetary_totals = {
                 payable_amount: bill.data.amount_total,
                 tax_exclusive_amount: tax_exclusive_amount,
@@ -1315,7 +1329,6 @@ const billService = {
                 allowance_total_amount: 0.00,
                 charge_total_amount: 0.00,
             }
-
 
 
             //construyo el json para la dian
@@ -1330,8 +1343,6 @@ const billService = {
             jsonDian.number = number;
             if (type_document_id.id !== 5) jsonDian.prefix = prefix;
             jsonDian.customer = customer;
-
-
 
             //Campos específicos segun el tipo de documento
             if (type_document_id.id == 1) {
@@ -1348,6 +1359,7 @@ const billService = {
                 jsonDian.discrepancynotes = (bill.data.ref.split(', ')[1]);
                 jsonDian.requested_monetary_totals = legal_monetary_totals;
 
+                //Factura de origen de la cual se realizo la nota debito
                 const getBillReference = await this.getOneBill(Number(bill.data.debit_origin_id[0]));
                 if (getBillReference.statusCode !== 200) return getBillReference;
 
@@ -1366,6 +1378,7 @@ const billService = {
                 jsonDian.discrepancynotes = (bill.data.ref.split(', ')[1]);
                 jsonDian.legal_monetary_totals = legal_monetary_totals;
 
+                //Factura de origen de la cual se realizo la nota credito
                 const getBillReference = await this.getOneBill(Number(bill.data.reversed_entry_id[0]));
                 if (getBillReference.statusCode !== 200) return getBillReference;
 
