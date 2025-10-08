@@ -635,14 +635,20 @@ const billService = {
             if (lines.statusCode !== 200) {
                 return lines;
             }
-
-            //Actualizo los productos de la nota credito con los productos de la factura original
+            console.log("Factura de la nota de crédito:", billExists.data);
+            //Actualizo los productos y los datos de la factura en la nota credito
             const updatedCreditNote = await this.updateBill(creditNoteId, {
+                //Datos de la factura
+                l10n_co_edi_payment_option_id: billExists.data.l10n_co_edi_payment_option_id?.[0],
+                invoice_payment_term_id: billExists.data.invoice_payment_term_id?.[0],
+                invoice_date_due: billExists.data.invoice_date_due,
+                //Productos
                 invoice_line_ids: lines.data
             }, 'update');
             if (updatedCreditNote.statusCode !== 200) {
                 return updatedCreditNote;
             }
+            console.log("Nota de crédito actualizada:", updatedCreditNote.data);
 
             //Regreso la nota credito creada
             return {
@@ -1083,7 +1089,7 @@ const billService = {
             //Obtengo todos los datos de la factura
             const bill = await this.getOneBill(billId, [['state', '=', 'posted']]); //Solo facturas confirmadas y firmadas
             if (bill.statusCode !== 200) return bill;
-
+            console.log("Factura obtenida para crear el json:", bill.data);
             let billReference = null;
             //si tiene una factura de referencia la obtengo
             if (bill.data.reversed_entry_id && bill.data.reversed_entry_id[0]) {
@@ -1179,7 +1185,7 @@ const billService = {
 
             const payment_method_id = (await paramsPaymentMethodsRepository.getPaymentMethodByCode(payment_method.data[0].code));
             if (payment_method_id.data.length < 1) return { statusCode: 404, message: "El método de pago no está configurado en la tabla de parámetros" };
-            payment_form.method_payment_id = payment_method_id.data[0].id;
+            payment_form.payment_method_id = payment_method_id.data[0].id;
 
             //Notas de la factura
             const notes = bill.data.x_studio_notas || "";
@@ -1290,12 +1296,7 @@ const billService = {
                     }
 
                 }
-
-
-
                 lines2.tax_totals = tax_totals;
-
-                console.log(lines2);
                 linesProduct.push(lines2);
             }
 
@@ -1315,7 +1316,15 @@ const billService = {
                 charge_total_amount: 0.00,
             }
 
+
+
             //construyo el json para la dian
+            //Campos generales de las facturas, notas credito y notas debito
+            jsonDian.type_document_id = type_document_id.id;
+            jsonDian.tax_totals = tax_totals_bill;
+            jsonDian.sendmail = sendEmail;
+            jsonDian.notes = notes;
+            jsonDian.payment_form = payment_form;
             jsonDian.date = date;
             jsonDian.time = time;
             jsonDian.number = number;
@@ -1324,12 +1333,13 @@ const billService = {
 
 
 
-
+            //Campos específicos segun el tipo de documento
             if (type_document_id.id == 1) {
                 //Campos de factura de venta
                 jsonDian.invoice_lines = linesProduct;
                 jsonDian.legal_monetary_totals = legal_monetary_totals;
                 jsonDian.resolution_number = resolution_number;
+
             } else if (type_document_id.id == 5) {
                 //Campos de nota debito
                 jsonDian.number = Number(jsonDian.number);
@@ -1367,16 +1377,6 @@ const billService = {
 
                 jsonDian.billing_reference = billing_reference;
             }
-
-            jsonDian.type_document_id = type_document_id.id;
-
-
-            jsonDian.tax_totals = tax_totals_bill;
-            jsonDian.payment_form = payment_form;
-            jsonDian.sendmail = sendEmail;
-            jsonDian.notes = notes;
-
-
 
             return {
                 statusCode: 200,
