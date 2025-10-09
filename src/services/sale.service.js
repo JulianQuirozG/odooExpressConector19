@@ -5,7 +5,6 @@ const odooConector = require("../utils/odoo.service");
 const quotationService = require("./quotation.service");
 const purchaseOrderService = require("./purchaseOrder.service");
 const billService = require("./bills.service");
-const nextPymeService = require("./nextPyme.service");
 
 const saleService = {
     /**
@@ -103,7 +102,6 @@ const saleService = {
             //mapear los ids a numeros
             const ids = Number(salesOrderIds[0]);
 
-            console.log('ids', ids);
             //ejecuto el wizard para traer toda la info y crear la factura
             const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
                 vals_list: [{
@@ -115,14 +113,11 @@ const saleService = {
                 context: { active_model: 'sale.order', active_ids: ids, active_id: ids[0] }
             });
 
-            console.log('wizardCreate', wizardCreate);
-
             if (!wizardCreate.success) {
                 return { statusCode: 500, message: 'Error creando wizard facturación', error: wizardCreate.data };
             }
 
             const wizardId = wizardCreate.data[0];
-            console.log('wizardId', wizardId);
             //creo la factura
             const response = await odooConector.executeOdooRequest(
                 "sale.advance.payment.inv",
@@ -137,14 +132,11 @@ const saleService = {
                 }
             );
 
-            console.log('response', response);
 
             if (response.error) return { statusCode: 500, message: 'Error al crear factura desde orden de venta', error: response.message };
             if (!response.success) return { statusCode: 400, message: 'Error al crear factura desde orden de venta', data: response.data };
 
-            console.log('response.data.res_id', response.data.res_id);
             const bill = await billService.getOneBill(response.data.res_id);
-            console.log('bill', bill.data);
             if (bill.statusCode !== 200) return bill;
 
             return {
@@ -196,7 +188,6 @@ const saleService = {
             //crear cotizacion
             const quotation = await quotationService.createQuotation(dataVenta);
             if (quotation.statusCode !== 201) return quotation;
-            console.log('Cotización creada:', dataVenta);
 
             //confirmar cotizacion 
             const confirmQuotation = await quotationService.confirmQuotation(quotation.data.id);

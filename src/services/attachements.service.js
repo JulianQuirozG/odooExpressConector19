@@ -1,11 +1,19 @@
-const { type } = require("../schemas/bill.schema");
-const { BILL_FIELDS, PRODUCT_FIELDS } = require("../utils/fields");
 const odooConector = require("../utils/odoo.service");
-const { pickFields } = require("../utils/util");
-const productService = require("./products.service");
 
+/**
+ * Servicio para gestionar adjuntos (ir.attachment) en Odoo.
+ * Proporciona métodos para listar, obtener, crear (en varios formatos) y eliminar adjuntos.
+ */
 const attachementService = {
-    //obtener adjuntos por modelo y id
+    /**
+     * Obtener attachments filtrando por modelo y/o id de recurso.
+     *
+     * @async
+     * @param {string} [res_model] - Nombre del modelo Odoo (ej. 'account.move'). Si se omite, no filtra por modelo.
+     * @param {number|string} [res_id] - ID del registro en el modelo. Si se omite, no filtra por id.
+     * @param {string[]} [attachmentFields=['name','mimetype','file_size','res_model','res_id','url']] - Campos a recuperar.
+     * @returns {Promise<Object>} Objeto con statusCode, message y data (array de attachments) o error.
+     */
     async getAttachments(res_model, res_id, attachmentFields = ['name', 'mimetype', 'file_size', 'res_model', 'res_id', 'url']) {
         try {
             const domain = [];
@@ -30,7 +38,13 @@ const attachementService = {
             return { statusCode: 500, message: 'Error al obtener attachments', error: error.message };
         }
     },
-    //obtener un adjunto por id
+    /**
+     * Obtener un único adjunto por su ID.
+     *
+     * @async
+     * @param {number|string} id - ID del attachment a recuperar.
+     * @returns {Promise<Object>} Objeto con statusCode, message y data (attachment) o error.
+     */
     async getOneAttachment(id) {
         try {
             const response = await odooConector.executeOdooRequest('ir.attachment', 'search_read', {
@@ -53,7 +67,21 @@ const attachementService = {
             return { statusCode: 500, message: 'Error al obtener adjunto', error: error.message };
         }
     },
-    //crear un adjunto
+    /**
+     * Crear un adjunto (ir.attachment) asociado a un registro existente.
+     *
+     * Proceso:
+     *  - Valida que el `model` y `referenceId` existan en Odoo.
+     *  - Valida que `file` esté presente y contenga los datos necesarios.
+     *  - Construye el objeto `vals` con los campos esperados por Odoo (name, datas, res_model, res_id)
+     *    y llama al método 'create' sobre 'ir.attachment'.
+     *
+     * @async
+     * @param {string} model - Modelo Odoo (ej. 'account.move').
+     * @param {number|string} referenceId - ID del registro al que se asociará el adjunto.
+     * @param {Object} file - Objeto de archivo (por ejemplo, de multer) con { originalname, buffer }.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado o respuesta de Odoo) o error.
+     */
     async createAttachement(model, referenceId, file) {
         try {
             //verifico la factura si viene en el body
@@ -103,6 +131,17 @@ const attachementService = {
             return { statusCode: 500, message: 'Error al crear adjunto', error: error.message };
         }
     },
+    /**
+     * Crear un adjunto cuyo contenido ya está en formato base64 o texto XML.
+     *
+     * Este método acepta `file.buffer` como string base64 o como Buffer y lo convierte si es necesario.
+     *
+     * @async
+     * @param {string} model - Modelo Odoo (ej. 'account.move').
+     * @param {number|string} referenceId - ID del registro al que se asociará el adjunto.
+     * @param {Object} file - Objeto de archivo con { originalname, buffer } donde buffer puede ser string base64 o Buffer.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     */
     async createAttachementXML(model, referenceId, file) {
         try {
             //verifico la factura si viene en el body
@@ -152,6 +191,17 @@ const attachementService = {
             return { statusCode: 500, message: 'Error al crear adjunto', error: error.message };
         }
     },
+    /**
+     * Crear un adjunto cuyo contenido es binario (por ejemplo un ZIP).
+     *
+     * Este método envía `datas` como Buffer o string según el contenido recibido.
+     *
+     * @async
+     * @param {string} model - Modelo Odoo (ej. 'purchase.order').
+     * @param {number|string} referenceId - ID del registro al que se asociará el adjunto.
+     * @param {Object} file - Objeto de archivo con { originalname, buffer } donde buffer es binario.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     */
     async createAttachementZIP(model, referenceId, file) {
         try {
             //verifico la factura si viene en el body
@@ -201,7 +251,13 @@ const attachementService = {
             return { statusCode: 500, message: 'Error al crear adjunto', error: error.message };
         }
     },
-    //eliminar un adjunto
+    /**
+     * Elimina un attachment por ID.
+     *
+     * @async
+     * @param {number|string} id - ID del attachment a eliminar.
+     * @returns {Promise<Object>} Resultado con statusCode y message. Si hay error, incluye error o data.
+     */
     async deleteAttachment(id) {
         try {
             const attachmentExists = await this.getOneAttachment(id);

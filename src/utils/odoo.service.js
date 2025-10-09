@@ -3,9 +3,35 @@ const config = require('../config/config');
 const ODOO_URL = config.odooUrl;
 const API_KEY = config.odooApiKey;
 const ODOO_DB = config.odooDb;
+
+/**
+ * Conector simple para Odoo via HTTP.
+ *
+ * Construye la URL usando `ODOO_URL`, el `model` y el `method` provistos y realiza
+ * una petición POST con cabeceras JSON y la API key (si está configurada).
+ *
+ * Nota: el conector actual envía la DB en la cabecera `X-Odoo-Database` y asume
+ * que el endpoint remoto acepta la forma: `${ODOO_URL}/${model}/${method}`.
+ * Si tu instancia de Odoo expone otro endpoint (por ejemplo `/web/dataset/call_kw`),
+ * hay que adaptar esta función.
+ *
+ * @module utils/odooConnector
+ */
 const odooConector = {
 
-    // Ejecutar una solicitud a Odoo
+    /**
+     * Ejecuta una solicitud a Odoo.
+     *
+     * @async
+     * @param {string} model - Nombre del modelo Odoo (ej. 'sale.order', 'account.move').
+     * @param {string} method - Método/acción a invocar en el modelo (ej. 'search_read', 'create', 'write').
+     * @param {Object} [args={}] - Payload/argumentos que se enviarán en el body de la petición.
+     *                             El contenido exacto depende del endpoint remoto y del método.
+     * @returns {Promise<{success:boolean, data?:any, error?:boolean, message?:string}>} Objeto con el resultado:
+     *          - success: true en caso de éxito.
+     *          - data: respuesta del servicio Odoo cuando success === true.
+     *          - error/message: información del error cuando success === false.
+     */
     async executeOdooRequest(model, method, args = {}) {
         try {
             const URL = `${ODOO_URL}/${model}/${method}`;
