@@ -44,7 +44,7 @@ const clientSchema = z.object({
   supplier_rank: z.coerce.number().int().min(0),
 
   // Ventas/Compras
-  user_id: z.coerce.number().int().min(1),
+  user_id: z.coerce.number().int().min(1).optional(),
   property_payment_term_id: z.coerce.number().int().min(1),
   property_inbound_payment_method_line_id: z.coerce.number().int().min(1),
 
@@ -78,10 +78,10 @@ const clientSchema = z.object({
     z.coerce.number().int().min(1),
     z.tuple([z.coerce.number().int().min(1)])
   ]),
-  autopost_bills: z.enum(['ask', 'no', 'all']).default('ask'),
+  autopost_bills: z.enum(['ask', 'never', 'always']).default('never'),
   ignore_abnormal_invoice_amount: z.union([z.boolean(), z.literal(0), z.literal(1)]),
   ignore_abnormal_invoice_date: z.union([z.boolean(), z.literal(0), z.literal(1)]),
-
+  x_studio_registro_mercantil: z.string().optional().default('000000'),
   // Invoicing
   invoice_sending_method: z.enum(['email', 'manual', 'none']).default('email'),
   // opcionales
