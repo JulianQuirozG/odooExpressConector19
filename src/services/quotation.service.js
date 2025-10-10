@@ -283,7 +283,7 @@ const quotationService = {
             //Obtengo los datos de las ordenes de compra
             const purchaseOrders = await odooConector.executeOdooRequest('purchase.order', 'search_read', {
                 domain: [['id', 'in', purchaseOrdersIds]],
-                fields: ['name', 'partner_id', 'date_order', 'amount_total', 'state', 'order_line'],
+                //fields: ['name', 'partner_id', 'date_order', 'amount_total', 'state', 'order_line', ],
             });
 
             return { statusCode: 200, message: "Órdenes de compra relacionadas", data: purchaseOrders.data };

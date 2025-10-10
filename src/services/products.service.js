@@ -38,7 +38,6 @@ const productService = {
         try {
             const response = await odooConector.executeOdooRequest('product.template', 'search_read', {
                 domain: [['id', '=', id]],
-                fields: ['name', 'default_code', 'list_price'],
                 limit: 1
             });
             if (!response.success) {
