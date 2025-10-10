@@ -8,6 +8,7 @@ const { validateBody } = require('../middleware/validateBody.middleware');
 //Schemas
 const createCreditNoteSchema = require('../schemas/CreditNotes/createCreditNote.schema');
 const createdPaymentSchema = require('../schemas/Payments/createPayment.schema');
+const { controlCron } = require('../middleware/LogLotesFacturas');
 
 //Aqui van las rutas de bill
 router.get('/', billController.getBill);
@@ -24,6 +25,6 @@ router.get('/outstanding-credits/:invoiceId', billController.listOutstandingCred
 router.post('/apply-credits/:invoiceId', billController.applyCreditNote);
 router.put('/verify-lines/:id', billController.verifyBillLines);
 router.get('/dian-json/:id', billController.getBillDianJson);
-router.put('/confirm-credit-note/:id', billController.confirmCreditNote);
+router.put('/confirm-credit-note/:id', controlCron, billController.confirmCreditNote);
 
 module.exports = router;
