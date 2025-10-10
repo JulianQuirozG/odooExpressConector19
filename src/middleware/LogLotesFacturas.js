@@ -1,6 +1,6 @@
-const productService = require('../services/products.service');
-//const {cron} = require('../job/corn');
 const { getIdsBill, claimBillRecord, createBillRecord, CompleteBillRecord, ErrorBillRecord } = require("../Repository/lotesprocesarfactura/lotesprocesarfactura.repository");
+const billService = require('../services/bills.service');
+const { lotesService } = require("../services/BillLotesDb.service");
 
 const controlCron = async (req, res, next) => {
     try {
@@ -8,23 +8,30 @@ const controlCron = async (req, res, next) => {
             req.params?.id ?? req.body?.id ?? req.body?.invoice_id ?? req.query?.id;
 
         // Guarda contexto para usarlo al finalizar
-        res.locals._lot = { invoiceId, claimedOrCreated: false };
+        res.locals._lot = { invoiceId, claimedOrCreated: false, typebill: null };
 
         // 1) Registrar al entrar
         (async () => {
             try {
                 if (!invoiceId) return { statusCode: 400, message: 'No se envió el ID de la factura' };
-                const exists = await getIdsBill(invoiceId);
-                console.log('exists', exists);
-                if (exists.data?.length > 0) {
-                    // Intenta tomar el lock/lease (solo si está pending/error o lease expirado)
-                    const claimed = await claimBillRecord(invoiceId);
-                    res.locals._lot.claimedOrCreated = claimed;
-                } else {
-                    // Crea el registro en processing con TTL (lease)
-                    const created = await createBillRecord(invoiceId);
-                    res.locals._lot.claimedOrCreated = !!created;
+
+                const bill = await billService.getOneBill(invoiceId);
+                if (bill.statusCode !== 200) {
+                    console.error('No se encontró la factura en Odoo para el ID:', invoiceId);
+                    return { statusCode: 404, message: 'No se encontró la factura en Odoo' };
                 }
+                let exists = {};
+
+                // Según el tipo de factura, usar la tabla correspondiente
+                // 01: Factura de venta
+                // 91: Nota de crédito de venta
+                // 92: Nota de débito de venta
+                res.locals._lot.typebill = bill.data.l10n_co_edi_type;
+
+                const response = await lotesService.registerinvoiceLoteByType(bill.data.id, bill.data.l10n_co_edi_type);
+
+                console.log('Respuesta al registrar la factura en el lote:', response);
+
             } catch (e) {
                 console.error('[controlCron] error on enter:', e.message || e);
             }
@@ -33,13 +40,14 @@ const controlCron = async (req, res, next) => {
         // 2) Registrar al salir (cuando la respuesta ya terminó)
         res.on('finish', async () => {
             try {
-                const { invoiceId: id } = res.locals._lot || {};
+                const { invoiceId: id, typebill } = res.locals._lot || {};
                 if (!id) return;
+
                 //console.log('finalizing lot for invoiceId', id, 'with status', res.statusCode);
                 if (res.statusCode >= 200 && res.statusCode < 300) {
-                    await CompleteBillRecord(id); // éxito: done y limpia lease
+                    await lotesService.FinishInvoiceLoteByType(id, typebill); // éxito: done y limpia lease
                 } else {
-                    await ErrorBillRecord(id); // deja listo para reintento (pending/error)
+                    await lotesService.FinishInvoiceLoteByType(id, typebill, false); // deja listo para reintento (pending/error)
                 }
             } catch (e) {
                 console.error('[controlCron] error on finish:', e.message || e);
