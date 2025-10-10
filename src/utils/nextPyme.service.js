@@ -1,11 +1,33 @@
 const axios = require('axios');
-const config = require('../config/config');
 const NEXTPYME_URL = process.env.NEXTPYME_URL
 const NEXTPYME_API_KEY = process.env.NEXTPYME_API_KEY;
 
+/**
+ * Conector para NextPyme — encapsula llamadas HTTP a la API de NextPyme.
+ *
+ * Exporta un único método `nextPymeRequest` que construye la URL base, aplica
+ * la cabecera de autorización con la API Key y ejecuta la petición usando axios.
+ *
+ * @module utils/nextPymeConnector
+ */
 const nextPymeConnector = {
 
-    // Ejecutar una solicitud en nextPyme
+    /**
+     * Ejecuta una solicitud HTTP contra NextPyme.
+     *
+     * - Construye la URL: `${NEXTPYME_URL}/${url}`.
+     * - Si el método es GET, envía la petición sin body; en caso contrario, envía `args` como body.
+     * - Agrega encabezados: Content-Type, Authorization (Bearer API_KEY) y Accept.
+     *
+     * @async
+     * @param {string} url - Ruta relativa a la API de NextPyme (por ejemplo: 'invoice-transport' o 'download/NIT/FILE').
+     * @param {string} method - Método HTTP (GET, POST, PUT, DELETE, ...). No es case-sensitive.
+     * @param {Object} [args={}] - Payload para métodos que aceptan body (POST/PUT). Para GET se ignora.
+     * @returns {Promise<{success:boolean, data?:any, error?:boolean, message?:string}>} Resultado estandarizado:
+     *          - success: true cuando la respuesta fue correcta.
+     *          - data: body de la respuesta cuando success === true.
+     *          - error/message: información del error cuando success === false.
+     */
     async nextPymeRequest(url, method, args = {}) {
         try {
             const URL = `${NEXTPYME_URL}/${url}`;

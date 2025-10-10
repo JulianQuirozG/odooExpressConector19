@@ -1,11 +1,5 @@
-const { da } = require("zod/locales");
 const {
-    BILL_FIELDS,
-    PRODUCT_FIELDS,
-    PRODUCT_FIELDS_BILL,
-    INVOICE_LINE_FIELDS,
     QUOTATION_FIELDS,
-    QUOTATION_LINE_FIELDS
 } = require("../utils/fields");
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
@@ -13,15 +7,22 @@ const productService = require("./products.service");
 const partnerService = require("./partner.service");
 
 const quotationService = {
-    //obtener todas las cotizaciones
+    /**
+     * Obtener todas las cotizaciones (sale.order) desde Odoo.
+     *
+     * @async
+     * @param {string[]} [quotationFields] - Campos a recuperar por cotización.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (array de cotizaciones) o error.
+     */
     async getQuotation(quotationFields = ["name", "partner_id", "date_order", "validity_date",
-        "amount_total", "state", "order_line", "procurement_group_id"]) {
+        "amount_total", "state", "order_line", "procurement_group_id"], domain = []) {
         try {
             const response = await odooConector.executeOdooRequest(
                 "sale.order",
                 "search_read",
                 {
                     fields: quotationFields,
+                    domain: domain,
                 }
             );
             if (!response.success) {
@@ -52,7 +53,14 @@ const quotationService = {
             };
         }
     },
-    //obtener una cotización por id
+    /**
+     * Obtener una cotización por su ID.
+     *
+     * @async
+     * @param {number|string} id - ID de la cotización (sale.order).
+     * @param {Array} [domain=[]] - Dominio adicional para filtrar la búsqueda.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (detalle) o error.
+     */
     async getOneQuotation(id, domain = []) {
         try {
             const domainFinal = [['id', '=', id], ...domain];
@@ -95,7 +103,17 @@ const quotationService = {
             };
         }
     },
-    //crear una cotización
+    /**
+     * Crear una cotización (sale.order) en Odoo.
+     *
+     * - Valida que el partner exista.
+     * - Valida que los productos indicados existan.
+     * - Construye las líneas con la sintaxis requerida por Odoo y crea la cotización.
+     *
+     * @async
+     * @param {Object} dataQuotation - Objeto con los campos de la cotización (filtrado por QUOTATION_FIELDS).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (cotización creada) o error.
+     */
     async createQuotation(dataQuotation) {
         try {
             const data = pickFields(dataQuotation, QUOTATION_FIELDS);
@@ -181,13 +199,18 @@ const quotationService = {
         }
     },
 
-    //confirmar una cotización
+    /**
+     * Confirmar (action_confirm) una cotización para convertirla en orden de venta.
+     *
+     * @async
+     * @param {number|string} id - ID de la cotización a confirmar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (cotización confirmada) o error.
+     */
     async confirmQuotation(id) {
         try {
             //verifico que la cotización exista
             const quotationResponse = await this.getOneQuotation(id, [['state', '=', 'draft']]);
             if (quotationResponse.statusCode !== 200) return quotationResponse;
-            console.log(quotationResponse.data);
             //confirmo la cotización
             const quotationConfirmed = await odooConector.executeOdooRequest(
                 "sale.order",
@@ -207,7 +230,6 @@ const quotationService = {
                     data: quotationConfirmed.data,
                 };
             }
-            console.log("Cotización confirmada en Odoo:", quotationConfirmed.data);
             return {
                 statusCode: 200,
                 message: "Cotización confirmada",
@@ -223,6 +245,13 @@ const quotationService = {
             };
         }
     },
+    /**
+     * Obtener las órdenes de compra relacionadas a una orden de venta (sale.order).
+     *
+     * @async
+     * @param {number|string} saleOrderId - ID de la orden de venta.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (array de órdenes de compra) o error.
+     */
     async getPurchaseOrdersBySaleOrderId(saleOrderId) {
         try {
             //verifico que la orden de venta exista
@@ -267,6 +296,40 @@ const quotationService = {
                 message: "Error al obtener órdenes de compra",
                 error: error.message,
             };
+        }
+    },
+    /**
+     * Validar una lista de IDs de cotizaciones (sale.order) y devolver cuáles existen y cuáles no.
+     *
+     * @async
+     * @param {number[]} ids - Array de IDs a validar.
+     * @param {Array} [domain=[]] - Dominio adicional para filtrar la búsqueda.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data { foundIds, notFoundIds } o error.
+     */
+    async validListId(ids, domain = []) {
+        try {
+            if (!Array.isArray(ids) || ids.length === 0) {
+                return { statusCode: 400, message: 'Debe proporcionar un array de IDs válido', data: { foundIds: [], notFoundIds: [] } };
+            }
+
+            const response = await odooConector.executeOdooRequest('sale.order', 'read', {
+                ids: ids,
+            });
+
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al validar cotizaciones', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al validar cotizaciones', data: response.data };
+            }
+
+            const foundIds = Array.isArray(response.data) ? response.data.map(item => item.id) : [];
+            const notFoundIds = ids.filter(id => !foundIds.includes(id));
+
+            return { statusCode: 200, message: 'Validación de cotizaciones', data: { foundIds, notFoundIds } };
+        } catch (error) {
+            console.error('Error en quotationService.validListId:', error);
+            return { statusCode: 500, message: 'Error al validar cotizaciones', error: error.message };
         }
     }
 };
