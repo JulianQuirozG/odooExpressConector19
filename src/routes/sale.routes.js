@@ -10,12 +10,13 @@ const { validateBody } = require('../middleware/validateBody.middleware');
 //Schema
 const { createSaleSchema } = require('../schemas/Sale/createSale.schema');
 const { validateData } = require("../middleware/createSale.muddleware");
+const { controlCron } = require("../middleware/LogLotesFacturas");
 
 //Routes
 router.get('/', saleController.getSales);
 router.get('/:id', saleController.getSaleById);
 router.post('/create-bill', saleController.createBillFromSalesOrder);
-router.post('/',  validateData, validateBody(createSaleSchema), saleController.createSale);
+router.post('/', validateData, validateBody(createSaleSchema), saleController.createSale);
 
 
 module.exports = router;

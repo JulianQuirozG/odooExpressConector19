@@ -19,6 +19,9 @@ const purchaseOrderRoutes = require('./routes/purchasOrder.routes');
 const paymentMethodRoutes = require('./routes/paymentMethod.routes');
 const currencyRoutes = require('./routes/currency.routes');
 const DbConfig = require('./config/db');
+const { cron } = require('./job/corn');
+const { getBillsStay } = require('./Repository/lotesprocesarfactura/lotesprocesarfactura.repository');
+const { lotesService } = require('./services/BillLotesDb.service');
 
 const app = express();
 
@@ -32,9 +35,9 @@ app.use('/api/product', productRoutes);
 app.use('/api/bills', billsRoutes);
 app.use('/api/attachments', attachmentsRoutes);
 app.use('/api/journal', journalRoutes);
-app.use('/api/quotation',quotationRoutes)
+app.use('/api/quotation', quotationRoutes)
 app.use('/api/sales', salesRoutes);
-app.use('/api/purchase-order',purchaseOrderRoutes)
+app.use('/api/purchase-order', purchaseOrderRoutes)
 app.use('/api/payment-method', paymentMethodRoutes);
 app.use('/api/currency', currencyRoutes);
 
@@ -70,6 +73,19 @@ app.use('*', (req, res) => {
     path: req.originalUrl
   });
 });
+
+cron.schedule('*/1 * * * *', async () => {
+  try {
+    console.log(`[CRON] Tarea cada 1 minuto ${JSON.stringify((await getBillsStay()).data.map(item => item.idexterno))}`
+      , new Date().toISOString());
+    let idsBills = (await getBillsStay()).data.map(item => item.idexterno);
+    if (idsBills.length > 0) await lotesService.processJobFacturas(idsBills);
+  } catch (e) {
+    console.error('Error en el cron:', e.message || e);
+    return;
+  }
+
+}, { scheduled: true, timezone: 'America/Bogota' });
 
 const PORT = config.port || 3000;
 

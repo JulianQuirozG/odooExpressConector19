@@ -447,6 +447,45 @@ const billService = {
         }
     },
 
+    async SyncAndUpdateBillsDian(id) {
+        try {
+
+            //verifico que la nota de credito exista y no este confirmada
+            const billExists = await this.getOneBill(id);
+            if (billExists.statusCode !== 200) return billExists
+
+            //si no esta confirmada la confirmo
+            if (billExists.data.state !== 'posted') {
+
+                const bill = await this.confirmBill(id);
+                if (bill.statusCode !== 200) return bill;
+
+            }
+
+            //sincronizo con la dian
+            const responseDian = await this.syncDian(id);
+            if (responseDian.statusCode !== 200) return responseDian;
+            console.log("Respuesta DIAN:", responseDian);
+            //subo los archivos de la dian a ODOO
+            const uploadFiles = await this.uploadFilesFromDian(id, responseDian.data);
+            if (uploadFiles.statusCode !== 200) return uploadFiles;
+
+            return {
+                statusCode: 200,
+                message: "Nota de crédito confirmada con éxito",
+                data: uploadFiles.data
+            }
+
+        } catch (error) {
+            console.log("Error en billService.confirmCreditNote:", error);
+            return {
+                statusCode: 500,
+                message: "Error al confirmar nota de crédito",
+                error: error.message,
+            };
+        }
+    },
+
     //reestablecer una factura a borrador
     async resetToDraftBill(id) {
         try {
@@ -1126,7 +1165,7 @@ const billService = {
             //documento del cliente
             const vat = bill_customer.data.vat.split('-');
             customer.identification_number = vat[0];
-            if(type_document_identification_id.data[0].id == 6) customer.dv = vat[1];
+            if (type_document_identification_id.data[0].id == 6) customer.dv = vat[1];
 
             //nombre, telefono, direccion y email del cliente
             if (!bill_customer.data.name) return { statusCode: 400, message: "El cliente no tiene nombre", data: [] };
@@ -1147,7 +1186,7 @@ const billService = {
 
             //municipio
             const city = await odooConector.executeOdooRequest("res.city", "search_read", { domain: [['id', '=', bill_customer.data.city_id[0]]] });
-            if(city.error) return { statusCode: 500, message: "Error al obtener el municipio del cliente", error: city.message };
+            if (city.error) return { statusCode: 500, message: "Error al obtener el municipio del cliente", error: city.message };
             if (!city.success) return { statusCode: 400, message: "Error al obtener el municipio del cliente", data: city.data };
             if (city.data.length === 0) return { statusCode: 404, message: "El cliente no tiene municipio o el municipio no existe" };
 
@@ -1157,7 +1196,7 @@ const billService = {
 
             //tipo de regimen
             const fiscal_regimen = bill_customer.data.l10n_co_edi_fiscal_regimen;
-            if(!fiscal_regimen) return { statusCode: 400, message: "El cliente no tiene régimen fiscal", data: [] };
+            if (!fiscal_regimen) return { statusCode: 400, message: "El cliente no tiene régimen fiscal", data: [] };
             customer.type_regime_id = (fiscal_regimen === "49") ? 2 : 1;
 
             //Tipo de responsabilidad
@@ -1396,7 +1435,8 @@ const billService = {
             };
         }
 
-    }
+    },
+
 };
 
 module.exports = billService;
