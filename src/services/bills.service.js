@@ -530,11 +530,20 @@ const billService = {
             const uploadFiles = await this.uploadFilesFromDian(id, responseDian.data);
             if (uploadFiles.statusCode !== 200) return uploadFiles;
 
+            //Realizo el ingreso para terceros
+            const {accountingEntryService} = require("./accountingEntry.service");
+
+            const externalAccountingEntry = await accountingEntryService.createExternalAccountingEntry(id);
+            if (externalAccountingEntry.statusCode !== 200) return externalAccountingEntry;
+
+            //Confirmpo el ingreso para terceros
+            const confirmEntry = await this.confirmBill(externalAccountingEntry.data[0]);
+
             //Regreso la nota de credito confirmada y sincronizada
             return {
                 statusCode: 200,
-                message: "Nota de crédito confirmada con éxito",
-                data: uploadFiles.data
+                message: "Documento confirmado y sincronizado",
+                data: { billid: bill.data.id, entry: externalAccountingEntry.data.id }
             }
 
         } catch (error) {
@@ -1589,7 +1598,7 @@ const billService = {
             if (billExists.statusCode !== 200) return billExists;
 
             //obtengo las ordenes de compra relacionadas
-            let saleOrdersIds = await odooConector.executeOdooRequest('account.move', 'action_view_source_sale_orders', { ids: [id] });
+            let saleOrdersIds = await odooConector.executeOdooRequest('account.move', 'action_view_source_sale_orders', { ids: [Number(id)] });
             if (saleOrdersIds.error) {
                 return {
                     statusCode: 500,
