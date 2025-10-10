@@ -15,13 +15,14 @@ const quotationService = {
      * @returns {Promise<Object>} Resultado con statusCode, message y data (array de cotizaciones) o error.
      */
     async getQuotation(quotationFields = ["name", "partner_id", "date_order", "validity_date",
-        "amount_total", "state", "order_line", "procurement_group_id"]) {
+        "amount_total", "state", "order_line", "procurement_group_id"], domain = []) {
         try {
             const response = await odooConector.executeOdooRequest(
                 "sale.order",
                 "search_read",
                 {
                     fields: quotationFields,
+                    domain: domain,
                 }
             );
             if (!response.success) {
@@ -295,6 +296,40 @@ const quotationService = {
                 message: "Error al obtener órdenes de compra",
                 error: error.message,
             };
+        }
+    },
+    /**
+     * Validar una lista de IDs de cotizaciones (sale.order) y devolver cuáles existen y cuáles no.
+     *
+     * @async
+     * @param {number[]} ids - Array de IDs a validar.
+     * @param {Array} [domain=[]] - Dominio adicional para filtrar la búsqueda.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data { foundIds, notFoundIds } o error.
+     */
+    async validListId(ids, domain = []) {
+        try {
+            if (!Array.isArray(ids) || ids.length === 0) {
+                return { statusCode: 400, message: 'Debe proporcionar un array de IDs válido', data: { foundIds: [], notFoundIds: [] } };
+            }
+
+            const response = await odooConector.executeOdooRequest('sale.order', 'read', {
+                ids: ids,
+            });
+
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al validar cotizaciones', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al validar cotizaciones', data: response.data };
+            }
+
+            const foundIds = Array.isArray(response.data) ? response.data.map(item => item.id) : [];
+            const notFoundIds = ids.filter(id => !foundIds.includes(id));
+
+            return { statusCode: 200, message: 'Validación de cotizaciones', data: { foundIds, notFoundIds } };
+        } catch (error) {
+            console.error('Error en quotationService.validListId:', error);
+            return { statusCode: 500, message: 'Error al validar cotizaciones', error: error.message };
         }
     }
 };

@@ -281,6 +281,7 @@ const billService = {
                     }
                 } else if (action === 'update') {
                     //si viene update ceirfico el tamaño de las linas y las actualizo
+                    
                     await this.verifyBillLines(id, dataBill.invoice_line_ids.map((line) => { return pickFields(line, INVOICE_LINE_FIELDS); }));
                 }
             }
@@ -339,7 +340,7 @@ const billService = {
      */
     async verifyBillLines(id, lines) {
         try {
-
+            console.log(lines, "Estas son las lineas que llegan");
             //Verificamos que la factura exista
             const billExists = await this.getOneBill(id);
             if (billExists.statusCode !== 200) {
@@ -349,7 +350,7 @@ const billService = {
                     data: billExists.data,
                 };
             }
-
+            console.log(billExists, "Factura verificada");
             //Verificamos que la cantidad de lineas coincida y que los productos sean válidos
             const lineIds = billExists.data.invoice_line_ids;
             if (lines.length !== lineIds.length || lines.length === 0) {
@@ -358,7 +359,7 @@ const billService = {
                     message: "La cantidad de lineas no coincide con las existentes",
                 };
             }
-
+            console.log(lines.map((line) => line.product_id), "Estos son los IDs de los productos");
             const productsIds = await productService.validListId(lines.map((line) => line.product_id));
             if (productsIds.statusCode !== 200 || productsIds.data.foundIds.length !== lines.length) {
                 return {
@@ -366,7 +367,7 @@ const billService = {
                     message: "Los productos no son válidos",
                 };
             }
-
+            console.log(productsIds, "Productos verificados");
             //Actualizamos las lineas de la factura
             const response = await this.updateBillLines(id, 1, lines);
             if (response.statusCode !== 200) {
@@ -842,7 +843,7 @@ const billService = {
                 'account.payment.register',
                 'create',
                 {
-                    vals_list: wizardData, 
+                    vals_list: wizardData,
                     context: {
                         active_model: 'account.move',
                         active_ids: [Number(invoiceId)]
@@ -868,7 +869,7 @@ const billService = {
                 { ids: [wizardId] }
             );
 
-            if(payment.error) return { statusCode: 500, message: "Error al crear el pago", error: payment.message };
+            if (payment.error) return { statusCode: 500, message: "Error al crear el pago", error: payment.message };
             if (!payment.success) {
                 return {
                     statusCode: 400,
@@ -1140,13 +1141,23 @@ const billService = {
             if (jsonDian.statusCode !== 200) return jsonDian;
             let dianResponse;
             //Si es factura de venta
-            if (jsonDian.data.type_document_id === 1) dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
+            if (jsonDian.data.type_document_id === 1){
+                dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
+                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
+            }
 
             //Si es nota credito
-            if (jsonDian.data.type_document_id === 4) dianResponse = await nextPymeConnection.nextPymeService.sendCreditNoteToDian(jsonDian.data);
+            if (jsonDian.data.type_document_id === 4){
+                dianResponse = await nextPymeConnection.nextPymeService.sendCreditNoteToDian(jsonDian.data);
+                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
+            } 
 
             //Si es nota debito
-            if (jsonDian.data.type_document_id === 5) dianResponse = await nextPymeConnection.nextPymeService.sendDebitNoteToDian(jsonDian.data);
+            if (jsonDian.data.type_document_id === 5){
+                dianResponse = await nextPymeConnection.nextPymeService.sendDebitNoteToDian(jsonDian.data);
+                console.log(dianResponse.data);
+                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
+            } 
 
             if (dianResponse.statusCode !== 200) return dianResponse;
 
@@ -1569,6 +1580,53 @@ const billService = {
             };
         }
 
+    },
+
+    async getSaleOrdersByBillId(id) {
+        try {
+            //verifico que la factura exista
+            const billExists = await this.getOneBill(id);
+            if (billExists.statusCode !== 200) return billExists;
+
+            //obtengo las ordenes de compra relacionadas
+            let saleOrdersIds = await odooConector.executeOdooRequest('account.move', 'action_view_source_sale_orders', { ids: [id] });
+            if (saleOrdersIds.error) {
+                return {
+                    statusCode: 500,
+                    message: "Error al obtener órdenes de venta",
+                    error: saleOrdersIds.message,
+                };
+            }
+            if (!saleOrdersIds.success) {
+                return {
+                    statusCode: 400,
+                    message: "Error al obtener órdenes de compra",
+                    data: purchaseOrdersIds.data,
+                };
+            }
+            saleOrdersIds = saleOrdersIds.data;
+            console.log(saleOrdersIds, "Estas son las órdenes de venta relacionadas");
+            //Si solo tiene una orden de venta relacionada
+            if (saleOrdersIds.res_id) saleOrdersIds = [saleOrdersIds.res_id];
+            else saleOrdersIds = saleOrdersIds.domain[0][2];
+
+            //Obtengo los datos de las ordenes de venta
+            const saleOrders = await odooConector.executeOdooRequest('sale.order', 'search_read', {
+                domain: [['id', 'in', saleOrdersIds]],
+                fields: ['name', 'partner_id', 'date_order', 'amount_total', 'state', 'order_line'],
+            });
+
+            return { statusCode: 200, message: "Órdenes de venta relacionadas", data: saleOrders.data };
+
+
+        } catch (error) {
+            console.log("Error al obtener las órdenes de venta:", error);
+            return {
+                statusCode: 500,
+                message: "Error al obtener órdenes de venta",
+                error: error.message,
+            };
+        }
     }
 };
 

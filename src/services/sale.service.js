@@ -5,6 +5,7 @@ const odooConector = require("../utils/odoo.service");
 const quotationService = require("./quotation.service");
 const purchaseOrderService = require("./purchaseOrder.service");
 const billService = require("./bills.service");
+const { ca, id } = require("zod/locales");
 
 const saleService = {
     /**
@@ -94,18 +95,20 @@ const saleService = {
                 return { statusCode: 400, message: 'IDs de órdenes de venta inválidos', data: [] };
             }
 
-            // Crear facturas desde las órdenes de venta
-            const getSaleOrder = await this.getSaleById(salesOrderIds[0]);
 
-            if (getSaleOrder.statusCode !== 200) return getSaleOrder;
+            // Verifico que las ordenes de venta existan
+            const getSaleOrders = await quotationService.getQuotation(['id'], [['invoice_status', '=', 'to invoice'], ['id', 'in', salesOrderIds]]); //filtro por los ids que me envian
+            console.log(getSaleOrders.data.length, salesOrderIds.length, "salesOrderIds");
+            if (getSaleOrders.statusCode !== 200) return getSaleOrders;
+            if (getSaleOrders.data.length != salesOrderIds.length) return { statusCode: 404, message: `Órdenes de venta no encontradas: ${salesOrderIds.filter(id => !getSaleOrders.data.map(order => order.id).includes(id)).join(', ')}` };
+            if (getSaleOrders.statusCode !== 200) return getSaleOrders;
 
             //mapear los ids a numeros
-            const ids = Number(salesOrderIds[0]);
-
+            const ids = salesOrderIds.map(id => [4, Number(id)]);
             //ejecuto el wizard para traer toda la info y crear la factura
             const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
                 vals_list: [{
-                    sale_order_ids: [[4, ids]],
+                    sale_order_ids: ids,
                     advance_payment_method: 'delivered',
                     consolidated_billing: 'true',
                     // amount / fixed_amount NO se usan en 'delivered'
@@ -132,17 +135,45 @@ const saleService = {
                 }
             );
 
-
             if (response.error) return { statusCode: 500, message: 'Error al crear factura desde orden de venta', error: response.message };
             if (!response.success) return { statusCode: 400, message: 'Error al crear factura desde orden de venta', data: response.data };
+            const invoices = response.data.res_id == 0 ? response.data.domain[0][2] : [response.data.res_id];
 
-            const bill = await billService.getOneBill(response.data.res_id);
-            if (bill.statusCode !== 200) return bill;
+            console.log(invoices, "Facturas creadas");
+            //Por cada factura creada, la actualizo con el detalle de las lineas de sus ordenes de venta
+            for (const invoice of invoices) {
+                //obtenemos las ordenes de venta relacionadas a esa factura
+                const saleOrders = await billService.getSaleOrdersByBillId(invoice);
+                console.log(saleOrders, "saleOrders");
+                const lines = [];
+                //Buscar las lineas de esa factura
+                //obtenemos las lineas de esas ordenes de venta
+                const invoiceLines = [];
+                for (const saleOrder of saleOrders.data) {
+                    const lines = await odooConector.executeOdooRequest('sale.order.line', 'search_read', { domain: [['order_id', '=', saleOrder.id]] });
+                    if (!lines.success) {
+                        if (lines.error) {
+                            return { statusCode: 500, message: 'Error al obtener líneas de orden de compra', error: lines.message };
+                        }
+                        return { statusCode: 400, message: 'Error al obtener líneas de orden de compra', data: lines.data };
+                    }
+                    console.log(lines.data, "lines");
+                    for (const line of lines.data) {
+                        line.product_id = line.product_id[0];
+                        invoiceLines.push(line);
+                    }
+
+                }
+                //Actualizo la factura con las lineas obtenidas
+                console.log(invoiceLines, "Estas son mis lineas");
+                const updateInvoice = await billService.updateBill(invoice, { invoice_line_ids: invoiceLines }, 'update');
+                if (updateInvoice.statusCode !== 200) return updateInvoice;
+            }
 
             return {
                 statusCode: 201,
                 message: 'Factura creada desde la orden de venta',
-                data: bill.data
+                data: response.data
             };
 
 
@@ -182,85 +213,93 @@ const saleService = {
      */
     async createSale(data) {
         try {
-            //preparamos la informacion de la venta y de la compra
-            const { dataVenta, dataCompra } = data;
 
-            //crear cotizacion
-            const quotation = await quotationService.createQuotation(dataVenta);
-            if (quotation.statusCode !== 201) return quotation;
+            //recorremos cada venta a crear
+            const sales = [];
+            for (const sale of data.sales) {
+                try {
+                    const { dataVenta, dataCompra } = sale;
+                    console.log(dataVenta, "dataVenta");
+                    console.log(dataCompra, "dataCompra");
+                    //crear cotizacion
+                    const quotation = await quotationService.createQuotation(dataVenta);
+                    if (quotation.statusCode !== 201) return quotation;
 
-            //confirmar cotizacion 
-            const confirmQuotation = await quotationService.confirmQuotation(quotation.data.id);
-            if (confirmQuotation.statusCode !== 200) return confirmQuotation;
+                    //confirmar cotizacion 
+                    const confirmQuotation = await quotationService.confirmQuotation(quotation.data.id);
+                    if (confirmQuotation.statusCode !== 200) return confirmQuotation;
 
-            // Recuperar la información de la orden de compra generada al confirmar la cotización
-            const purchaseOrder = await quotationService.getPurchaseOrdersBySaleOrderId(quotation.data.id);
-            const purchaseOrderId = purchaseOrder.data[0].id;
-            if (purchaseOrder.statusCode !== 200) return purchaseOrder;
+                    // Recuperar la información de la orden de compra generada al confirmar la cotización
+                    const purchaseOrder = await quotationService.getPurchaseOrdersBySaleOrderId(quotation.data.id);
+                    const purchaseOrderId = purchaseOrder.data[0].id;
+                    if (purchaseOrder.statusCode !== 200) return purchaseOrder;
 
-            //actualizar orden de compra 
-            const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrderId, dataCompra, 'update');
-            if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
+                    //actualizar orden de compra 
+                    const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrderId, dataCompra, 'update');
+                    if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
 
-            //Confirmar orden de compra
-            const confirmPurchaseOrder = await purchaseOrderService.confirmPurchaseOrder(purchaseOrderId);
-            if (confirmPurchaseOrder.statusCode !== 200) return confirmPurchaseOrder;
+                    //Confirmar orden de compra
+                    const confirmPurchaseOrder = await purchaseOrderService.confirmPurchaseOrder(purchaseOrderId);
+                    if (confirmPurchaseOrder.statusCode !== 200) return confirmPurchaseOrder;
 
-            //Crear factura de la orden de compra
-            const bill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
-            if (bill.statusCode !== 201) return bill;
+                    //crear la factura de la orden de compra
+                    const bill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
+                    if (bill.statusCode !== 201) return bill;
+
+                    //Actualizamos la factura de compra validando los campos personalizados
+                    const updatePurchaseBill = await billService.updateBill(bill.data.id, { invoice_line_ids: dataCompra.order_line }, 'update');
+                    if (updatePurchaseBill.statusCode !== 200) return updatePurchaseBill;
+
+                    //Confirmar factura de la orden de compra
+                    const confirmBill = await billService.confirmBill(bill.data.id);
+                    if (confirmBill.statusCode !== 200) return confirmBill;
+
+                    sales.push({ saleOrder: quotation.data, purchaseOrder: updatePurchaseOrder.data });
+                } catch (error) {
+                    sales.push({ statusCode: 500, message: 'Error al crear la venta', error: error.message });
+                }
+            }
 
 
-            //Actualizamos la factura de compra validando los campos personalizados
-            const updatePurchaseBill = await billService.updateBill(bill.data.id, { invoice_line_ids: dataCompra.order_line }, 'update');
-            if (updatePurchaseBill.statusCode !== 200) return updatePurchaseBill;
+            // //Regresar la informacion de la orden de venta final con orden de compra
+            // const sale = await this.getSaleById(quotation.data.id);
+            // if (sale.statusCode !== 200) return sale;
 
-            //Confirmar factura de la orden de compra
-            const confirmBill = await billService.confirmBill(bill.data.id);
-            if (confirmBill.statusCode !== 200) return confirmBill;
+            // //traer el detalle de la factura de compra
+            // const billDetails = await billService.getOneBill(bill.data.id);
+            // if (billDetails.statusCode !== 200) return billDetails;
 
-            //Regresar la informacion de la orden de venta final con orden de compra
-            const sale = await this.getSaleById(quotation.data.id);
-            if (sale.statusCode !== 200) return sale;
+            // //crear la factura de venta
+            // const createBillFromSalesOrder = await this.createBillFromSalesOrder([quotation.data.id]);
+            // if (createBillFromSalesOrder.statusCode !== 201) return createBillFromSalesOrder;
 
-            //traer el detalle de la factura de compra
-            const billDetails = await billService.getOneBill(bill.data.id);
-            if (billDetails.statusCode !== 200) return billDetails;
+            // //actualizar la factura de venta con los campos personalizados
+            // const updateSaleBill = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_operation_type: dataVenta.l10n_co_edi_operation_type, l10n_co_edi_payment_option_id: dataVenta.l10n_co_edi_payment_option_id, invoice_line_ids: dataVenta.order_line }, 'update');
+            // if (updateSaleBill.statusCode !== 200) return updateSaleBill;
 
-            //crear la factura de venta
-            const createBillFromSalesOrder = await this.createBillFromSalesOrder([quotation.data.id]);
-            if (createBillFromSalesOrder.statusCode !== 201) return createBillFromSalesOrder;
+            // //confirmar la factura de venta
+            // const confirmSaleBill = await billService.confirmBill(createBillFromSalesOrder.data.id);
+            // if (confirmSaleBill.statusCode !== 200) return confirmSaleBill;
 
-            //actualizar la factura de venta con los campos personalizados
-            const updateSaleBill = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_operation_type: dataVenta.l10n_co_edi_operation_type, l10n_co_edi_payment_option_id:dataVenta.l10n_co_edi_payment_option_id, invoice_line_ids: dataVenta.order_line }, 'update');
-            if (updateSaleBill.statusCode !== 200) return updateSaleBill;
+            // //validar la factura de venta, nota credito o nota debito con la dian
+            // const dianResponse = await billService.syncDian(createBillFromSalesOrder.data.id);
+            // if (dianResponse.statusCode !== 200) return dianResponse;
 
-            //confirmar la factura de venta
-            const confirmSaleBill = await billService.confirmBill(createBillFromSalesOrder.data.id);
-            if (confirmSaleBill.statusCode !== 200) return confirmSaleBill;
+            // const updateSaleBillCufe = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
+            // if (updateSaleBillCufe.statusCode !== 200) return updateSaleBillCufe;
 
-            //validar la factura de venta, nota credito o nota debito con la dian
-            const dianResponse = await billService.syncDian(createBillFromSalesOrder.data.id);
-            if (dianResponse.statusCode !== 200) return dianResponse;
+            // //Subimos los documentos a odoo
+            // const files = await billService.uploadFilesFromDian(createBillFromSalesOrder.data.id, dianResponse.data);
+            // if (files.statusCode !== 200) return files;
 
-            const updateSaleBillCufe = await billService.updateBill(createBillFromSalesOrder.data.id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe ,x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
-            if (updateSaleBillCufe.statusCode !== 200) return updateSaleBillCufe;
-
-            //Subimos los documentos a odoo
-            const files = await billService.uploadFilesFromDian(createBillFromSalesOrder.data.id, dianResponse.data);
-            if (files.statusCode !== 200) return files;
-
-            //regresar toda la informacion
-            const saleBillDetails = await billService.getOneBill(createBillFromSalesOrder.data.id);
-            if (saleBillDetails.statusCode !== 200) return saleBillDetails;
+            // //regresar toda la informacion
+            // const saleBillDetails = await billService.getOneBill(createBillFromSalesOrder.data.id);
+            // if (saleBillDetails.statusCode !== 200) return saleBillDetails;
 
             return {
                 statusCode: 201,
                 data: {
-                    saleOrder: sale.data,
-                    purchaseOrder: updatePurchaseOrder.data,
-                    purchaseBill: billDetails.data,
-                    saleBill: saleBillDetails.data
+                    sales
                 },
                 message: 'Venta creada con éxito',
             };
