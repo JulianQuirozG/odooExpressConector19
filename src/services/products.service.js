@@ -1,9 +1,15 @@
-const { CLIENT_FIELDS, PRODUCT_FIELDS } = require("../utils/fields");
+const { PRODUCT_FIELDS } = require("../utils/fields");
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 
 const productService = {
-    //obtener todos los productos
+    /**
+     * Obtener la lista de productos (product.template) desde Odoo.
+     *
+     * @async
+     * @param {string[]} [productFields=['name','default_code','list_price']] - Campos a recuperar por producto.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (array de productos) o error.
+     */
     async getProducts(productFields = ['name', 'default_code', 'list_price']) {
         try {
             const response = await odooConector.executeOdooRequest('product.template', 'search_read', {
@@ -21,7 +27,13 @@ const productService = {
             return { statusCode: 500, message: 'Error al obtener productos', error: error.message };
         }
     },
-    //obtener un producto por id
+    /**
+     * Obtener un producto por su ID.
+     *
+     * @async
+     * @param {number|string} id - ID del producto.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (detalle del producto) o error.
+     */
     async getOneProduct(id) {
         try {
             const response = await odooConector.executeOdooRequest('product.template', 'search_read', {
@@ -44,7 +56,15 @@ const productService = {
             return { statusCode: 500, message: 'Error al obtener producto', error: error.message };
         }
     },
-    //crear un producto
+    /**
+     * Crear un producto (product.template) en Odoo.
+     *
+     * Si `dataProduct.seller_ids` viene presente, lo mapeará para crear las entradas de proveedores.
+     *
+     * @async
+     * @param {Object} dataProduct - Datos del producto (se filtran por PRODUCT_FIELDS).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado o respuesta) o error.
+     */
     async createProduct(dataProduct) {
         try {
             const product = pickFields(dataProduct, PRODUCT_FIELDS);
@@ -73,7 +93,14 @@ const productService = {
             return { statusCode: 500, message: 'Error al crear producto', error: error.message };
         }
     },
-    //actualizar un producto
+    /**
+     * Actualizar un producto existente.
+     *
+     * @async
+     * @param {number|string} id - ID del producto a actualizar.
+     * @param {Object} dataProduct - Campos a actualizar (filtrados por PRODUCT_FIELDS).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     */
     async updateProduct(id, dataProduct) {
         try {
             const productExists = await this.getOneProduct(id);
@@ -97,7 +124,13 @@ const productService = {
             return { statusCode: 500, message: 'Error al actualizar producto', error: error.message };
         }
     },
-    //eliminar un producto
+    /**
+     * Eliminar un producto por ID.
+     *
+     * @async
+     * @param {number|string} id - ID del producto a eliminar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     */
     async deleteProduct(id) {
         try {
             const productExists = await this.getOneProduct(id);
@@ -120,7 +153,13 @@ const productService = {
             return { statusCode: 500, message: 'Error al eliminar producto', error: error.message };
         }
     },
-    //validar una lista de ids de productos
+    /**
+     * Validar una lista de IDs de productos: devuelve los encontrados y los no encontrados.
+     *
+     * @async
+     * @param {number[]} ids - Array de IDs a validar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data { foundIds, notFoundIds } o error.
+     */
     async validListId(ids){
         try {
             const response = await odooConector.executeOdooRequest('product.template', 'read', {

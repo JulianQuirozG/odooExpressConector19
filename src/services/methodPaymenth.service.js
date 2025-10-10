@@ -1,8 +1,18 @@
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 
+/**
+ * Servicio para gestionar métodos de pago (payment.method) en Odoo.
+ * Proporciona utilidades para listar y obtener métodos de pago.
+ */
 const methodPaymenthService = {
-    //obtener todos los métodos de pago
+    /**
+     * Obtener la lista de métodos de pago.
+     *
+     * @async
+     * @param {string[]} [paymentMethodFields=['id','name','code']] - Campos a recuperar por método.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (array de métodos) o error.
+     */
     async getPaymentMethods(paymentMethodFields = ['id', 'name', 'code']) {
         try {
             const response = await odooConector.executeOdooRequest('payment.method', 'search_read', {
@@ -20,7 +30,13 @@ const methodPaymenthService = {
             return { statusCode: 500, message: 'Error al obtener métodos de pago', error: error.message };
         }
     },
-    //obtener un método de pago por id
+    /**
+     * Obtener un método de pago por su ID.
+     *
+     * @async
+     * @param {number|string} id - ID del método de pago.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (detalle del método) o error.
+     */
     async getOnePaymentMethod(id) {
         try {
             const response = await odooConector.executeOdooRequest('payment.method', 'search_read', {

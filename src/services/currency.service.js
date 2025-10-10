@@ -1,10 +1,21 @@
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
 
+/**
+ * Servicio para gestionar monedas (res.currency) en Odoo.
+ * Proporciona utilidades para listar y obtener monedas.
+ */
 const currencyService = {
-    //obtener todas las monedas
+    /**
+     * Obtener la lista de monedas.
+     *
+     * @async
+     * @param {string[]} [currencyFields=['id','name']] - Campos a recuperar por moneda.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (array de monedas) o error.
+     */
     async getCurrency(currencyFields = ['id', 'name']) {
         try {
+            //Obtenemos todas las monedas
             const response = await odooConector.executeOdooRequest('res.currency', 'search_read', {
                 fields: currencyFields
             });
@@ -20,7 +31,13 @@ const currencyService = {
             return { statusCode: 500, message: 'Error al obtener monedas', error: error.message };
         }
     },
-    //obtener una moneda por id
+    /**
+     * Obtener una moneda por su ID.
+     *
+     * @async
+     * @param {number|string} id - ID de la moneda.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (detalle de la moneda) o error.
+     */
     async getOneCurrency(id) {
         try {
             const response = await odooConector.executeOdooRequest('res.currency', 'search_read', {

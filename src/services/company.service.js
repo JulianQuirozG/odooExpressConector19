@@ -19,6 +19,7 @@ const companyService = {
      */
     async companyExists(companyId, user) {
         try {
+            // Verificar que la compañía exista
             const domain = [['id', '=', companyId]];
             const fields = ['id', 'name'];
             const companies = await connector.executeOdooQuery("object", "execute_kw", [user.db, user.uid, user.password, 'res.company', 'search_read', [domain], { fields }]);
@@ -28,9 +29,13 @@ const companyService = {
                 }
                 return { statusCode: 400, message: companies.message, data: companies.data };
             }
+
+            // Si no se encuentra la compañía regresamos 404
             if (companies.data.length === 0) {
                 return { statusCode: 404, message: "La compañía no existe", data: {} };
             }
+
+            //Si la compañía existe regresamos los datos de la compañía
             return { statusCode: 200, message: "Compañía encontrada", data: companies.data[0] };
         } catch (error) {
             console.error("Error al verificar si la compañía existe:", error);
@@ -52,6 +57,7 @@ const companyService = {
         try {
             const domain = [['name', '=', name]];
             const fields = ['id', 'name'];
+            // Buscar la compañía por nombre
             const companies = await connector.executeOdooQuery("object", "execute_kw", [user.db, user.uid, user.password, 'res.company', 'search_read', [domain], { fields }]);
             if (companies.success === false) {
                 if (companies.error === true) {
@@ -59,9 +65,13 @@ const companyService = {
                 }
                 return { statusCode: 400, message: companies.message, data: companies.data };
             }
+
+            // Si no se encuentra la compañía regresamos 404
             if (companies.data.length === 0) {
                 return { statusCode: 404, message: "La compañía no existe", data: {} };
             }
+
+            //Si la compañía existe regresamos los datos de la compañía
             return { statusCode: 200, message: "Compañía encontrada", data: companies.data[0] };
         } catch (error) {
             console.error("Error al buscar la compañía por nombre:", error);
