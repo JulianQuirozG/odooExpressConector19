@@ -56,16 +56,17 @@ const nextPymeConnector = {
             }
 
             const data = request.data;
-            if (data && data.error || request.response?.status === 500) {
-                return { success: false, data: request.response.data?.message ? request.response.data.message : 'Error en la consulta a nextPyme' };
+
+            if (data && (data.error || !data.success) || request.response?.status > 300) {
+                return { success: false, message: data.message || 'Error en la consulta a nextPyme', data: request.data?.message ? request.data.message : 'Error en la consulta a nextPyme' };
             }
             return { success: true, data: data };
         } catch (error) {
             console.error('Error al conectar con nextPyme:', error);
             if (error.response) {
-                return { success: false, error: true, message: error.response.data?.message || 'Error en la respuesta de nextPyme' };
+                return { success: false, error: true, message: error.response.data?.message || 'Error en la respuesta de nextPyme', data: error.response.data || [] };
             }
-            return { success: false, error: true, message: 'Error interno del servidor' };
+            return { success: false, error: true, message: 'Error interno del servidor', data: error.response.data || [] };
         }
     },
 
