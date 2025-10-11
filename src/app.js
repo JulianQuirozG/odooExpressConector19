@@ -18,6 +18,7 @@ const salesRoutes = require('./routes/sale.routes');
 const purchaseOrderRoutes = require('./routes/purchasOrder.routes');
 const paymentMethodRoutes = require('./routes/paymentMethod.routes');
 const currencyRoutes = require('./routes/currency.routes');
+const radianRoutes = require('./routes/radian.routes');
 const DbConfig = require('./config/db');
 const { cron } = require('./job/corn');
 const { getBillsStay } = require('./Repository/lotesprocesarfactura/lotesprocesarfactura.repository');
@@ -42,6 +43,7 @@ app.use('/api/sales', salesRoutes);
 app.use('/api/purchase-order', purchaseOrderRoutes)
 app.use('/api/payment-method', paymentMethodRoutes);
 app.use('/api/currency', currencyRoutes);
+app.use('/api/radian', radianRoutes);
 
 // Initialize the database connection
 
@@ -76,13 +78,15 @@ app.use('*', (req, res) => {
   });
 });
 
-cron.schedule('*/1 * * * *', async () => {
+cron.schedule('*/10 * * * *', async () => {
   try {
-    console.log(`[CRON] Tarea cada 1 minuto ${JSON.stringify((await getBillsStay()).data.map(item => item.idexterno))}`, new Date().toISOString());
+    console.log(`[CRON] Tarea cada 10 minutos ${JSON.stringify((await getBillsStay()).data.map(item => item.idexterno))}`, new Date().toISOString());
 
     const idsBills = (await getBillsStay()).data.map(item => item.idexterno);
     const idsCreditNote = (await getCreditNotesStay()).data.map(item => item.idexterno);
     const idsDebitNote = (await getDebitNotesStay()).data.map(item => item.idexterno);
+
+
     await lotesService.processJobFacturas(idsBills, '01');
     await lotesService.processJobFacturas(idsCreditNote, '91');
     await lotesService.processJobFacturas(idsDebitNote, '92');
