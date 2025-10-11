@@ -63,8 +63,8 @@ const nextPymeService = {
     async sendDebitNoteToDian(debitNoteData) {
         try {
             const response = await nextPymeConnection.nextPymeRequest('debit-note', 'post', debitNoteData);
-            if(!response.success) {
-                if(response.error) {
+            if (!response.success) {
+                if (response.error) {
                     return { statusCode: 500, message: 'Error al enviar la nota débito a DIAN', error: response.message };
                 }
                 return { statusCode: 400, message: 'Error al enviar la nota débito a DIAN', data: response.data };
@@ -153,6 +153,23 @@ const nextPymeService = {
             return { statusCode: 500, message: 'Error al obtener el archivo de DIAN', error: error.message };
         }
     },
+
+    async sendRadianData(radianData) {
+        try {
+            const direction = radianData.document_reference?.cufe ? 'send-event-data' : 'send-event';
+            console.log('Enviando datos a Radian vía NextPyme en:', direction);
+            const response = await nextPymeConnection.nextPymeRequest(direction, 'post', radianData);
+
+            if (response.error) return { statusCode: 500, message: 'Error al enviar los datos a Radian', error: response.data };
+            if (!response.success) return { statusCode: 400, message: 'Error al enviar los datos a Radian', data: response.data };
+
+            return { statusCode: 200, message: 'Datos enviados a Radian', data: response.data };
+            
+        } catch (error) {
+            console.log('Error en nextPymeService.sendRadianData:', error);
+            return { statusCode: 500, message: 'Error al enviar los datos a Radian', error: error.message };
+        }
+    }
 }
 
 module.exports = { nextPymeService };
