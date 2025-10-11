@@ -6,6 +6,7 @@ const quotationService = require("./quotation.service");
 const purchaseOrderService = require("./purchaseOrder.service");
 const billService = require("./bills.service");
 const { ca, id } = require("zod/locales");
+const partnerService = require("./partner.service");
 
 const saleService = {
     /**
@@ -98,20 +99,19 @@ const saleService = {
 
             // Verifico que las ordenes de venta existan
             const getSaleOrders = await quotationService.getQuotation(['id'], [['invoice_status', '=', 'to invoice'], ['id', 'in', salesOrderIds]]); //filtro por los ids que me envian
-            console.log(getSaleOrders.data.length, salesOrderIds.length, "salesOrderIds");
             if (getSaleOrders.statusCode !== 200) return getSaleOrders;
             if (getSaleOrders.data.length != salesOrderIds.length) return { statusCode: 404, message: `Órdenes de venta no encontradas: ${salesOrderIds.filter(id => !getSaleOrders.data.map(order => order.id).includes(id)).join(', ')}` };
             if (getSaleOrders.statusCode !== 200) return getSaleOrders;
 
             //mapear los ids a numeros
             const ids = salesOrderIds.map(id => [4, Number(id)]);
+
             //ejecuto el wizard para traer toda la info y crear la factura
             const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
                 vals_list: [{
                     sale_order_ids: ids,
                     advance_payment_method: 'delivered',
                     consolidated_billing: 'true',
-                    // amount / fixed_amount NO se usan en 'delivered'
                 }],
                 context: { active_model: 'sale.order', active_ids: ids, active_id: ids[0] }
             });
@@ -121,6 +121,7 @@ const saleService = {
             }
 
             const wizardId = wizardCreate.data[0];
+
             //creo la factura
             const response = await odooConector.executeOdooRequest(
                 "sale.advance.payment.inv",
@@ -139,14 +140,11 @@ const saleService = {
             if (!response.success) return { statusCode: 400, message: 'Error al crear factura desde orden de venta', data: response.data };
             const invoices = response.data.res_id == 0 ? response.data.domain[0][2] : [response.data.res_id];
 
-            console.log(invoices, "Facturas creadas");
-            //Por cada factura creada, la actualizo con el detalle de las lineas de sus ordenes de venta
+            //Por cada factura creada, la actualizo con el detalle de las lineas de sus ordenes de venta e informacion de pago
             for (const invoice of invoices) {
                 //obtenemos las ordenes de venta relacionadas a esa factura
                 const saleOrders = await billService.getSaleOrdersByBillId(invoice);
-                console.log(saleOrders, "saleOrders");
-                const lines = [];
-                //Buscar las lineas de esa factura
+
                 //obtenemos las lineas de esas ordenes de venta
                 const invoiceLines = [];
                 for (const saleOrder of saleOrders.data) {
@@ -157,23 +155,21 @@ const saleService = {
                         }
                         return { statusCode: 400, message: 'Error al obtener líneas de orden de compra', data: lines.data };
                     }
-                    console.log(lines.data, "lines");
+                    //Agregamos las lineas de la orden de ventas a las de la factura
                     for (const line of lines.data) {
                         line.product_id = line.product_id[0];
                         invoiceLines.push(line);
                     }
-
                 }
-                //Actualizo la factura con las lineas obtenidas
-                console.log(invoiceLines, "Estas son mis lineas");
-                const updateInvoice = await billService.updateBill(invoice, { invoice_line_ids: invoiceLines }, 'update');
-                if (updateInvoice.statusCode !== 200) return updateInvoice;
+                
+                //Actualizo la factura con las lineas obtenidas y el tipo de operacion
+                await billService.updateBill(invoice, { invoice_line_ids: invoiceLines, l10n_co_edi_operation_type: "12" }, 'update');
             }
 
             return {
                 statusCode: 201,
-                message: 'Factura creada desde la orden de venta',
-                data: response.data
+                message: 'Factura(s) creada(s) desde la(s) orden(es) de venta',
+                data: invoices
             };
 
 
@@ -219,8 +215,7 @@ const saleService = {
             for (const sale of data.sales) {
                 try {
                     const { dataVenta, dataCompra } = sale;
-                    console.log(dataVenta, "dataVenta");
-                    console.log(dataCompra, "dataCompra");
+
                     //crear cotizacion
                     const quotation = await quotationService.createQuotation(dataVenta);
                     if (quotation.statusCode !== 201) return quotation;

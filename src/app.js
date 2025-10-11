@@ -76,7 +76,7 @@ app.use('*', (req, res) => {
   });
 });
 
-cron.schedule('*/1 * * * *', async () => {
+cron.schedule('*/10 * * * *', async () => {
   try {
     console.log(`[CRON] Tarea cada 1 minuto ${JSON.stringify((await getBillsStay()).data.map(item => item.idexterno))}`, new Date().toISOString());
 

@@ -25,6 +25,6 @@ router.get('/outstanding-credits/:invoiceId', billController.listOutstandingCred
 router.post('/apply-credits/:invoiceId', billController.applyCreditNote);
 router.put('/verify-lines/:id', billController.verifyBillLines);
 router.get('/dian-json/:id', billController.getBillDianJson);
-router.put('/confirm-credit-note/:id', controlCron, billController.confirmCreditNote);
+router.put('/confirm-credit-note/:id', billController.confirmCreditNote);
 
 module.exports = router;
