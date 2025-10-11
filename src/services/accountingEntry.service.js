@@ -11,7 +11,7 @@ const accountingEntryService = {
             if (bill.statusCode !== 200) return bill;
 
             //Verificamos que la factura sea de venta y este confirmada
-            if (bill.data.move_type !== 'out_invoice') return { statusCode: 400, message: 'La factura no es de venta', data: [] };
+            if (bill.data.move_type !== 'out_invoice' && bill.data.move_type !== 'out_refund') return { statusCode: 400, message: 'La factura no es de venta o nota credito, no se le puede hacer ingreso de terceros', data: [] };
             if (bill.data.state !== 'posted') return { statusCode: 400, message: 'La factura no está confirmada', data: [] };
 
             //Obtenemos sus ordenes de venta
@@ -56,13 +56,31 @@ const accountingEntryService = {
                     //Obtenemos la cuenta de utilidades
                     const externalEntryAccountId = product.data.property_account_expense_id[0];
 
-                    lines.push([0, 0, { name: "Descontamos el costo generado automáticamente", debit: amount, credit: 0.0, "partner_id": partnerId, account_id: utilityAccountId }])
-                    lines.push([0, 0, { name: "Ingreso para terceros generados automáticamente", debit: 0.0, credit: amount, "partner_id": partnerId, account_id: externalEntryAccountId }])
+                    //Si es nota credito hacemos ingreso de terceros, si es nota credito hacemos la operacion inversa
+                    let utilityAccountDebit = amount, utilityAccountCredit = 0.0, externalEntryAccountDebit = 0.0, externalEntryAccountCredit = amount;
+                    let utilityAccountName = "Descontamos el costo generado automáticamente";
+                    let externalEntryAccountName = "Ingreso para terceros generados automáticamente";
+
+                    if (bill.data.move_type === 'out_refund') {
+                        utilityAccountDebit = 0.0;
+                        utilityAccountCredit = amount;
+                        externalEntryAccountDebit = amount;
+                        externalEntryAccountCredit = 0.0;
+                        utilityAccountName = "Revertimos el costo generado automáticamente";
+                        externalEntryAccountName = "Revertimos el ingreso para terceros generado automáticamente";
+                    }
+
+                    lines.push([0, 0, { name: utilityAccountName, debit: utilityAccountDebit, credit: utilityAccountCredit, "partner_id": bill.data.partner_id[0], account_id: utilityAccountId }])
+                    lines.push([0, 0, { name: externalEntryAccountName, debit: externalEntryAccountDebit, credit: externalEntryAccountCredit, "partner_id": partnerId, account_id: externalEntryAccountId }])
                 }
             }
 
+            //Asignamos la referencia del asiento contable segun si es factura o nota credito
+            let accountingEntryref = `Utilidad generada automáticamente para ${bill.data.name}`;
+            if (bill.data.move_type === 'out_refund') accountingEntryref = `Reversión de utilidad generada automáticamente para ${bill.data.name}`;
+            
             //Creamos el asiento contable
-            const accountingEntry = await this.createAccountingEntry(lines, `Utilidad generada automáticamente para ${bill.data.name}`, bill.data.invoice_date, 12);
+            const accountingEntry = await this.createAccountingEntry(lines, accountingEntryref, bill.data.invoice_date, 12);
             if (accountingEntry.statusCode !== 200) return accountingEntry;
 
             return { statusCode: 200, message: 'Ingreso para terceros generados exitosamente', data: accountingEntry.data };

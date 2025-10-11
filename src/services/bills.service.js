@@ -281,7 +281,7 @@ const billService = {
                     }
                 } else if (action === 'update') {
                     //si viene update ceirfico el tamaño de las linas y las actualizo
-                    
+
                     await this.verifyBillLines(id, dataBill.invoice_line_ids.map((line) => { return pickFields(line, INVOICE_LINE_FIELDS); }));
                 }
             }
@@ -513,7 +513,6 @@ const billService = {
      */
     async confirmCreditNote(id) {
         try {
-
             //verifico que la nota de credito exista y no este confirmada
             const billExists = await this.getOneBill(id, [['state', '!=', 'posted']]);
             if (billExists.statusCode !== 200) return billExists
@@ -530,20 +529,21 @@ const billService = {
             const uploadFiles = await this.uploadFilesFromDian(id, responseDian.data);
             if (uploadFiles.statusCode !== 200) return uploadFiles;
 
-            //Realizo el ingreso para terceros
-            const {accountingEntryService} = require("./accountingEntry.service");
+            //Realizo el ingreso para terceros solo si es factura de venta o nota credito
+            const { accountingEntryService } = require("./accountingEntry.service");
+            if (billExists.data.l10n_co_edi_type == '01' || billExists.data.l10n_co_edi_type == '91') {
+                const externalAccountingEntry = await accountingEntryService.createExternalAccountingEntry(id);
+                if (externalAccountingEntry.statusCode !== 200) return externalAccountingEntry;
 
-            const externalAccountingEntry = await accountingEntryService.createExternalAccountingEntry(id);
-            if (externalAccountingEntry.statusCode !== 200) return externalAccountingEntry;
-
-            //Confirmpo el ingreso para terceros
-            const confirmEntry = await this.confirmBill(externalAccountingEntry.data[0]);
+                //Confirmpo el ingreso para terceros
+                const confirmEntry = await this.confirmBill(externalAccountingEntry.data[0]);
+            } else { }
 
             //Regreso la nota de credito confirmada y sincronizada
             return {
                 statusCode: 200,
                 message: "Documento confirmado y sincronizado",
-                data: { billid: bill.data.id, entry: externalAccountingEntry.data.id }
+                data: { billid: bill.data.id }
             }
 
         } catch (error) {
@@ -721,7 +721,7 @@ const billService = {
 
             //Actualizar tipo de documento de la nota de debito
             const debitNoteId = debitNoteResponse.data.res_id;
-            await this.updateBill(debitNoteId, { l10n_co_edi_type: "92" }, 'update');
+            await this.updateBill(debitNoteId, { l10n_co_edi_type: "92", x_studio_uuid_dian: null, l10n_co_edi_cufe_cude_ref: null }, 'update');
 
             //Regreso la nota debito creada
             return {
@@ -817,6 +817,8 @@ const billService = {
                 l10n_co_edi_payment_option_id: billExists.data.l10n_co_edi_payment_option_id?.[0],
                 invoice_payment_term_id: billExists.data.invoice_payment_term_id?.[0],
                 invoice_date: billExists.data.invoice_date,
+                x_studio_uuid_dian: null,
+                l10n_co_edi_cufe_cude_ref: null,
                 //Productos
                 invoice_line_ids: lines.data
             }, 'update');
@@ -1189,23 +1191,29 @@ const billService = {
             if (jsonDian.statusCode !== 200) return jsonDian;
             let dianResponse;
             //Si es factura de venta
-            if (jsonDian.data.type_document_id === 1){
+            if (jsonDian.data.type_document_id === 1) {
                 dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
+                console.log(dianResponse.data);
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
             }
 
             //Si es nota credito
-            if (jsonDian.data.type_document_id === 4){
+            if (jsonDian.data.type_document_id === 4) {
+                console.log("Enviando nota de crédito a la DIAN...");
                 dianResponse = await nextPymeConnection.nextPymeService.sendCreditNoteToDian(jsonDian.data);
+                console.log("Datos de la respuesta:", dianResponse.data);
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
-            } 
+
+            }
 
             //Si es nota debito
-            if (jsonDian.data.type_document_id === 5){
+            if (jsonDian.data.type_document_id === 5) {
                 dianResponse = await nextPymeConnection.nextPymeService.sendDebitNoteToDian(jsonDian.data);
+                if (dianResponse.statusCode === 500) return dianResponse;
+
                 console.log(dianResponse.data);
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
-            } 
+            }
 
             if (dianResponse.statusCode !== 200) return dianResponse;
 
@@ -1389,7 +1397,7 @@ const billService = {
 
             //tipo de regimen
             const fiscal_regimen = bill_customer.data.l10n_co_edi_fiscal_regimen;
-            if(!fiscal_regimen) return { statusCode: 400, message: "El cliente no tiene régimen fiscal", data: [] };
+            if (!fiscal_regimen) return { statusCode: 400, message: "El cliente no tiene régimen fiscal", data: [] };
             customer.type_regime_id = (fiscal_regimen === "49") ? 2 : 1;
 
             //Tipo de responsabilidad
@@ -1582,7 +1590,9 @@ const billService = {
                 jsonDian.requested_monetary_totals = legal_monetary_totals;
 
                 //Factura de origen de la cual se realizo la nota debito
+                console.log("Buscando factura de origen para nota debito...", bill.data.debit_origin_id[0]);
                 const getBillReference = await this.getOneBill(Number(bill.data.debit_origin_id[0]));
+                console.log("Factura encontrada:", getBillReference);
                 if (getBillReference.statusCode !== 200) return getBillReference;
 
                 const billing_reference = {
