@@ -34,6 +34,18 @@ const payrollController = {
             res.status(500).json({ message: 'Error al obtener las nóminas', error: error.message });
         }
     }
+    ,
+
+    async reportPayrollsByDates(req, res) {
+        try {
+            const {start_date, end_date} = req.query;
+            const result = await payrollService.reportPayrollsByDates(start_date, end_date);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en payrollController.getPayrolls:', error);
+            res.status(500).json({ message: 'Error al obtener las nóminas', error: error.message });
+        }
+    }
 }
 
 module.exports = payrollController;
