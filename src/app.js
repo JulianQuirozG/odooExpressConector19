@@ -25,7 +25,8 @@ const { getBillsStay } = require('./Repository/lotesprocesarfactura/lotesprocesa
 const { lotesService } = require('./services/BillLotesDb.service');
 const { getCreditNotesStay } = require('./Repository/lotesprocesarnotacredito/lotesprocesarnotacredito.repository');
 const { getDebitNotesStay } = require('./Repository/lotesprocesarnotadebito/lotesprocesarnotadebito.repository');
-
+const payrollRoutes = require('./routes/payroll.routes');
+const employeeRoutes = require('./routes/employee.routes');
 const app = express();
 
 app.use(express.json());
@@ -44,6 +45,8 @@ app.use('/api/purchase-order', purchaseOrderRoutes)
 app.use('/api/payment-method', paymentMethodRoutes);
 app.use('/api/currency', currencyRoutes);
 app.use('/api/radian', radianRoutes);
+app.use('/api/payroll', payrollRoutes);
+app.use('/api/employee', employeeRoutes);
 
 // Initialize the database connection
 

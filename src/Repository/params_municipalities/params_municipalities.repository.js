@@ -31,3 +31,19 @@ exports.getMunicipalityByCode = async (code) => {
         };
     }
 }
+
+exports.getMunicipalityByName = async (name) => {
+    try {
+        const query = "SELECT * FROM param_municipalities WHERE name LIKE ?";
+        const params = [`%${name}%`];
+        const result = await dbConnect.executeQuery(query, params);
+        return result;
+    } catch (error) {
+        console.error("Error al obtener el municipio por nombre:", error);
+        return {
+            statusCode: 500,
+            message: "Error al obtener el municipio por nombre.",
+            error: error.message,
+        };
+    }
+}

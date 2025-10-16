@@ -44,7 +44,7 @@ const bankAccountService = {
      * @param {string[]} [bankFields=['id','display_name','partner_id','currency_id','bank_id']] - Campos a recuperar.
      * @returns {Promise<Object>} Resultado con statusCode, message y data (detalle) o error.
      */
-    async getOneBankAccount(id, bankFields = ['id', 'display_name', 'partner_id', 'currency_id', 'bank_id']) {
+    async getOneBankAccount(id, bankFields = ['id', 'display_name', 'partner_id', 'currency_id', 'bank_id', 'acc_number']) {
         try {
             //Obtenemos la cuenta bancaria por id
             const response = await odooConector.executeOdooRequest('res.partner.bank', 'search_read', {
