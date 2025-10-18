@@ -19,6 +19,9 @@ const purchaseOrderRoutes = require('./routes/purchasOrder.routes');
 const paymentMethodRoutes = require('./routes/paymentMethod.routes');
 const currencyRoutes = require('./routes/currency.routes');
 const radianRoutes = require('./routes/radian.routes');
+const workEntryRoutes = require('./routes/workEntry.routes');
+
+//Importar repositorios y servicios necesarios para el cron
 const DbConfig = require('./config/db');
 const { cron } = require('./job/corn');
 const { getBillsStay } = require('./Repository/lotesprocesarfactura/lotesprocesarfactura.repository');
@@ -47,6 +50,7 @@ app.use('/api/currency', currencyRoutes);
 app.use('/api/radian', radianRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/employee', employeeRoutes);
+app.use('/api/work-entries', workEntryRoutes);
 
 // Initialize the database connection
 
