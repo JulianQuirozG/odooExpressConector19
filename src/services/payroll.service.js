@@ -5,13 +5,15 @@ const odooConector = require("../utils/odoo.service");
 const employeeService = require("../services/employee.service");
 const moveService = require("../services/bills.service");
 const bankAccountService = require("../services/bankAccount.service");
+const workEntryService = require("../services/workEntry.service");
 
 //Utils
 const util_date = require("../utils/date");
 // Imports repositories
 const paramsTypeDocumentIdentificationRepository = require("../Repository/params_type_document_identification.repository/params_type_document_identification.repository");
 const paramsMunicipalitiesRepository = require("../Repository/params_municipalities/params_municipalities.repository");
-const { ca } = require("zod/locales");
+const paramsPaymentMethodsRepository = require("../Repository/params_payment_methods/params_payment_methods.repository");
+
 const payrollService = {
     async getJsonPayrollById(id) {
         try {
@@ -133,8 +135,10 @@ const payrollService = {
             let payment = {};
 
             //Metodo de pago (Es el mismo metodo de pago que en las facturas)
-            const payment_method_id = 47;
-            payment.payment_method_id = payment_method_id;
+            if (!employee.data.x_studio_metodo_de_pago) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'El método de pago del empleado no está definido', data: [] };
+            const payment_method = (await odooConector.executeOdooRequest("l10n_co_edi.payment.option", "search_read", { domain: [['id', '=', employee.data.x_studio_metodo_de_pago[0]]] }));
+            const payment_method_id = await paramsPaymentMethodsRepository.getPaymentMethodByCode(payment_method.id);
+            payment.payment_method_id = payment_method_id.id;
 
             //Cuenta bancaria, banco y tipo de cuenta los sacamos del contacto del empleado
             if (contacts.data[0].bank_ids.length < 1) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'El empleado no tiene cuenta bancaria asociada', data: [] };
@@ -159,7 +163,6 @@ const payrollService = {
             let payment_dates = {};
 
             //Fecha del pago
-            console.log("PAYROLL DATE: ", payroll.data.paid_date);
             if (!payroll.data.paid_date) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'La nómina no tiene fecha de pago asignada', data: [] };
             const payment_date = new Date(payroll.data.paid_date);
             payment_dates.payment_date = [payment_date]
@@ -227,14 +230,12 @@ const payrollService = {
             return { statusCode: 200, message: 'Detalle de la nómina en formato JSON', data: payrollJson };
         } catch (error) {
             console.error('Error construyendo el JSON de la nómina:', error);
-            return { statusCode: 500, success: false, error: true, message: 'Error interno del servidor' };
+            return { statusCode: 500, success: false, error: true, message: error.message, data: [] };
         }
     },
 
     async getJsonPayrolls(payrolls) {
         try {
-            console.log("Payrolls to process:", payrolls);
-
             //----------------------------------------------- Informacion del empleado ---------------------------------------------
 
             //Obtengo el empleado asignado a la nomina
@@ -271,26 +272,26 @@ const payrollService = {
 
             //Tipo de trabajador
             const type_worker_id = Number(employee.data.x_studio_tipo_de_empleado);
-            if (!type_worker_id) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'El tipo de empleado no está definido', data: [] };
+            if (!type_worker_id) return { statusCode: 400, message: 'Error al obtener la nómina', error: `El tipo de empleado del empleado ${employee.data.id} no está definido`, data: [] };
             worker.type_worker_id = type_worker_id;
 
             //Municipio
-            if (!employee.data.private_city) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'La ciudad del empleado no está definida', data: [] };
+            if (!employee.data.private_city) return { statusCode: 400, message: 'Error al obtener la nómina', error: `La ciudad del empleado ${employee.data.id} no está definida`, data: [] };
             const municipality_id = (await paramsMunicipalitiesRepository.getMunicipalityByName(employee.data.private_city)).data[0].id;
-            if (!municipality_id) return { statusCode: 404, message: "El municipio no está configurado en la tabla de parámetros" };
+            if (!municipality_id) return { statusCode: 404, message: `El municipio del empleado ${employee.data.id} no está configurado en la tabla de parámetros` };
             worker.municipality_id = municipality_id;
 
             //Tipo de contrato
             let type_contract_id = Number(employee.data.contract_type_id[0]);
-            if (!type_contract_id) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'El tipo de contrato del empleado no está definido', data: [] };
+            if (!type_contract_id) return { statusCode: 400, message: 'Error al obtener la nómina', error: `El tipo de contrato del empleado ${employee.data.id} no está definido`, data: [] };
 
             //Consulto la informacion del contrato
             const contract_info = await odooConector.executeOdooRequest("hr.contract.type", "search_read", { domain: [["id", "=", type_contract_id]] });
-            if (contract_info.error) return { statusCode: 500, message: 'Error al crear partner', error: contract_info.message };
+            if (contract_info.error) return { statusCode: 500, message: 'Error al obtener el tipo de contrato', error: contract_info.message };
             if (!contract_info.success) return { statusCode: 400, message: 'Error al obtener la nómina', data: contract_info.data };
             if (contract_info.data.length === 0) return { statusCode: 404, message: 'Tipo de contrato no encontrado' };
             type_contract_id = Number(contract_info.data[0].x_studio_codigo_dian)
-            if (type_contract_id < 1 || type_contract_id > 5) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'El tipo de contrato del empleado no es válido ', data: [] };
+            if (type_contract_id < 1 || type_contract_id > 5) return { statusCode: 400, message: 'Error al obtener la nómina', error: `El tipo de contrato del empleado ${employee.data.id} no es válido`, data: [] };
 
             worker.type_contract_id = type_contract_id;
 
@@ -305,16 +306,16 @@ const payrollService = {
 
             //Numero de identificacion
             const identificacion_number = Number(employee.data.identification_id);
-            if (isNaN(identificacion_number)) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'El número de identificación del empleado no es un número válido', data: [] };
+            if (isNaN(identificacion_number)) return { statusCode: 400, message: 'Error al obtener la nómina', error: `El número de identificación del empleado ${employee.data.id} no es un número válido`, data: [] };
 
             worker.identification_number = identificacion_number;
 
             //Tipo de documento de identidad
             let identificacion_type = employee.data.x_studio_tipo_de_identificacion[0];
-            if (!identificacion_type) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'El tipo de identificación del empleado no está definido', data: [] };
+            if (!identificacion_type) return { statusCode: 400, message: 'Error al obtener la nómina', error: `El tipo de identificación del empleado ${employee.data.id} no está definido`, data: [] };
 
             const payroll_type_document_identification_id = await paramsTypeDocumentIdentificationRepository.getTypeDocumentByCode(identificacion_type);
-            if (payroll_type_document_identification_id.data.length < 1) return { statusCode: 404, message: "El tipo de documento de identificación no está configurado en la tabla de parámetros" };
+            if (payroll_type_document_identification_id.data.length < 1) return { statusCode: 404, message: `El tipo de documento del empleado ${employee.data.id} no está configurado en la tabla de parámetros` };
             worker.payroll_type_document_identification_id = payroll_type_document_identification_id.data[0].id;
 
             //Codigo del trabajador
@@ -327,11 +328,12 @@ const payrollService = {
             const type_document_id = 9;
 
             //Consecutivo y prefix del documento, se obtiene del diario asignado al asiento contable de la nomina
-            const move = (await this.getMovesByPayrollId(payrolls[payrolls.length - 1].id)).data[0];
-            const consecutive = move.sequence_number;
+            const move = await this.getMovesByPayrollId(payrolls[payrolls.length - 1].id);
+            if (move.statusCode !== 200) return move;
+            const consecutive = move.data[0].sequence_number;
 
             //Prefix del documento
-            const prefix = move.sequence_prefix.split('/')[0];
+            const prefix = move.data[0].sequence_prefix.split('/')[0];
 
             //Periodo de la nomina
             const payroll_period_id = 5; // Por ahora el por defecto es 5 (Pago mensual)
@@ -342,21 +344,23 @@ const payrollService = {
             const contacts = await employeeService.getContactsByEmployeeId(employee.data.id);
 
             //Metodo de pago (Es el mismo metodo de pago que en las facturas)
-            const payment_method_id = 47;
+            if (!employee.data.x_studio_metodo_de_pago) return { statusCode: 400, message: 'Error al obtener la nómina', error: `El método de pago del empleado ${employee.data.id} no está definido`, data: [] };
+
+            const payment_method_id = employee.data.x_studio_metodo_de_pago[0];
             payment.payment_method_id = payment_method_id;
 
             //Cuenta bancaria, banco y tipo de cuenta los sacamos del contacto del empleado
-            if (contacts.data[0].bank_ids.length < 1) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'El empleado no tiene cuenta bancaria asociada', data: [] };
+            if (contacts.data[0].bank_ids.length < 1) return { statusCode: 400, message: 'Error al obtener la nómina', error: `El empleado ${employee.data.id} no tiene cuenta bancaria asociada`, data: [] };
 
             //Elegimos la primera cuenta bancaria del empleado
             const bankAccountId = contacts.data[0].bank_ids[0];
 
             //Recuperamos la informacion de la cuenta bancaria
             const bankAccount = await bankAccountService.getOneBankAccount(bankAccountId);
-            if (bankAccount.statusCode !== 200) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'No se pudo recuperar la información de la cuenta bancaria del empleado', data: [] };
+            if (bankAccount.statusCode !== 200) return { statusCode: 400, message: 'Error al obtener la nómina', error: `No se pudo recuperar la información de la cuenta bancaria del empleado ${employee.data.id}`, data: [] };
 
-            if (!bankAccount.data.acc_number) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'La cuenta bancaria del empleado no tiene número de cuenta asignado', data: [] };
-            if (!bankAccount.data.bank_id[1]) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'La cuenta bancaria del empleado no tiene banco asignado', data: [] };
+            if (!bankAccount.data.acc_number) return { statusCode: 400, message: 'Error al obtener la nómina', error: `La cuenta bancaria del empleado ${employee.data.id} no tiene número de cuenta asignado`, data: [] };
+            if (!bankAccount.data.bank_id[1]) return { statusCode: 400, message: 'Error al obtener la nómina', error: `La cuenta bancaria del empleado ${employee.data.id} no tiene banco asignado`, data: [] };
 
             payment.bank_name = bankAccount.data.bank_id[1];
             payment.account_number = bankAccount.data.acc_number;
@@ -372,7 +376,7 @@ const payrollService = {
             const contract = await odooConector.executeOdooRequest("hr.version", "search_read", { domain: [["id", "=", Number(payrolls[0].version_id[0])]] });
 
             //Fecha de ingreso del empleado
-            const admision_date = contract.data[0].contract_date_start;
+            const admision_date = contract.data[contract.data.length - 1].contract_date_start;
             period.admision_date = admision_date;
 
             //Dias trabajados
@@ -386,9 +390,7 @@ const payrollService = {
 
             // Guardar en el periodo
             period.worked_time = worked_time;
-
-
-            console.log("Worked days to process:", contract);
+            if(period.worked_time < 0) return { statusCode: 400, message: 'Error al obtener la nómina', error: 'La fecha de ingreso del empleado es mayor a la fecha actual', data: [] };
 
             //Fecha de reporte de liquidacion
             const issue_date = new Date();
@@ -414,7 +416,16 @@ const payrollService = {
             let salary = 0;
             let transportation_allowance = 0;
             let accrued_total = 0;
+            //bonos
+            let bonuses = [];
+            let total_salary_bonuses = 0;
+            let total_non_salary_bonuses = 0;
 
+            //Horas extra diurnas
+            let HEDs = [];
+
+            //Hora extra nocturnas
+            let HENs = [];
             //----------------------------------------Deducciones --------------------------------------------------------
             const deductions = {};
             let eps_deduction = 0;
@@ -422,6 +433,8 @@ const payrollService = {
             let cooperativa = 0;
             let fondosp_deduction_SP = 0;
             let deductions_total = 0;
+            let HEDs_total = 0;
+            let HENs_total = 0;
             deductions.eps_type_law_deductions_id = 3;
             deductions.pension_type_law_deductions_id = 5;
 
@@ -445,21 +458,21 @@ const payrollService = {
 
                 if (end_date.getDate() >= 30) end_date.setDate(29);
 
-
-                console.log("Start date:", start_date);
-                console.log("End date:", end_date);
-
                 // Calcular la diferencia en milisegundos
                 const diffTime = end_date - start_date;
 
                 // Convertir a días
                 const days = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
                 worked_days += days;
+
+                // El indice de los dias empiza desde 0 
                 if (util_date.esBisiesto(end_date.getFullYear()) && end_date.getMonth() == 1 && end_date.getDate() == 28) worked_days += 1;
                 if (!util_date.esBisiesto(end_date.getFullYear()) && end_date.getMonth() == 1 && end_date.getDate() == 27) worked_days += 2;
 
                 //Me recorro las lineas de la nomina para obtener los subtotales de devengados y deducciones
+                let bonus = {};
                 for (const line of payrollData.line_ids) {
+                    
                     if (line.code === 'AUXT') {
                         transportation_allowance += line.total
                     }
@@ -472,7 +485,86 @@ const payrollService = {
                     if (line.code === 'PSEM') {
                         pension_deduction += Math.abs(line.total)
                     }
+                    if (line.code === 'BNS') {
+                        bonus.non_salary_bonus = line.total;
+                        total_non_salary_bonuses += line.total;
+                    }
+                    if (line.code === 'BS') {
+                        total_salary_bonuses += line.total;
+                        bonus.salary_bonus = line.total;
+                    }
+                    if (line.code === 'HED') {
+                        HEDs_total += line.total;
+                    }
+                    if (line.code === 'HEN') {
+                        HENs_total += line.total;
+                    }
                 }
+
+                //Me recorro los dias trabajados y las entradas de trabajo para obtener las horas extra diurnas
+                const work_entry = await workEntryService.getWorkEntries([["date", ">=", payrollData.date_from], ["date", "<=", payrollData.date_to], ["employee_id", "=", employee.data.id]]);
+                   
+                for (const worked_day of payrollData.worked_days_ids) {
+                    if (worked_day.work_entry_type_id[1] == "Hora Extra Diurna") {
+
+                        //Calculo el valor de las horas diurnas
+                        let worked_hours = worked_day.number_of_hours;
+                        let paid_of_hours = HEDs_total / worked_hours;
+
+                        //Me recorro las entradas de trabajo para obtener el tipo de hora extra
+                        for (const entry of work_entry.data) {
+
+                            //Hora extra diurna
+                            if (entry.work_entry_type_id[1] == "Hora Extra Diurna") {
+                                // Crear fecha de inicio basada en la fecha de entrada
+                                // Asumimos que las horas extras empiezan después de la jornada normal (6:00 AM)
+                                const baseDate = new Date(entry.date + 'T01:00:00');
+
+                                // Calcular fecha de fin sumando las horas trabajadas (duration está en horas)
+                                const endTime = new Date(baseDate.getTime() + (entry.duration * 60 * 60 * 1000));
+
+                                HEDs.push({
+                                    start_time: baseDate.toISOString(),
+                                    end_time: endTime.toISOString(),
+                                    quantity: entry.duration,
+                                    payment: paid_of_hours * entry.duration,
+                                    percentage: ((paid_of_hours * entry.duration) / salary) * 100
+                                });
+                            }
+                        }
+                    }
+
+                    //Horas extra nocturnas
+                    if (worked_day.work_entry_type_id[1] == "Hora Extra Nocturna") {
+                        //Calculo el valor de las horas nocturnas
+                        let worked_hours = worked_day.number_of_hours;
+                        let paid_of_hours = HENs_total / worked_hours;
+
+                        //Me recorro las entradas de trabajo para obtener el tipo de hora extra
+                        for (const entry of work_entry.data) {
+
+                            //Hora extra nocturna
+                            if (entry.work_entry_type_id[1] == "Hora Extra Nocturna") {
+                                // Crear fecha de inicio basada en la fecha de entrada
+                                // Asumimos que las horas extras empiezan después de la jornada normal (9:00 PM)
+                                const baseDate = new Date(entry.date + 'T16:00:00');
+
+                                // Calcular fecha de fin sumando las horas trabajadas (duration está en horas)
+                                const endTime = new Date(baseDate.getTime() + (entry.duration * 60 * 60 * 1000));
+
+                                HENs.push({
+                                    start_time: baseDate.toISOString(),
+                                    end_time: endTime.toISOString(),
+                                    quantity: entry.duration,
+                                    payment: paid_of_hours * entry.duration,
+                                    percentage: ((paid_of_hours * entry.duration) / salary) * 100
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if (bonus.salary_bonus || bonus.non_salary_bonus) bonuses.push(bonus);
 
 
             }
@@ -481,7 +573,13 @@ const payrollService = {
             accrued.worked_days = worked_days;
             accrued.salary = salary;
             accrued.transportation_allowance = transportation_allowance;
-            accrued_total = salary + transportation_allowance;
+            accrued.worked_days = worked_days;
+            if (bonuses.length > 0) accrued.bonuses = bonuses;
+            if (HENs.length > 0) accrued.HENs = HENs;
+            if (HEDs.length > 0) accrued.HEDs = HEDs;
+
+            //Total devengados
+            accrued_total = salary + transportation_allowance + HEDs_total + HENs_total + total_salary_bonuses + total_non_salary_bonuses;
             accrued.accrued_total = accrued_total;
 
             //Deducciones
@@ -489,12 +587,15 @@ const payrollService = {
             deductions.pension_deduction = pension_deduction;
             deductions.cooperativa = cooperativa;
             deductions.fondosp_deduction_SP = fondosp_deduction_SP;
+            
+
+            //Total deducciones
             deductions_total = eps_deduction + pension_deduction + cooperativa + fondosp_deduction_SP;
             deductions.deductions_total = deductions_total;
-            accrued.worked_days = worked_days;
-            const payrollJson = {};
+
 
             //-------------------------------------- Asigno la informacion de la nomina -----------------------------------------
+            const payrollJson = {};
             payrollJson.worker = worker;
             payrollJson.type_document_id = type_document_id;
             payrollJson.prefix = prefix;
@@ -506,11 +607,10 @@ const payrollService = {
             payrollJson.accrued = accrued;
             payrollJson.period = period;
             payrollJson.deductions = deductions;
-
             return { statusCode: 200, message: 'Detalle de la nómina en formato JSON', data: payrollJson };
         } catch (error) {
             console.error('Error construyendo el JSON de la nómina:', error);
-            return { statusCode: 500, success: false, error: true, message: 'Error interno del servidor' };
+            return { statusCode: 500, success: false, error: true, message: error.message, data: [] };
         }
     },
 
@@ -549,12 +649,20 @@ const payrollService = {
             if (!payroll.success) return { statusCode: 400, message: 'Error al obtener la nómina', data: payroll.data };
             if (payroll.data.length === 0) return { statusCode: 404, message: 'Nómina no encontrada' };
 
-            //Me recorro las nominas y les agrego las lineas de la nomina
+            //Me recorro las nominas y les agrego las lineas de la nomina y los dias
             payroll.data = await Promise.all(payroll.data.map(async (payslip) => {
+                //Recupero las lineas de la nomina
                 const lines = await odooConector.executeOdooRequest("hr.payslip.line", "search_read", { domain: [["slip_id", "=", payslip.id]] });
                 if (lines.error) return { statusCode: 500, message: 'Error al obtener las líneas de la nómina', error: lines.message };
                 if (!lines.success) return { statusCode: 400, message: 'Error al obtener las líneas de la nómina', data: lines.data };
                 payslip.line_ids = lines.data;
+
+                //Recupero los dias trabajados de la nomina
+                const worked_days = await odooConector.executeOdooRequest("hr.payslip.worked_days", "search_read", { domain: [["payslip_id", "=", payslip.id]] });
+                if (worked_days.error) return { statusCode: 500, message: 'Error al obtener los días trabajados de la nómina', error: worked_days.message };
+                if (!worked_days.success) return { statusCode: 400, message: 'Error al obtener los días trabajados de la nómina', data: worked_days.data };
+                payslip.worked_days_ids = worked_days.data;
+
                 return payslip;
             }));
             //Regreso la informacion de la nomina
@@ -573,14 +681,17 @@ const payrollService = {
             //Verifico que la nomina exista
             const payroll = await this.getpayrollById(payrollId);
             if (payroll.statusCode !== 200) return payroll;
-            console.log("PAYROLL: ", payrollId);
+
             //Recupero los asientos contables de la nomina
             const response = await odooConector.executeOdooRequest("hr.payslip", "action_open_move", { ids: [Number(payrollId)] });
             if (response.error) return { statusCode: 500, message: 'Error al obtener los asientos contables de la nómina', error: response.message };
             if (!response.success) return { statusCode: 400, message: 'Error al obtener los asientos contables de la nómina', data: response.data };
-            console.log("RESPONSE: ", response);
+
+            if ((response.data.res_id == 0 || response.data.res_id == false) && (!response.data.domain || response.data.domain.length == 0)) return { statusCode: 404, message: `No se encontraron asientos contables para la nómina ${payrollId}`, data: [] };
+
+            //Obtengo los ids de los asientos contables
             let moves = response.data.res_id == 0 ? response.data.domain[0][2] : [response.data.res_id];
-            console.log("MOVES IDS: ", moves);
+
             //Recupero la informacion de los asientos contables
             moves = await Promise.all(moves.map(async (moveId) => {
                 const move = await moveService.getOneBill(moveId);
@@ -616,11 +727,11 @@ const payrollService = {
             const payrollsJson = []
             //Obtengo los json de las nominas
             for (let [employeeId, employeePayrolls] of payrollsByEmployee) {
-                payrollsJson.push(await this.getJsonPayrolls(employeePayrolls));
+                const payroll = await this.getJsonPayrolls(employeePayrolls);
+                if (payroll.statusCode == 200) payrollsJson.push(payroll);
+                else payrollsJson.push({ message: payroll.message, data: payroll.error });
+
             }
-
-            console.log("Nóminas agrupadas por empleado:", payrollsByEmployee);
-
             return { statusCode: 200, message: `Nóminas reportadas entre ${startDate} y ${endDate}`, data: payrollsJson };
         } catch (error) {
             console.error('Error al reportar nómina', error);
