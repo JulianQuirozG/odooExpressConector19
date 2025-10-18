@@ -5,7 +5,7 @@ const workEntryService = {
     async getWorkEntries(domain = []) {
         try {
             // Obtener todas las entradas de trabajo desde Odoo
-            const workEntries = await odooService.executeOdooRequest("hr.work.entry", "search_read", { domain });
+            const workEntries = await odooService.executeOdooRequest("hr.work.entry", "search_read", { domain, order: 'date asc' });
             if(workEntries.error) return { statusCode: 500, message: 'Error al obtener entradas de trabajo', error: workEntries.error };
             if(!workEntries.success) return { statusCode: 400, message: 'No se pudieron obtener las entradas de trabajo', error: workEntries.message };
             
