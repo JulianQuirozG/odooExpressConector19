@@ -1,0 +1,611 @@
+[
+  {
+    "id": 5766,
+    "display_name": "Attendance - 8h00",
+    "name": "Asistencia: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-21",
+    "duration": 8,
+    "work_entry_type_id": [
+      1,
+      "Attendance"
+    ],
+    "display_code": "A",
+    "code": "WORK100",
+    "external_code": false,
+    "color": 0,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": false,
+    "leave_state": false,
+    "has_payslip": true
+  },
+  {
+    "id": 5767,
+    "display_name": "Attendance - 4h00",
+    "name": "Asistencia: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-22",
+    "duration": 4,
+    "work_entry_type_id": [
+      1,
+      "Attendance"
+    ],
+    "display_code": "A",
+    "code": "WORK100",
+    "external_code": false,
+    "color": 0,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": false,
+    "leave_state": false,
+    "has_payslip": true
+  },
+  {
+    "id": 5768,
+    "display_name": "Attendance - 8h00",
+    "name": "Asistencia: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-24",
+    "duration": 8,
+    "work_entry_type_id": [
+      1,
+      "Attendance"
+    ],
+    "display_code": "A",
+    "code": "WORK100",
+    "external_code": false,
+    "color": 0,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": false,
+    "leave_state": false,
+    "has_payslip": true
+  },
+  {
+    "id": 5769,
+    "display_name": "Attendance - 8h00",
+    "name": "Asistencia: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-25",
+    "duration": 8,
+    "work_entry_type_id": [
+      1,
+      "Attendance"
+    ],
+    "display_code": "A",
+    "code": "WORK100",
+    "external_code": false,
+    "color": 0,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": false,
+    "leave_state": false,
+    "has_payslip": true
+  },
+  {
+    "id": 5770,
+    "display_name": "Attendance - 8h00",
+    "name": "Asistencia: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-26",
+    "duration": 8,
+    "work_entry_type_id": [
+      1,
+      "Attendance"
+    ],
+    "display_code": "A",
+    "code": "WORK100",
+    "external_code": false,
+    "color": 0,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": false,
+    "leave_state": false,
+    "has_payslip": true
+  },
+  {
+    "id": 5771,
+    "display_name": "Attendance - 8h00",
+    "name": "Asistencia: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-27",
+    "duration": 8,
+    "work_entry_type_id": [
+      1,
+      "Attendance"
+    ],
+    "display_code": "A",
+    "code": "WORK100",
+    "external_code": false,
+    "color": 0,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": false,
+    "leave_state": false,
+    "has_payslip": true
+  },
+  {
+    "id": 5772,
+    "display_name": "Attendance - 8h00",
+    "name": "Asistencia: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-28",
+    "duration": 8,
+    "work_entry_type_id": [
+      1,
+      "Attendance"
+    ],
+    "display_code": "A",
+    "code": "WORK100",
+    "external_code": false,
+    "color": 0,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": false,
+    "leave_state": false,
+    "has_payslip": true
+  },
+  {
+    "id": 5773,
+    "display_name": "Attendance - 4h00",
+    "name": "Asistencia: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-29",
+    "duration": 4,
+    "work_entry_type_id": [
+      1,
+      "Attendance"
+    ],
+    "display_code": "A",
+    "code": "WORK100",
+    "external_code": false,
+    "color": 0,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": false,
+    "leave_state": false,
+    "has_payslip": true
+  },
+  {
+    "id": 5788,
+    "display_name": "Vacaciones - 8h00",
+    "name": "Vacaciones: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-18",
+    "duration": 8,
+    "work_entry_type_id": [
+      119,
+      "Vacaciones"
+    ],
+    "display_code": "VAC",
+    "code": "VCD",
+    "external_code": false,
+    "color": 10,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": [
+      7,
+      "Luis Serrano on Vacaciones Disfrutadas: 17 días (11/01/2025 to 11/20/2025)"
+    ],
+    "leave_state": "validate",
+    "has_payslip": true
+  },
+  {
+    "id": 5789,
+    "display_name": "Vacaciones - 8h00",
+    "name": "Vacaciones: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-19",
+    "duration": 8,
+    "work_entry_type_id": [
+      119,
+      "Vacaciones"
+    ],
+    "display_code": "VAC",
+    "code": "VCD",
+    "external_code": false,
+    "color": 10,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": [
+      7,
+      "Luis Serrano on Vacaciones Disfrutadas: 17 días (11/01/2025 to 11/20/2025)"
+    ],
+    "leave_state": "validate",
+    "has_payslip": true
+  },
+  {
+    "id": 5790,
+    "display_name": "Vacaciones - 8h00",
+    "name": "Vacaciones: Luis Serrano",
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-20",
+    "duration": 8,
+    "work_entry_type_id": [
+      119,
+      "Vacaciones"
+    ],
+    "display_code": "VAC",
+    "code": "VCD",
+    "external_code": false,
+    "color": 10,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      1,
+      "OdooBot"
+    ],
+    "create_date": "2025-10-18 21:18:52",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": [
+      7,
+      "Luis Serrano on Vacaciones Disfrutadas: 17 días (11/01/2025 to 11/20/2025)"
+    ],
+    "leave_state": "validate",
+    "has_payslip": true
+  },
+  {
+    "id": 5794,
+    "display_name": "Vacaciones - 8h00",
+    "name": false,
+    "active": true,
+    "employee_id": [
+      3,
+      "Luis Serrano"
+    ],
+    "version_id": [
+      3,
+      "Sep 1, 2025"
+    ],
+    "work_entry_source": "calendar",
+    "date": "2025-11-17",
+    "duration": 8,
+    "work_entry_type_id": [
+      119,
+      "Vacaciones"
+    ],
+    "display_code": "VAC",
+    "code": "VCD",
+    "external_code": false,
+    "color": 10,
+    "state": "validated",
+    "company_id": [
+      1,
+      "My Company"
+    ],
+    "conflict": false,
+    "department_id": false,
+    "country_id": [
+      49,
+      "Colombia"
+    ],
+    "amount_rate": 1,
+    "create_uid": [
+      2,
+      "Administrator"
+    ],
+    "create_date": "2025-10-18 21:42:17",
+    "write_uid": [
+      2,
+      "Administrator"
+    ],
+    "write_date": "2025-10-18 21:46:21",
+    "leave_id": false,
+    "leave_state": false,
+    "has_payslip": true
+  }
+]
