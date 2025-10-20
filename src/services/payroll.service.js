@@ -447,6 +447,7 @@ const payrollService = {
             let HENs_total = 0;
             let HEDDFs_total = 0;
             let HENDFs_total = 0;
+
             deductions.eps_type_law_deductions_id = 3;
             deductions.pension_type_law_deductions_id = 5;
 
@@ -454,6 +455,7 @@ const payrollService = {
             //Me recorro las nominas
             for (const payrollData of payrolls) {
                 const id = payrollData.id;
+                let common_vacation_total = 0;
 
                 //Verfico que el id sea valido
                 if (Number(id) <= 0 || isNaN(Number(id))) return { statusCode: 400, message: `ID de nómina '${id}' inválido, debe ser un número`, data: [] };
@@ -484,62 +486,93 @@ const payrollService = {
                 //Me recorro las lineas de la nomina para obtener los subtotales de devengados y deducciones
                 let bonus = {};
                 for (const line of payrollData.line_ids) {
-
+                    //Auxilio de transporte
                     if (line.code === 'AUXT') {
                         transportation_allowance += line.total
                     }
+                    //Salario basico
                     if (line.code === 'BASIC') {
                         salary += line.total
                     }
+                    //Deduccion de salud
                     if (line.code === 'SEMP') {
                         eps_deduction += Math.abs(line.total)
                     }
+                    //Deduccion de pension
                     if (line.code === 'PSEM') {
                         pension_deduction += Math.abs(line.total)
                     }
+                    //Bono no salarial
                     if (line.code === 'BNS') {
                         bonus.non_salary_bonus = line.total;
                         total_non_salary_bonuses += line.total;
                     }
+                    //Bono salarial
                     if (line.code === 'BS') {
                         total_salary_bonuses += line.total;
                         bonus.salary_bonus = line.total;
                     }
+                    //Horas extra diurnas
                     if (line.code === 'HED') {
                         HEDs_total += line.total;
                     }
+                    //Horas extra nocturnas
                     if (line.code === 'HEN') {
                         HENs_total += line.total;
                     }
+                    //Horas extra diurnas dominicales
                     if (line.code === 'HEDD') {
                         HEDDFs_total += line.total;
                     }
+                    //Horas extra nocturnas dominicales
                     if (line.code === 'HEDN') {
                         HENDFs_total += line.total;
                     }
+                    //Vacaciones comunes
+                    if (line.code === 'VCS') {
+                        common_vacation_total += line.total;
+                    }
 
                 }
-                //Me recorro los dias trabajados y las entradas de trabajo para obtener las horas extra diurnas
+
+
+                //Me recorro las entrdas de trabajo para obtener las vacaciones
                 const work_entry = await workEntryService.getWorkEntries([["date", ">=", payrollData.date_from], ["date", "<=", payrollData.date_to], ["employee_id", "=", employee.data.id]]);
                 let holiday_start = null;
                 let holiday_end = null;
 
-                const fs = require('fs');
-                //Me recorro las entrdas de trabajo para obtener las vacaciones
-                // console.log("work_entry.data:", work_entry);
-                // vamos a guardar esto en un fs .json ten encuentra 
-                // fs.writeFileSync('work_entry.json', JSON.stringify(work_entry.data, null, 2));
+
+                //Obtengo los dias totales de vacaciones
+                const days_worked =(payrollData.worked_days_ids.filter(day => day.work_entry_type_id[1] == "Vacaciones"));
+                const holiday_days = days_worked.length > 0 ? days_worked[0].number_of_days : 0;
+                
                 for (const entry of work_entry.data) {
                     //vacaciones
                     if (entry.work_entry_type_id[1] == "Vacaciones" || new Date(entry.date).getDay() == 6) {
+                        //Reduzco los dias trabajados
                         worked_days--;
+
+                        //Asigno las fechas de inicio y fin de las vacaciones
                         if (!holiday_start) holiday_start = new Date(entry.date);
                         holiday_end = new Date(entry.date);
-                    } 
+                    } else {
+                        //Calculo las vacaciones
+                        if (holiday_start && holiday_end) {
+                            const quantity = ((holiday_end - holiday_start) / (1000 * 60 * 60 * 24)) + 1;
+                            const payment = (common_vacation_total / holiday_days) * quantity;
+                            
+                            common_vacation.push({
+                                start_date: holiday_start,
+                                end_date: holiday_end,
+                                quantity: quantity,
+                                payment: payment
+                            });
+                        }
+                        holiday_start = null;
+                        holiday_end = null;
+                    }
                 }
 
-
-                console.log("holiday_start:", holiday_start, "holiday_end:", holiday_end);
                 // Calculo las vacaciones
                 if (holiday_start && holiday_end) {
                     common_vacation.push({
@@ -550,7 +583,7 @@ const payrollService = {
                 }
 
 
-                //Me recorro los dias trabajados para obtener las horas extra
+                //Me recorro los dias trabajados para obtener las horas extra diurnas y nocturnas, dominicales diurnas y nocturnas
                 for (const worked_day of payrollData.worked_days_ids) {
                     //Horas extra diurnas
                     if (worked_day.work_entry_type_id[1] == "Hora Extra Diurna") {
@@ -821,7 +854,6 @@ const payrollService = {
         try {
             //Obtengo las nominas entre las fechas
             const payrolls = await this.getPayrollsByDates(startDate, endDate);
-            console.log("payrolls", payrolls);
             if (payrolls.statusCode !== 200) return payrolls;
 
             //Agrupo las nominas por empleado
