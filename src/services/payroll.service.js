@@ -9,10 +9,13 @@ const workEntryService = require("../services/workEntry.service");
 
 //Utils
 const util_date = require("../utils/date");
+const XLSX = require('xlsx');
+
 // Imports repositories
 const paramsTypeDocumentIdentificationRepository = require("../Repository/params_type_document_identification.repository/params_type_document_identification.repository");
 const paramsMunicipalitiesRepository = require("../Repository/params_municipalities/params_municipalities.repository");
 const paramsPaymentMethodsRepository = require("../Repository/params_payment_methods/params_payment_methods.repository");
+const { ca } = require("zod/locales");
 
 const payrollService = {
     async getJsonPayrollById(id) {
@@ -878,6 +881,17 @@ const payrollService = {
         } catch (error) {
             console.error('Error al reportar nómina', error);
             return { statusCode: 500, success: false, error: true, message: 'Error interno del servidor' };
+        }
+    },
+
+    async reportPayrollsByExcel(file) {
+        try {
+            if (!file) return { statusCode: 400, message: 'Archivo Excel es requerido', data: [] };
+            const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+            console.log(workbook.SheetNames);
+        }catch (error) {
+            console.error('Error al conectar con Radian:', error);
+            return { success: false, error: true, message: 'Error interno del servidor' };
         }
     }
 }

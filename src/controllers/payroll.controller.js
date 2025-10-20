@@ -1,6 +1,7 @@
 //import services
 const payrollService = require('../services/payroll.service');
 
+
 const payrollController = {
     async getJsonPayrollById(req, res) {
         try {
@@ -26,7 +27,7 @@ const payrollController = {
 
     async getPayrollsByDates(req, res) {
         try {
-            const {start_date, end_date} = req.query;
+            const { start_date, end_date } = req.query;
             const result = await payrollService.getPayrollsByDates(start_date, end_date);
             res.status(result.statusCode).json(result);
         } catch (error) {
@@ -38,9 +39,19 @@ const payrollController = {
 
     async reportPayrollsByDates(req, res) {
         try {
-            const {start_date, end_date} = req.query;
+            const { start_date, end_date } = req.query;
             const result = await payrollService.reportPayrollsByDates(start_date, end_date);
             res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en payrollController.getPayrolls:', error);
+            res.status(500).json({ message: 'Error al obtener las nóminas', error: error.message });
+        }
+    },
+
+    async reportPayrollsByExcel(req, res) {
+        try {
+            const result = await payrollService.reportPayrollsByExcel(req.file);
+            res.status(200).json(result);
         } catch (error) {
             console.error('Error en payrollController.getPayrolls:', error);
             res.status(500).json({ message: 'Error al obtener las nóminas', error: error.message });
