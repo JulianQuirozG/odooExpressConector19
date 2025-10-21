@@ -1073,14 +1073,14 @@ const payrollService = {
                 //Saco el Json para las Horas Extra Diurna
                 const HEDDFs = this.extraTimeHours([{ type: 'HED', quantity: row.hed, payment: row.horas_extras_diurnas_125 }], 'HEDDFs', period.settlement_start_date, period.settlement_end_date);
                 if (HEDDFs.data?.length > 0) {
-                    payroll.HEDDFs = HEDDFs.data;
+                    payroll.accrued.HEDDFs = HEDDFs.data;
                 }
 
                 //Saco el json para las Horas Extra Nocturna
-                console.log("Response final: ", this.extraTimeHours([{ type: 'HEN', quantity: row.hed, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date));
-                const HENDFs = this.extraTimeHours([{ type: 'HEN', quantity: row.hed, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date);
-                if (HENDFs.data?.length > 0) {
-                    payroll.HENDFs = HENDFs.data;
+                //console.log("Response final: ", this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date));
+                const HENs = this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENs', period.settlement_start_date, period.settlement_end_date);
+                if (HENs.data?.length > 0) {
+                    payroll.accrued.HENs = HENs.data;
                 }
 
                 response.push(payroll)
@@ -1132,8 +1132,8 @@ const payrollService = {
             //me voy a recorrer el arreglo de horas extras y voy a validar que el tipo sea valido
             for (const horaExtra of horasExtrasData) {
                 //saco la cantidad de dias en base a las horas y las horas maximas por dia 
-                let laps = horaExtra.quantity <= numberMaximumHoursExtra[horaExtra.type] ? horaExtra.quantity : Math.floor(horaExtra.quantity / numberMaximumHoursExtra[horaExtra.type]);
-                let horasRestantes = horaExtra.quantity;
+                let horasRestantes = Number(horaExtra.quantity.trim().replaceAll(',', ''));
+                let laps = horasRestantes <= numberMaximumHoursExtra[horaExtra.type] ? 1 : Math.ceil(horasRestantes / numberMaximumHoursExtra[horaExtra.type]);
 
                 //saco el precio a calcular
                 const payable =  Number(horaExtra.payment.trim().replaceAll(',', ''));
@@ -1158,7 +1158,7 @@ const payrollService = {
                         if (horaExtra.type == 'HED') dayInit.setUTCHours(rangeHoursExtra['HED'][0], 0, 0); //18:00 que son las 
                         if (horaExtra.type == 'HEN') dayInit.setUTCHours(rangeHoursExtra['HEN'][0], 0, 0); //21:00
 
-                        const hoursToAssign = horasRestantes <= Math.floor(horaExtra.quantity / laps) ? horasRestantes : Math.floor(horaExtra.quantity / laps)
+                        const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity.trim()) / laps) ? horasRestantes : Math.floor(Number(horaExtra.quantity.trim()) / laps)
 
                         if (horaExtra.type == 'HED') dayEnd.setUTCHours(rangeHoursExtra['HED'][0] + hoursToAssign, 0, 0); //21:00 que son las 
                         if (horaExtra.type == 'HEN') dayEnd.setUTCHours(rangeHoursExtra['HEN'][0] + hoursToAssign, 0, 0); //6:00
