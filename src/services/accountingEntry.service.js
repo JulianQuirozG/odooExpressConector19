@@ -4,6 +4,26 @@ const quotationService = require("./quotation.service");
 const productService = require("./products.service");
 const accountingEntryService = {
 
+    /**
+     * Genera y contabiliza el asiento de “ingreso para terceros” a partir de una factura de venta/nota crédito publicada.
+     * Flujo:
+     * - Valida que la factura exista, sea out_invoice/out_refund y esté en estado posted.
+     * - Busca sus órdenes de venta y, por cada una, las órdenes de compra asociadas.
+     * - Por cada OC con factura de proveedor publicada, obtiene el producto (1ª línea) y sus cuentas contables.
+     * - Construye 2 líneas contables (utilidad/costo y tercero) y crea el asiento usando createAccountingEntry.
+     * - En notas crédito invierte los débitos/créditos.
+     *
+     * @async
+     * @param {number} billId ID de la factura/nota en Odoo (account.move).
+     * @returns {Promise<{statusCode:number, message:string, data?:any, error?:string}>}
+     *          200: asiento creado (data incluye respuesta de Odoo);
+     *          400: validación fallida o sin líneas;
+     *          500: error inesperado.
+     *
+     * @example
+     * const res = await accountingEntryService.createExternalAccountingEntry(123);
+     * if (res.statusCode === 200) console.log('Asiento creado:', res.data);
+     */
     async createExternalAccountingEntry(billId) {
         try {
             //verificamos que la factura exista
@@ -90,6 +110,25 @@ const accountingEntryService = {
         }
     },
 
+    /**
+     * Crea un asiento contable (account.move) en Odoo con las líneas indicadas.
+     *
+     * @async
+     * @param {Array<[0,0, {name:string, debit:number, credit:number, partner_id:number, account_id:number}]>} lines
+     *        Comandos one2many para line_ids (formato [0,0,vals] por cada línea).
+     * @param {string} [Ref='Nuevo asiento contable'] Referencia del asiento (campo ref).
+     * @param {string|Date} [date=Date.now()] Fecha del asiento (YYYY-MM-DD o Date).
+     * @param {number} [journal=12] ID del diario (account.journal) donde se creará el asiento.
+     * @returns {Promise<{statusCode:number, message:string, data?:any, error?:string}>}
+     *          200: asiento creado; 400: solicitud inválida; 500: error al crear.
+     *
+     * @example
+     * const lines = [
+     *   [0, 0, { name: 'Ingreso tercero', debit: 0, credit: 1000, partner_id: 45, account_id: 410505 }],
+     *   [0, 0, { name: 'Contrapartida', debit: 1000, credit: 0, partner_id: 78, account_id: 613595 }],
+     * ];
+     * const res = await accountingEntryService.createAccountingEntry(lines, 'Ref auto', '2025-10-20', 12);
+     */
     async createAccountingEntry(lines, Ref = 'Nuevo asiento contable', date = Date.now(), journal = 12) {
         try {
             //Si no tiene lineas
