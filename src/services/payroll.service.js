@@ -894,8 +894,6 @@ const payrollService = {
 
             //obtengo la hoja Nomina
             const sheetName = workbook.SheetNames[2];
-            //console.log(sheetName);
-
 
             if (!sheetName) return { statusCode: 400, message: `Hoja Nomina no encontrada`, data: [] };
             const ws = workbook.Sheets[sheetName];
@@ -916,9 +914,9 @@ const payrollService = {
             const rows = XLSX.utils.sheet_to_json(ws, {
                 header: KEYS,
                 range: rangeStr,
-                raw: false,
+                raw: true,
                 blankrows: true, // ya omite filas 100% vacías
-                defval: 0,      // rellena celdas vacías con 0
+                defval: null,      // rellena celdas vacías con 0
             });
 
 
@@ -941,42 +939,41 @@ const payrollService = {
 
             const response = [];
             for (const row of rows) {
-                console.log(row)
                 if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
                 const worker = {
-                    salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')),
-                    address: row.direccion ? row.direccion.trim() : '',
-                    first_name: row.primer_nombre ? row.primer_nombre.trim() : '',
-                    middle_name: row.segundo_nombre ? row.segundo_nombre.trim() : '',
-                    surname: row.primer_apellido ? row.primer_apellido.trim() : '',
-                    second_surname: row.segundo_apellido ? row.segundo_apellido.trim() : null,
-                    type_worker_id: row.tipo_empleado ? Number(row.tipo_empleado.trim()) : null,
-                    municipality_id: row.municipio ? Number(row.municipio.trim()) : null,
-                    type_contract_id: row.tipo_contrato ? Number(row.tipo_contrato.trim()) : null,
-                    high_risk_pension: row.pensionado?.trim() == 'Si' ? true : false,
-                    integral_salarary: row.tipo_salario?.trim() == 'Integral' ? true : false,
-                    sub_type_worker_id: row.subtipo_empleado ? Number(row.subtipo_empleado.trim()) : null,
-                    identification_number: row.cedula ? row.cedula.trim().replaceAll(',', '') : '',
-                    payroll_type_document_identification_id: row.tipo_documento ? Number(row.tipo_documento.trim().replaceAll(',', '')) : null,
+                    salary: Number(row.sueldo_contrato),
+                    address: row.direccion ? row.direccion : '',
+                    first_name: row.primer_nombre ? row.primer_nombre : '',
+                    middle_name: row.segundo_nombre ? row.segundo_nombre : '',
+                    surname: row.primer_apellido ? row.primer_apellido : '',
+                    second_surname: row.segundo_apellido ? row.segundo_apellido : null,
+                    type_worker_id: row.tipo_empleado ? Number(row.tipo_empleado) : null,
+                    municipality_id: row.municipio ? Number(row.municipio) : null,
+                    type_contract_id: row.tipo_contrato ? Number(row.tipo_contrato) : null,
+                    high_risk_pension: row.pensionado == 'Si' ? true : false,
+                    integral_salarary: row.tipo_salario == 'Integral' ? true : false,
+                    sub_type_worker_id: row.subtipo_empleado ? Number(row.subtipo_empleado) : null,
+                    identification_number: row.cedula ? row.cedula : '',
+                    payroll_type_document_identification_id: row.tipo_documento ? Number(row.tipo_documento) : null,
                 }
 
                 const payment = {
-                    payment_method_id: Number(row.metodo_pago.trim().replaceAll(',', '')) ? Number(row.metodo_pago.trim().replaceAll(',', '')) : null,
+                    payment_method_id: Number(row.metodo_pago) ? Number(row.metodo_pago) : null,
                     bank_name: row.banco,
                     account_number: row.numero_cuenta,
                     account_type: row.tipo_cuenta
                 }
 
                 const accrued = {
-                    worked_days: Number(row.dias.trim().replaceAll(',', '')) ? Number(row.dias.trim().replaceAll(',', '')) : 0,
-                    salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')) ? Number(row.sueldo_contrato.trim().replaceAll(',', '')) : 0,
-                    transportation_allowance: Number(row.auxilio_transporte.trim().replaceAll(',', '')) ? Number(row.auxilio_transporte.trim().replaceAll(',', '')) : 0,
-                    accrued_total: Number(row.total_devengado.trim().replaceAll(',', '')) ? Number(row.total_devengado.trim().replaceAll(',', '')) : 0,
+                    worked_days: Number(row.dias) ? Number(row.dias) : 0,
+                    salary: Number(row.sueldo_contrato) ? Number(row.sueldo_contrato) : 0,
+                    transportation_allowance: Number(row.auxilio_transporte) ? Number(row.auxilio_transporte) : 0,
+                    accrued_total: Number(row.total_devengado) ? Number(row.total_devengado) : 0,
                 }
 
                 //Bonos salariales y no salariales
-                const devengados_salariales = Number(row.otros_devengos_no_salariales.trim().replaceAll(',', ''));
-                const devengados_no_salariales = Number(row.otros_devengos_salariales.trim().replaceAll(',', ''));
+                const devengados_salariales = Number(row.otros_devengos_no_salariales);
+                const devengados_no_salariales = Number(row.otros_devengos_salariales);
                 if (row.otros_devengos_no_salariales && !isNaN(devengados_salariales) || row.otros_devengos_salariales && !isNaN(devengados_no_salariales)) {
                     accrued.bonuses = [];
 
@@ -989,11 +986,11 @@ const payrollService = {
                 }
 
                 //Vacaciones disfrutadas
-                if (row.vacaciones_disfrutadas && String(row.vacaciones_disfrutadas).trim() != '-') {
-                    const vacation_days = Number(row.vacaciones_disfrutadas.trim().replaceAll(',', ''));
-                    const vacation_payment = Number(row.vacaciones.trim().replaceAll(',', ''));
-                    const start_date = new Date(row.vacaciones_salida);
-                    const end_date = new Date(row.vacaciones_ingreso);
+                if (row.vacaciones_dias && String(row.vacaciones_dias)) {
+                    const vacation_days = Number(String(row.vacaciones_dias));
+                    const vacation_payment = Number(String(row.vacaciones_disfrutadas));
+                    const start_date = new Date(excelDateToJSDate(row.vacaciones_salida));
+                    const end_date = new Date(excelDateToJSDate(row.vacaciones_ingreso));
 
                     //Si hay dias de vacaciones disfrutadas
                     if (vacation_days != 0 && !isNaN(vacation_days)) {
@@ -1007,12 +1004,12 @@ const payrollService = {
 
                         // Pago de vacaciones disfrutadas mayor a 0
                         if (!vacation_payment || isNaN(vacation_payment) || vacation_payment <= 0) {
-                            response.push({ error: `Error en el pago de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                            response.push({ error: `Error en el pago de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor de pago no definido o invalido` });
                             continue;
                         }
 
                         // Fechas de vacaciones disfrutadas validas
-                        if (!start_date || !end_date) {
+                        if (!start_date || !end_date || !row.vacaciones_ingreso || !row.vacaciones_salida) {
                             response.push({ error: `Error en las fechas de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
                             continue;
                         }
@@ -1034,39 +1031,61 @@ const payrollService = {
                 }
 
                 //Incapacidades
-                if (row.ieg && String(row.ieg).trim() != '-') {
-                    const disability_days = Number(String(row.ieg).trim().replaceAll(',', ''));
-                    const disability_payment = Number(String(row.incapacidad_general).trim().replaceAll(',', ''));
-                    const type_disability = Number(String(row.tipo_de_incapacidad).trim().replaceAll(',', ''));
+                if (row.ieg) {
+                    //Prepraro la informacion de la incapacidad
+                    const disability_days = Number(String(row.ieg));
+                    const disability_payment = Number(String(row.incapacidad_general));
+                    const type_disability = Number(String(row.incapacidad_tipo));
+                    const start_date = new Date(excelDateToJSDate(row.incapacidad_fecha_inicial));
+                    const end_date = new Date(excelDateToJSDate(row.incapacidad_fecha_final));
 
+                    //Verifico que los dias de incapacidad sean validos
                     if (isNaN(disability_days) || disability_days <= 0) {
                         response.push({ error: `Error en los dias de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
                         continue;
                     }
 
+                    //Verifico que el pago de incapacidad sea valido
                     if (isNaN(disability_payment) || disability_payment <= 0) {
                         response.push({ error: `Error en el pago de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
                         continue;
                     }
 
-                    // if (isNaN(type_disability) || type_disability > 4 && type_disability < 0) {
-                    //     response.push({ error: `Error en el tipo de incapacidad para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                    //     continue;
-                    // }
+                    //Verifico que las fechas de incapacidad sean validas
+                    if (!start_date || !end_date || !row.incapacidad_fecha_inicial || !row.incapacidad_fecha_final) {
+                        response.push({ error: `Error en las fechas de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
+                        continue;
+                    }
+
+                    //Verifico que el tipo de incapacidad sea valido (1 a 3)
+                    if (isNaN(type_disability) || type_disability > 4 && type_disability < 0) {
+                        response.push({ error: `Error en el tipo de incapacidad para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                        continue;
+                    }
+
+                    //Verificar que la diferencia entre las fechas sea igual a los dias de incapacidad
+                    const diffTime = Math.abs(end_date - start_date);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    if (diffDays !== disability_days) {
+                        response.push({ error: `Error en los dias de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de incapacidad` });
+                        continue;
+                    }
 
                     //Agrego las incapacidades al objeto de devengados
                     accrued.work_disabilities = [];
                     accrued.work_disabilities.push({
                         quantity: disability_days,
                         payment: disability_payment,
-                        type: type_disability
+                        type: type_disability,
+                        start_date: start_date.toISOString().split('T')[0],
+                        end_date: end_date.toISOString().split('T')[0]
                     });
                 }
 
                 //Cesantias
-                if (row.cesantia && String(row.cesantia).trim() != '-' && row.intereses_cesantias && String(row.intereses_cesantias).trim() != '-') {
-                    const payment = Number(String(row.cesantia).trim().replaceAll(',', ''));
-                    const interest_payment = Number(String(row.intereses_cesantias).trim().replaceAll(',', ''));
+                if (row.cesantia &&  row.intereses_cesantias ) {
+                    const payment = Number(String(row.cesantia));
+                    const interest_payment = Number(String(row.intereses_cesantias));
 
                     if (isNaN(payment) || payment <= 0) {
                         response.push({ error: `Error en el pago de cesantias para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
@@ -1091,21 +1110,21 @@ const payrollService = {
                 const deductions = {
                     eps_type_law_deductions_id: 3,
                     pension_type_law_deductions_id: 5,
-                    eps_deduction: Number(row.aportes_salud.trim().replaceAll(',', '')),
-                    pension_deduction: Number(row.aportes_pension.trim().replaceAll(',', '')),
+                    eps_deduction: Number(row.aportes_salud),
+                    pension_deduction: Number(row.aportes_pension),
                     //cooperativa: 0,
                     //fondosp_deduction_SP: 0,
-                    deductions_total: Number(row.total_deducciones.trim().replaceAll(',', ''))
+                    deductions_total: Number(row.total_deducciones)
                 }
 
                 const payment_dates = []
 
                 if (row.fecha_pago1 || row.fecha_pago2) {
-                    if (row.fecha_pago1 && row.fecha_pago1.trim() !== '') payment_dates.push({ payment_date: row.fecha_pago1 });
-                    if (row.fecha_pago2 && row.fecha_pago2.trim() !== '') payment_dates.push({ payment_date: row.fecha_pago2 });
+                    if (row.fecha_pago1 && row.fecha_pago1 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago1) });
+                    if (row.fecha_pago2 && row.fecha_pago2 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago2) });
                 }
 
-                period.worked_time = row.Dias_en_la_empresa ? Number(row.Dias_en_la_empresa.trim().replaceAll(',', '')) : null;
+                period.worked_time = row.Dias_en_la_empresa ? Number(row.Dias_en_la_empresa) : null;
                 period.admision_date = row.fecha_ingreso;
 
                 const payroll = {
@@ -1116,8 +1135,8 @@ const payrollService = {
                     accrued: accrued,
                     payment: payment,
                     deductions: deductions,
-                    consecutive: row.numero ? Number(row.numero.trim().replaceAll(',', '')) : null,
-                    worker_code: row.cedula ? row.cedula.trim().replaceAll(',', '') : null,
+                    consecutive: row.numero ? Number(row.numero) : null,
+                    worker_code: row.cedula ? row.cedula : null,
                     sendmailtome: false,
                     payment_dates: payment_dates,
                     type_document_id: 9,
@@ -1126,7 +1145,7 @@ const payrollService = {
 
                 //mapeo los dias ocupados en el periodo del mes
                 let mes = [];
-                this.arregloDiasOcupados(mes, new Date(period.settlement_start_date));
+                this.arregloDiasOcupados(mes, new Date(excelDateToJSDate(period.settlement_start_date)));
 
                 //Saco el Json para las Horas Extra Diurna
                 const HEDs = this.extraTimeHours([{ type: 'HED', quantity: row.hed, payment: row.horas_extras_diurnas_125 }], 'HEDs', period.settlement_start_date, period.settlement_end_date, mes);
@@ -1221,7 +1240,6 @@ const payrollService = {
                 return { statusCode: 400, message: `El tipo de hora extra '${type}' no es válido`, data: [] };
             }
 
-            //console.log("Iniciando procesamiento de horas extras: ", type);  
             const numberMaximumHoursExtra = {
                 'HED': 3,
                 'HRD': 3,
@@ -1254,23 +1272,19 @@ const payrollService = {
             //me voy a recorrer el arreglo de horas extras y voy a validar que el tipo sea valido
             for (const horaExtra of horasExtrasData) {
                 //saco la cantidad de dias en base a las horas y las horas maximas por dia 
-                let horasRestantes = Number(horaExtra.quantity.trim().replaceAll(',', ''));
+                let horasRestantes = Number(horaExtra.quantity);
                 let laps = horasRestantes <= numberMaximumHoursExtra[horaExtra.type] ? 1 : Math.ceil(horasRestantes / numberMaximumHoursExtra[horaExtra.type]);
 
                 //saco el precio a calcular
-                const payable = Number(horaExtra.payment.trim().replaceAll(',', ''));
+                const payable = Number(horaExtra.payment);
                 let pay = payable / (horaExtra.quantity);
 
                 //obtengo el dia de la semana
                 const initDay = new Date(dateFrom);
-                const diference = ((new Date(dateTo) - new Date(dateFrom)) / (1000 * 3600 * 24)) + 1;
 
-                //console.log("Diferencia de dias entre fecha inicio y fin: ", diference);
-                console.log("adasd", FechasOcupadas.length)
                 let weekDay = initDay.getUTCDay();
 
                 for (let i = 0; horasRestantes > 0 && FechasOcupadas.length > i; i++) {
-                    console.log("Fechas ocupadas: ", FechasOcupadas[i][String(i + 1)]);
                     if (FechasOcupadas[i][String(i + 1)]) continue;
 
                     //ahora armo la lista de dias con las horas extras
@@ -1282,7 +1296,7 @@ const payrollService = {
                     const dayEnd = new Date(dateFrom);
 
                     dayInit.setUTCHours(rangeHoursExtra[horaExtra.type][0], 0, 0);
-                    const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity.trim()) / laps) ? horasRestantes : Math.floor(Number(horaExtra.quantity.trim()) / laps)
+                    const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity) / laps) ? horasRestantes : Math.floor(Number(horaExtra.quantity) / laps)
                     dayEnd.setUTCHours(rangeHoursExtra[horaExtra.type][0] + hoursToAssign, 0, 0);
                     const payable_amount = pay * hoursToAssign;
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN' || horaExtra.type == 'HRD')) {
@@ -1312,7 +1326,6 @@ const payrollService = {
 
 
             }
-            //console.log("Response final horas extras: ", response);
             return { statusCode: 200, message: `Horas extras procesadas correctamente`, data: response };
 
         } catch (error) {
@@ -1360,10 +1373,9 @@ const payrollService = {
             if (!fechas) return;
 
             for (const fecha of fechas) {
-                console.log("------------------------------------");
 
-                const date = new Date(fecha?.date);
-                const date_to = new Date(fecha?.date_to);
+                const date = new Date(excelDateToJSDate(fecha?.date));
+                const date_to = new Date(excelDateToJSDate(fecha?.date_to));
                 const iterador_dias = new Date(Date.UTC(fechaInicioPeriodo.getUTCFullYear(), fechaInicioPeriodo.getUTCMonth(), 1));
 
                 //me recorro los dias y marco como true los ocupados en el rango de fechas
