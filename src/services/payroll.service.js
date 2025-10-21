@@ -941,6 +941,7 @@ const payrollService = {
 
             const response = [];
             for (const row of rows) {
+                console.log(row)
                 if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
                 const worker = {
                     salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')),
