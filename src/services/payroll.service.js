@@ -1070,6 +1070,7 @@ const payrollService = {
                 for (const lap of laps){
                     //
                 }
+                
                 response.push({
                     start_time: new Date().toString(),
                     end_time: new Date().toString(),
