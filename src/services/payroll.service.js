@@ -904,7 +904,7 @@ const payrollService = {
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
             const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 79 };     // r = ultima row activa, CB = (col 79 (0-based) del archivo)
+            const end = { r: ref.e.r, c: 81 };     // r = ultima row activa, CB = (col 79 (0-based) del archivo)
             const rangeStr = XLSX.utils.encode_range(start, end);
 
             //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
@@ -986,7 +986,7 @@ const payrollService = {
                 }
 
                 //Vacaciones disfrutadas
-                if (row.vacaciones_dias && String(row.vacaciones_dias)) {
+                if (row.vacaciones_dias && row.vacaciones_dias) {
                     const vacation_days = Number(String(row.vacaciones_dias));
                     const vacation_payment = Number(String(row.vacaciones_disfrutadas));
                     const start_date = new Date(excelDateToJSDate(row.vacaciones_salida));
@@ -1087,11 +1087,13 @@ const payrollService = {
                     const payment = Number(String(row.cesantia));
                     const interest_payment = Number(String(row.intereses_cesantias));
 
+                    //Verifico que el pago de cesantias sea valido
                     if (isNaN(payment) || payment <= 0) {
                         response.push({ error: `Error en el pago de cesantias para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
                         continue;
                     }
 
+                    //Verifico que el pago de intereses de cesantias sea valido
                     if (isNaN(interest_payment) || interest_payment <= 0) {
                         response.push({ error: `Error en el pago de intereses de cesantias para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
                         continue;
@@ -1105,7 +1107,94 @@ const payrollService = {
                     }
                 }
 
+                //Licencias de maternidad
+                if(row.lm) {
+                    //Prepraro la informacion de la licencia de maternidad
+                    const maternity_days = Number(row.lm);
+                    const maternity_payment = Number(row.licencia_maternidad);
+                    const start_date = new Date(excelDateToJSDate(row.licencia_maternidad_fecha_inicial));
+                    const end_date = new Date(excelDateToJSDate(row.licencia_maternidad_fecha_final));
 
+                    //Verifico que los dias de licencia de maternidad sean validos
+                    if (isNaN(maternity_days) || maternity_days <= 0) {
+                        response.push({ error: `Error en los dias de licencia de maternidad para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
+                        continue;
+                    }
+
+                    //Verifico que el pago de licencia de maternidad sea valido
+                    if (isNaN(maternity_payment) || maternity_payment <= 0) {
+                        response.push({ error: `Error en el pago de licencia de maternidad para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                        continue;
+                    }
+
+                    //Verifico que las fechas de licencia de maternidad sean validas
+                    if (!start_date || !end_date || !row.licencia_maternidad_fecha_inicial || !row.licencia_maternidad_fecha_final) {
+                        response.push({ error: `Error en las fechas de licencia de maternidad para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
+                        continue;
+                    }
+
+                    //Verificar que la diferencia entre las fechas sea igual a los dias de licencia de maternidad
+                    const diffTime = Math.abs(end_date - start_date);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays !== maternity_days) {
+                        response.push({ error: `Error en los dias de licencia de maternidad para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de licencia de maternidad` });
+                        continue;
+                    }
+
+                    //Agrego las licencias de maternidad al objeto de devengados
+                    accrued.maternity_leave = [];
+                    accrued.maternity_leave.push({
+                        quantity: maternity_days,
+                        payment: maternity_payment,
+                        start_date: start_date.toISOString().split('T')[0],
+                        end_date: end_date.toISOString().split('T')[0]
+                    });
+                }
+
+                //Licencias de maternidad
+                if(row.lp) {
+                    //Prepraro la informacion de la licencia de paternidad
+                    const paternity_days = Number(row.lp);
+                    const paternity_payment = Number(row.licencia_paternidad);
+                    const start_date = new Date(excelDateToJSDate(row.licencia_paternidad_fecha_inicial));
+                    const end_date = new Date(excelDateToJSDate(row.licencia_paternidad_fecha_final));
+
+                    //Verifico que los dias de licencia de paternidad sean validos
+                    if (isNaN(paternity_days) || paternity_days <= 0) {
+                        response.push({ error: `Error en los dias de licencia de paternidad para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
+                        continue;
+                    }
+
+                    //Verifico que el pago de licencia de paternidad sea valido
+                    if (isNaN(paternity_payment) || paternity_payment <= 0) {
+                        response.push({ error: `Error en el pago de licencia de paternidad para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                        continue;
+                    }
+
+                    //Verifico que las fechas de licencia de paternidad sean validas
+                    if (!start_date || !end_date || !row.licencia_paternidad_fecha_inicial || !row.licencia_paternidad_fecha_final) {
+                        response.push({ error: `Error en las fechas de licencia de paternidad para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
+                        continue;
+                    }
+
+                    //Verificar que la diferencia entre las fechas sea igual a los dias de licencia de paternidad
+                    const diffTime = Math.abs(end_date - start_date);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays !== paternity_days) {
+                        response.push({ error: `Error en los dias de licencia de paternidad para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de licencia de paternidad` });
+                        continue;
+                    }
+
+                    //Agrego las licencias de paternidad al objeto de devengados
+                    if(!accrued.maternity_leave) accrued.maternity_leave = []
+
+                    accrued.maternity_leave.push({
+                        quantity: paternity_days,
+                        payment: paternity_payment,
+                        start_date: start_date.toISOString().split('T')[0],
+                        end_date: end_date.toISOString().split('T')[0]
+                    });
+                }
 
                 const deductions = {
                     eps_type_law_deductions_id: 3,
@@ -1115,6 +1204,20 @@ const payrollService = {
                     //cooperativa: 0,
                     //fondosp_deduction_SP: 0,
                     deductions_total: Number(row.total_deducciones)
+                }
+
+                //Dotaciones
+                if (row.dotacion) {
+
+                    //Verifico que el pago de dotacion sea valido
+                    const dotation_payment = Number(row.dotacion);
+                    if (isNaN(dotation_payment) || dotation_payment <= 0) {
+                        response.push({ error: `Error en el pago de dotacion para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                        continue;
+                    }
+
+                    //Agrego la dotacion al objeto de devengados
+                    accrued.endowment = String(row.dotacion);
                 }
 
                 const payment_dates = []
@@ -1262,7 +1365,7 @@ const payrollService = {
                 'HED': 1,
                 'HEN': 2,
                 'HRN': 3,
-                'HEDDF': 4,
+                'HRD': 4,
                 'HRDDF': 5,
                 'HENDF': 6,
                 'HRNDF': 7
