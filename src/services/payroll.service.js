@@ -1071,9 +1071,9 @@ const payrollService = {
                 }
 
                 //Saco el Json para las Horas Extra Diurna
-                const HEDDFs = this.extraTimeHours([{ type: 'HED', quantity: row.hed, payment: row.horas_extras_diurnas_125 }], 'HEDDFs', period.settlement_start_date, period.settlement_end_date);
-                if (HEDDFs.data?.length > 0) {
-                    payroll.accrued.HEDDFs = HEDDFs.data;
+                const HEDs = this.extraTimeHours([{ type: 'HED', quantity: row.hed, payment: row.horas_extras_diurnas_125 }], 'HEDs', period.settlement_start_date, period.settlement_end_date);
+                if (HEDs.data?.length > 0) {
+                    payroll.accrued.HEDs = HEDs.data;
                 }
 
                 //Saco el json para las Horas Extra Nocturna
@@ -1081,6 +1081,19 @@ const payrollService = {
                 const HENs = this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENs', period.settlement_start_date, period.settlement_end_date);
                 if (HENs.data?.length > 0) {
                     payroll.accrued.HENs = HENs.data;
+                }
+
+                 //Saco el json para los recargos diurnos dominicales
+                //console.log("Response final: ", this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date));
+                const HRDDFs = this.extraTimeHours([{ type: 'HRDDF', quantity: row.rd, payment: row.recargo_dominical_festivo_180 }], 'HRDDFs', period.settlement_start_date, period.settlement_end_date);
+                if (HRDDFs.data?.length > 0) {
+                    payroll.accrued.HRDDFs = HRDDFs.data;
+                }
+
+                //Saco el json para los recargos nocturnos dominicales
+                const HRNs = this.extraTimeHours([{ type: 'HRN', quantity: row.rn, payment: row.recargo_nocturno_35 }], 'HRNs', period.settlement_start_date, period.settlement_end_date);
+                if (HRNs.data?.length > 0) {
+                    payroll.accrued.HRNs = HRNs.data;
                 }
 
                 response.push(payroll)
@@ -1096,26 +1109,76 @@ const payrollService = {
         }
     },
 
+
+    /**
+     * Construye las jornadas de horas extra dentro de un periodo, distribuyendo las horas
+     * por día según el máximo permitido y calculando los rangos de tiempo en UTC.
+     *
+     * Reglas:
+     * - Tipos soportados en `type`: 'HEDDFs' | 'HENs' | 'HENDFs'.
+     * - Para horaExtra.type 'HED' (diurna) se usa 18:00–21:00 UTC.
+     * - Para horaExtra.type 'HEN' (nocturna) se usa 21:00–06:00 UTC (puede cruzar medianoche).
+     * - Máximo por día configurado internamente (por defecto: 3 horas).
+     *
+     * Notas:
+     * - Usa setUTCHours para evitar desfases por zona horaria del servidor.
+     * - `quantity` es el total de horas a distribuir; `payment` es el total a prorratear.
+     * - Retorna objeto con statusCode/message; en error no lanza excepción.
+     *
+     * @param {Array<{type: 'HED'|'HEN'|'HEDD'|'HEDN'|string, quantity: string|number, payment: string|number}>} horasExtrasData
+     *        Conceptos de horas extra a procesar.
+     * @param {'HEDDFs'|'HENs'|'HENDFs'} type
+     *        Agrupación/colección objetivo a calcular.
+     * @param {string|Date} dateFrom
+     *        Inicio del periodo (inclusive). Acepta Date o 'YYYY-MM-DD'.
+     * @param {string|Date} dateTo
+     *        Fin del periodo (inclusive). Acepta Date o 'YYYY-MM-DD'.
+     * @returns {{
+     *   statusCode: number,
+     *   message: string,
+     *   data: Array<{
+     *     start_time: Date,
+     *     end_time: Date,
+     *     quantity: number,
+     *     payment: number,
+     *     percentage: number
+     *   }>
+     * } | { success: false, error: true, message: string }}
+     *
+     * @example
+     * const res = payrollService.extraTimeHours(
+     *   [{ type: 'HEN', quantity: '10', payment: '170,455' }],
+     *   'HENs',
+     *   '2025-10-01',
+     *   '2025-10-31'
+     * );
+     * if (res.statusCode === 200) {
+     *   console.log(res.data); // [{ start_time: Date, end_time: Date, quantity, payment, percentage }, ...]
+     * }
+     */
     extraTimeHours(horasExtrasData, type, dateFrom, dateTo) {
         try {
             if (!horasExtrasData || horasExtrasData.length == 0) {
                 return { statusCode: 400, message: `No se proporcionaron datos de horas extras`, data: [] };
             }
 
-            if (type !== 'HEDDFs' && type !== 'HENs' && type !== 'HENDFs') {
+            if (type !== 'HRNs' && type !== 'HENs' && type !== 'HRDDFs' && type !== 'HEDs') {
                 return { statusCode: 400, message: `El tipo de hora extra '${type}' no es válido`, data: [] };
             }
 
+            console.log("Iniciando procesamiento de horas extras: ", type);  
             const numberMaximumHoursExtra = {
                 'HED': 3,
                 'HEN': 3,
-                'HEDD': 3,
-                'HEDN': 3,
+                'HRN': 3,
+                'HRDDF': 3,
             }
 
             const rangeHoursExtra = {
                 'HED': [18, 21],
                 'HEN': [21, 6],
+                'HRN': [21, 6],
+                'HRDDF': [8, 21],
             }
 
             const pergentage = {
@@ -1136,35 +1199,32 @@ const payrollService = {
                 let laps = horasRestantes <= numberMaximumHoursExtra[horaExtra.type] ? 1 : Math.ceil(horasRestantes / numberMaximumHoursExtra[horaExtra.type]);
 
                 //saco el precio a calcular
-                const payable =  Number(horaExtra.payment.trim().replaceAll(',', ''));
+                const payable = Number(horaExtra.payment.trim().replaceAll(',', ''));
                 let pay = payable / (horaExtra.quantity);
                 console.log("Procesando hora extra: ", horaExtra.payment);
+
                 //obtengo el dia de la semana
                 const initDay = new Date(dateFrom);
                 let weekDay = initDay.getUTCDay();
-                console.log("Inicio dia semana: ", weekDay, initDay);
 
                 for (let i = 0; horasRestantes > 0; i++) {
+                   
                     //ahora armo la lista de dias con las horas extras
                     //Para asignar necesito saber la fecha de inicio y fin del perido de nomina porque las horas extra vienen sin esa data
                     //para las horas extra entre semana voy a asignar los dias de lunes a sabado
                     //console.log("weekDay: ", weekDay, " i: ", horasRestantes, " fecha: ", new Date(initDay.setDate(initDay.getDate() + i)).toString());
 
+                    //definir los dias y horas para las horas extras
+                    const dayInit = new Date(dateFrom);
+                    const dayEnd = new Date(dateFrom);
+
+                    dayInit.setUTCHours(rangeHoursExtra[horaExtra.type][0], 0, 0);
+                    const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity.trim()) / laps) ? horasRestantes : Math.floor(Number(horaExtra.quantity.trim()) / laps)
+                    dayEnd.setUTCHours(rangeHoursExtra[horaExtra.type][0] + hoursToAssign, 0, 0);
+                    const payable_amount = pay * hoursToAssign;
+                    console.log(horaExtra.type)
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN')) {
-
-                        const dayInit = new Date(dateFrom);
-                        const dayEnd = new Date(dateFrom);
-
-                        if (horaExtra.type == 'HED') dayInit.setUTCHours(rangeHoursExtra['HED'][0], 0, 0); //18:00 que son las 
-                        if (horaExtra.type == 'HEN') dayInit.setUTCHours(rangeHoursExtra['HEN'][0], 0, 0); //21:00
-
-                        const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity.trim()) / laps) ? horasRestantes : Math.floor(Number(horaExtra.quantity.trim()) / laps)
-
-                        if (horaExtra.type == 'HED') dayEnd.setUTCHours(rangeHoursExtra['HED'][0] + hoursToAssign, 0, 0); //21:00 que son las 
-                        if (horaExtra.type == 'HEN') dayEnd.setUTCHours(rangeHoursExtra['HEN'][0] + hoursToAssign, 0, 0); //6:00
-
-                        const payable_amount = pay * hoursToAssign;
-
+                        console.log("Asignando hora extra para dia: ", "------------------------------------");
                         response.push({
                             start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
                             end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
@@ -1175,6 +1235,17 @@ const payrollService = {
 
                         horasRestantes -= Math.floor(horaExtra.quantity / laps);
 
+                    } else if (weekDay == 0 && (horaExtra.type == 'HRDDF' || horaExtra.type == 'HRN')) {
+                        //Domingo
+                         console.log("Asignando hora extra para dia: ", "------------------------------------");
+                        response.push({
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
+                            quantity: hoursToAssign,
+                            payment: payable_amount,
+                            percentage: pergentage[horaExtra.type]
+                        });
+                         horasRestantes -= Math.floor(horaExtra.quantity / laps);
                     }
                     (weekDay + 1) == 7 ? weekDay = 0 : weekDay++;
                 }
