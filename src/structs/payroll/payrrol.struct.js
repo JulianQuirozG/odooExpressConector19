@@ -15,6 +15,7 @@ const payrollStruct = {
     municipio: 'Municipio',
     correo: 'Correo',
     tipo_salario: 'Tipo Salario',
+    pensionado: 'Pensionado',
     horas_mes: 'Horas Mes',
     sueldo_contrato: 'Sueldo Contrato',
     dias: 'dias',
