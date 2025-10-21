@@ -1006,6 +1006,7 @@ const payrollService = {
                             response.push({ error: `Error en los dias de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
                             continue;
                         }
+                        
                         // Pago de vacaciones disfrutadas mayor a 0
                         if (!vacationPayment || isNaN(vacationPayment) || vacationPayment <= 0) {
                             response.push({ error: `Error en el pago de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
