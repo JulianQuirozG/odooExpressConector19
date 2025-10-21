@@ -968,7 +968,7 @@ const payrollService = {
                     account_number: row.numero_cuenta,
                     account_type: row.tipo_cuenta
                 }
-
+                console.log("Procesando pago: ", row);
                 const accrued = {
                     worked_days: Number(row.dias.trim().replaceAll(',', '')) ? Number(row.dias.trim().replaceAll(',', '')) : 0,
                     salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')) ? Number(row.sueldo_contrato.trim().replaceAll(',', '')) : 0,
