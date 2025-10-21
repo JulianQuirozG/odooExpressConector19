@@ -18,6 +18,7 @@ const paramsMunicipalitiesRepository = require("../Repository/params_municipalit
 const paramsPaymentMethodsRepository = require("../Repository/params_payment_methods/params_payment_methods.repository");
 const { ca } = require("zod/locales");
 const { excelDateToJSDate } = require("../utils/attachements.util");
+const { type } = require("../schemas/product.schema");
 
 const payrollService = {
     async getJsonPayrollById(id) {
@@ -905,11 +906,11 @@ const payrollService = {
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
             const start = { r: 8, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 61 };     // r = ultima row activa, AU = (col 46 (0-based) del archivo)
+            const end = { r: ref.e.r, c: 65 };     // r = ultima row activa, AU = (col 46 (0-based) del archivo)
             const rangeStr = XLSX.utils.encode_range(start, end);
 
+            //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
             const KEYS = Object.keys(payrollStruct);
-            console.log("Rango de lectura: ", KEYS);
 
             // Obtiene matriz de filas (arrays), dentro del rango definido
             const rows = XLSX.utils.sheet_to_json(ws, {
@@ -920,38 +921,29 @@ const payrollService = {
                 defval: 0,      // rellena celdas vacías con 0
             });
 
-            console.log(rows);
 
             const startPeriod = { r: 1, c: 13 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
             const endPeriod = { r: 4, c: 13 };     // r = ultima row activa, AU = (col 46 (0-based) del archivo)
             const rangeStrPeriod = XLSX.utils.encode_range(startPeriod, endPeriod);
 
+            //obtengo los datos del periodo que se encuentran en el encabezado (1, 13) - (4, 13)
             const periodData = XLSX.utils.sheet_to_json(ws, {
                 header: 1,
                 range: rangeStrPeriod,
                 defval: 0,      // rellena celdas vacías con 0
             });
 
-            console.log("Datos del periodo: ", periodData);
-
             const period = {
                 issue_date: excelDateToJSDate(periodData[0][0]),
                 settlement_start_date: excelDateToJSDate(periodData[1][0]),
-                settlement_end_date: excelDateToJSDate(periodData[2][0])
+                settlement_end_date: excelDateToJSDate(periodData[2][0]),
             }
 
             const response = [];
             for (const row of rows) {
-                //let payrollEmployee = {};
-                if (!row.numero || row.numero == 0 || row.numero == "TOTALES" ) continue; //si no tiene numero de identificacion, no proceso la fila
-                console.log(row);
+                if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
+
                 console.log("-------------------");
-                console.log("Procesando fila de empleado: ", row[0]);
-                console.log("Proctyyyyy ", typeof row.sueldo_contrato);
-                //Recupero las nominas del empleado
-
-
-
 
                 const worker = {
                     salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')),
@@ -978,14 +970,13 @@ const payrollService = {
                 }
 
 
-
                 const accrued = {
-                    worked_days: row.dias ? Number(row.dias.trim().replaceAll(',', '')) : null,
-                    salary: row.total_devengado ? Number(row.sueldo_contrato.trim().replaceAll(',', '')) : null,
-                    transportation_allowance: row.auxilio_transporte ? Number(row.auxilio_transporte.trim().replaceAll(',', '')) : null,
-                    accrued_total: row.total_devengado ? Number(row.total_devengado.trim().replaceAll(',', '')) : null,
+                    worked_days: Number(row.dias.trim().replaceAll(',', '')) ? Number(row.dias.trim().replaceAll(',', '')) : 0,
+                    salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')) ? Number(row.sueldo_contrato.trim().replaceAll(',', '')) : 0,
+                    transportation_allowance: Number(row.auxilio_transporte.trim().replaceAll(',', '')) ? Number(row.auxilio_transporte.trim().replaceAll(',', '')) : 0,
+                    accrued_total: Number(row.total_devengado.trim().replaceAll(',', '')) ? Number(row.total_devengado.trim().replaceAll(',', '')) : 0,
                 }
-                console.log("Bonos: ", row.otros_devengos_no_salariales, row.otros_devengos_salariales);
+                //console.log("Bonos: ", row.otros_devengos_no_salariales, row.otros_devengos_salariales);
 
                 if (row.otros_devengos_no_salariales && row.otros_devengos_no_salariales.trim() == ' - ' || row.otros_devengos_salariales && row.otros_devengos_salariales.trim() == ' - ') {
                     accrued.bonuses = [];
@@ -1008,30 +999,87 @@ const payrollService = {
                     deductions_total: Number(row.total_deducciones.trim().replaceAll(',', ''))
                 }
 
-                const payroll = {
-                    period: period,
-                    worker: worker,
-                    type_document_id: 9,
-                    prefix: "NE",
-                    worker_code: row.cedula ? Number(row.cedula.trim().replaceAll(',', '')) : null,
-                    consecutive: row.numero ? Number(row.numero.trim().replaceAll(',', '')) : null,
-                    //payroll_period_id: 5,
-                    payment: payment,
-                    accrued: accrued,
-                    deductions: deductions
-                }
-
+                const payment_dates = []
 
                 if (row.fecha_pago1 || row.fecha_pago2) {
-                    const payment_dates = []
-                    if (row.fecha_pago1) payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago1) });
-                    if (row.fecha_pago2) payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago2) });
+                    if (row.fecha_pago1 && row.fecha_pago1.trim() !== '') payment_dates.push({ payment_date: row.fecha_pago1 });
+                    if (row.fecha_pago2 && row.fecha_pago2.trim() !== '') payment_dates.push({ payment_date: row.fecha_pago2 });
                 }
+
+                period.worked_time = row.Dias_en_la_empresa ? Number(row.Dias_en_la_empresa.trim().replaceAll(',', '')) : null;
+                period.admision_date = row.fecha_ingreso;
+
+                const payroll = {
+                    notes: "Nómina reportada desde archivo Excel",
+                    period: period,
+                    prefix: "NI",
+                    worker: worker,
+                    accrued: accrued,
+                    payment: payment,
+                    deductions: deductions,
+                    consecutive: row.numero ? Number(row.numero.trim().replaceAll(',', '')) : null,
+                    worker_code: row.cedula ? Number(row.cedula.trim().replaceAll(',', '')) : null,
+                    sendmailtome: false,
+                    payment_dates: payment_dates,
+                    type_document_id: 9,
+                    payroll_period_id: periodData[3][0] ? Number(periodData[3][0]) : null,
+                }
+
 
                 response.push(payroll)
             }
 
+            console.log("Response final: ", this.extraTimeHours([{ type: 'HED', quantity: 2 ,payment: 10000}], 'HEDDFs', null, null));
+
             return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: response };
+
+        } catch (error) {
+            console.error('Error al conectar con Radian:', error);
+            return { success: false, error: true, message: 'Error interno del servidor' };
+        }
+    },
+
+    async extraTimeHours(horasExtrasData, type, dateFrom, dateTo) {
+        try {
+            if (!horasExtrasData || horasExtrasData.length == 0) {
+                return { statusCode: 400, message: `No se proporcionaron datos de horas extras`, data: [] };
+            }
+
+            if (type !== 'HEDDFs' && type !== 'HENs' && type !== 'HENDFs') {
+                return { statusCode: 400, message: `El tipo de hora extra '${type}' no es válido`, data: [] };
+            }
+            
+            const numberMaximumHoursExtra = {
+                'HED': 3,
+                'HEN': 3,
+                'HEDD': 3,
+                'HEDN': 3,
+            }
+
+            const rangeHoursExtra = {
+                'HED': [18, 21],
+                'HEN': [21, 6],
+            }
+
+            const response = [];
+            //me voy a recorrer el arreglo de horas extras y voy a validar que el tipo sea valido
+            for (const horaExtra of horasExtrasData) {
+                //saco la cantidad de dias 
+                const laps = horaExtra.quantity / numberMaximumHoursExtra[horaExtra.type];
+
+                for (const lap of laps){
+                    //
+                }
+                response.push({
+                    start_time: new Date().toString(),
+                    end_time: new Date().toString(),
+                    quantity: horaExtra.quantity,
+                    payment: horaExtra.payment,
+                });
+
+            }
+            console.log("Response final horas extras: ", response);
+            return { statusCode: 200, message: `Horas extras procesadas correctamente`, data: response };
 
         } catch (error) {
             console.error('Error al conectar con Radian:', error);
