@@ -1123,27 +1123,29 @@ const payrollService = {
                     payroll_period_id: periodData[3][0] ? Number(periodData[3][0]) : null,
                 }
 
+                //mapeo los dias ocupados en el periodo del mes
+                let mes = [];
+                this.arregloDiasOcupados(mes, new Date(period.settlement_start_date));
+
                 //Saco el Json para las Horas Extra Diurna
-                const HEDs = this.extraTimeHours([{ type: 'HED', quantity: row.hed, payment: row.horas_extras_diurnas_125 }], 'HEDs', period.settlement_start_date, period.settlement_end_date);
+                const HEDs = this.extraTimeHours([{ type: 'HED', quantity: row.hed, payment: row.horas_extras_diurnas_125 }], 'HEDs', period.settlement_start_date, period.settlement_end_date, mes);
                 if (HEDs.data?.length > 0) {
                     payroll.accrued.HEDs = HEDs.data;
                 }
 
                 //Saco el json para las Horas Extra Nocturna
-                const HENs = this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENs', period.settlement_start_date, period.settlement_end_date);
+                const HENs = this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENs', period.settlement_start_date, period.settlement_end_date, mes);
                 if (HENs.data?.length > 0) {
                     payroll.accrued.HENs = HENs.data;
                 }
-
-                //Saco el json para los recargos diurnos dominicales
-                //console.log("Response final: ", this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date));
-                const HRDDFs = this.extraTimeHours([{ type: 'HRDDF', quantity: row.rd, payment: row.recargo_dominical_festivo_180 }], 'HRDDFs', period.settlement_start_date, period.settlement_end_date);
-                if (HRDDFs.data?.length > 0) {
-                    payroll.accrued.HRDDFs = HRDDFs.data;
+                //Saco el json para los recargos dominicales diurnos
+                const HRDs = this.extraTimeHours([{ type: 'HRD', quantity: row.rd, payment: row.recargo_dominical_festivo_180 }], 'HRDs', period.settlement_start_date, period.settlement_end_date, mes);
+                if (HRDs.data?.length > 0) {
+                    payroll.accrued.HRDs = HRDs.data;
                 }
 
                 //Saco el json para los recargos nocturnos dominicales
-                const HRNs = this.extraTimeHours([{ type: 'HRN', quantity: row.rn, payment: row.recargo_nocturno_35 }], 'HRNs', period.settlement_start_date, period.settlement_end_date);
+                const HRNs = this.extraTimeHours([{ type: 'HRN', quantity: row.rn, payment: row.recargo_nocturno_35 }], 'HRNs', period.settlement_start_date, period.settlement_end_date, mes);
                 if (HRNs.data?.length > 0) {
                     payroll.accrued.HRNs = HRNs.data;
                 }
@@ -1208,19 +1210,20 @@ const payrollService = {
      *   console.log(res.data); // [{ start_time: Date, end_time: Date, quantity, payment, percentage }, ...]
      * }
      */
-    extraTimeHours(horasExtrasData, type, dateFrom, dateTo) {
+    extraTimeHours(horasExtrasData, type, dateFrom, dateTo, FechasOcupadas) {
         try {
             if (!horasExtrasData || horasExtrasData.length == 0) {
                 return { statusCode: 400, message: `No se proporcionaron datos de horas extras`, data: [] };
             }
 
-            if (type !== 'HRNs' && type !== 'HENs' && type !== 'HRDDFs' && type !== 'HEDs') {
+            if (type !== 'HRNs' && type !== 'HENs' && type !== 'HRDDFs' && type !== 'HEDs' && type !== 'HRDs') {
                 return { statusCode: 400, message: `El tipo de hora extra '${type}' no es válido`, data: [] };
             }
 
             //console.log("Iniciando procesamiento de horas extras: ", type);  
             const numberMaximumHoursExtra = {
                 'HED': 3,
+                'HRD': 3,
                 'HEN': 3,
                 'HRN': 3,
                 'HRDDF': 3,
@@ -1228,6 +1231,7 @@ const payrollService = {
 
             const rangeHoursExtra = {
                 'HED': [18, 21],
+                'HRD': [18, 21],
                 'HEN': [21, 6],
                 'HRN': [21, 6],
                 'HRDDF': [8, 21],
@@ -1258,9 +1262,15 @@ const payrollService = {
 
                 //obtengo el dia de la semana
                 const initDay = new Date(dateFrom);
+                const diference = ((new Date(dateTo) - new Date(dateFrom)) / (1000 * 3600 * 24)) + 1;
+
+                //console.log("Diferencia de dias entre fecha inicio y fin: ", diference);
+                console.log("adasd", FechasOcupadas.length)
                 let weekDay = initDay.getUTCDay();
 
-                for (let i = 0; horasRestantes > 0; i++) {
+                for (let i = 0; horasRestantes > 0 && FechasOcupadas.length > i; i++) {
+                    console.log("Fechas ocupadas: ", FechasOcupadas[i][String(i + 1)]);
+                    if (FechasOcupadas[i][String(i + 1)]) continue;
 
                     //ahora armo la lista de dias con las horas extras
                     //Para asignar necesito saber la fecha de inicio y fin del perido de nomina porque las horas extra vienen sin esa data
@@ -1274,7 +1284,7 @@ const payrollService = {
                     const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity.trim()) / laps) ? horasRestantes : Math.floor(Number(horaExtra.quantity.trim()) / laps)
                     dayEnd.setUTCHours(rangeHoursExtra[horaExtra.type][0] + hoursToAssign, 0, 0);
                     const payable_amount = pay * hoursToAssign;
-                    if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN')) {
+                    if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN' || horaExtra.type == 'HRD')) {
                         response.push({
                             start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
                             end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
@@ -1307,6 +1317,66 @@ const payrollService = {
         } catch (error) {
             console.error('Error al conectar con Radian:', error);
             return { success: false, error: true, message: 'Error interno del servidor' };
+        }
+    },
+
+    /**
+     * Inicializa y marca días ocupados de un mes en UTC.
+     *
+     * - Recorre el mes de `fechaInicioPeriodo` (UTC) del día 1 al último.
+     * - Llena `mes` con objetos { 'día': boolean } empezando en false.
+     * - Por cada rango en `fechas` ([date, date_to]), marca true los días incluidos.
+     *
+     * Nota: La función muta el arreglo `mes` (lo llena/actualiza). Usa fechas a las 00:00:00.000Z.
+     *
+     * @param {Array<Record<string, boolean>>} mes
+     *        Arreglo a mutar. Recibirá elementos tipo { '1': false }, { '2': true }, ... hasta 28–31.
+     * @param {Date} fechaInicioPeriodo
+     *        Fecha base para determinar año/mes (se usa su año/mes en UTC).
+     * @param {Array<{date: string|Date, date_to: string|Date}>} [fechas=[]]
+     *        Rangos de fechas (inclusive) a marcar como ocupadas dentro del mes objetivo.
+     * @returns {void | { success: false, error: true, message: string, data: [] }}
+     *        No retorna nada en éxito; en error retorna objeto con detalle.
+     *
+     * @example
+     * const mes = [];
+     * arregloDiasOcupados(
+     *   mes,
+     *   new Date('2025-10-01'),
+     *   [{ date: '2025-10-05', date_to: '2025-10-08' }]
+     * );
+     * // mes[4]['5'] === true, mes[5]['6'] === true, mes[6]['7'] === true, mes[7]['8'] === true
+     */
+    arregloDiasOcupados(mes, fechaInicioPeriodo, fechas = []) {
+        try {
+
+            const primero_de_mes = new Date(Date.UTC(fechaInicioPeriodo.getUTCFullYear(), fechaInicioPeriodo.getUTCMonth(), 1));
+
+            for (let d = primero_de_mes; d <= new Date(Date.UTC(fechaInicioPeriodo.getUTCFullYear(), fechaInicioPeriodo.getUTCMonth() + 1, 0)); d.setUTCDate(d.getUTCDate() + 1)) {
+                mes.push({ [d.getUTCDate()]: false });
+            }
+
+            if (!fechas) return;
+
+            for (const fecha of fechas) {
+                console.log("------------------------------------");
+
+                const date = new Date(fecha?.date);
+                const date_to = new Date(fecha?.date_to);
+                const iterador_dias = new Date(Date.UTC(fechaInicioPeriodo.getUTCFullYear(), fechaInicioPeriodo.getUTCMonth(), 1));
+
+                //me recorro los dias y marco como true los ocupados en el rango de fechas
+                for (let d = iterador_dias; d <= new Date(Date.UTC(fechaInicioPeriodo.getUTCFullYear(), fechaInicioPeriodo.getUTCMonth() + 1, 0)); d.setUTCDate(d.getUTCDate() + 1)) {
+                    if (d >= date && d <= date_to) {
+                        mes[d.getUTCDate() - 1][`${d.getUTCDate()}`] = true;
+                    }
+                }
+
+            }
+
+        } catch (error) {
+            console.error('Error al conectar con Radian:', error);
+            return { success: false, error: true, message: 'Error interno del servidor', data: [] };
         }
     }
 }
