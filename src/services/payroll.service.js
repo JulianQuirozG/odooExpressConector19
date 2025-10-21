@@ -894,7 +894,7 @@ const payrollService = {
 
             //obtengo la hoja Nomina
             const sheetName = workbook.SheetNames[2];
-            console.log(sheetName);
+            //console.log(sheetName);
 
 
             if (!sheetName) return { statusCode: 400, message: `Hoja Nomina no encontrada`, data: [] };
@@ -906,7 +906,7 @@ const payrollService = {
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
             const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 65 };     // r = ultima row activa, BN = (col 65 (0-based) del archivo)
+            const end = { r: ref.e.r, c: 66 };     // r = ultima row activa, BN = (col 65 (0-based) del archivo)
             const rangeStr = XLSX.utils.encode_range(start, end);
 
             //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
@@ -942,9 +942,8 @@ const payrollService = {
             const response = [];
             for (const row of rows) {
                 if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
-                console.log("Procesando fila de nomina: ", row);
+                console.log("Procesando fila de nomina: ");
                 console.log("-------------------");
-
                 const worker = {
                     salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')),
                     address: row.direccion ? row.direccion.trim() : '',
@@ -955,8 +954,8 @@ const payrollService = {
                     type_worker_id: row.tipo_empleado ? Number(row.tipo_empleado.trim()) : null,
                     municipality_id: row.municipio ? Number(row.municipio.trim()) : null,
                     type_contract_id: row.tipo_contrato ? Number(row.tipo_contrato.trim()) : null,
-                    high_risk_pension: false,
-                    integral_salarary: false,
+                    high_risk_pension: row.pensionado?.trim() == 'Si' ? true : false,
+                    integral_salarary: row.tipo_salario?.trim() == 'Integral' ? true : false,
                     sub_type_worker_id: row.subtipo_empleado ? Number(row.subtipo_empleado.trim()) : null,
                     identification_number: row.cedula ? row.cedula.trim().replaceAll(',', '') : '',
                     payroll_type_document_identification_id: row.tipo_documento ? Number(row.tipo_documento.trim().replaceAll(',', '')) : null,
@@ -1166,7 +1165,7 @@ const payrollService = {
                 return { statusCode: 400, message: `El tipo de hora extra '${type}' no es válido`, data: [] };
             }
 
-            console.log("Iniciando procesamiento de horas extras: ", type);  
+            //console.log("Iniciando procesamiento de horas extras: ", type);  
             const numberMaximumHoursExtra = {
                 'HED': 3,
                 'HEN': 3,
@@ -1179,6 +1178,8 @@ const payrollService = {
                 'HEN': [21, 6],
                 'HRN': [21, 6],
                 'HRDDF': [8, 21],
+                'HEDDF': [18, 21],
+                'HENDF': [21, 6],
             }
 
             const pergentage = {
@@ -1247,7 +1248,7 @@ const payrollService = {
 
 
             }
-            console.log("Response final horas extras: ", response);
+            //console.log("Response final horas extras: ", response);
             return { statusCode: 200, message: `Horas extras procesadas correctamente`, data: response };
 
         } catch (error) {
