@@ -1065,7 +1065,7 @@ const payrollService = {
 
                     //Verificar que la diferencia entre las fechas sea igual a los dias de incapacidad
                     const diffTime = Math.abs(end_date - start_date);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                     if (diffDays !== disability_days) {
                         response.push({ error: `Error en los dias de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de incapacidad` });
                         continue;
@@ -1083,7 +1083,7 @@ const payrollService = {
                 }
 
                 //Cesantias
-                if (row.cesantia &&  row.intereses_cesantias ) {
+                if (row.cesantia && row.intereses_cesantias) {
                     const payment = Number(String(row.cesantia));
                     const interest_payment = Number(String(row.intereses_cesantias));
 
@@ -1261,16 +1261,35 @@ const payrollService = {
                 if (HENs.data?.length > 0) {
                     payroll.accrued.HENs = HENs.data;
                 }
-                //Saco el json para los recargos dominicales diurnos
-                const HRDs = this.extraTimeHours([{ type: 'HRD', quantity: row.rd, payment: row.recargo_dominical_festivo_180 }], 'HRDs', period.settlement_start_date, period.settlement_end_date, mes);
-                if (HRDs.data?.length > 0) {
-                    payroll.accrued.HRDs = HRDs.data;
-                }
 
                 //Saco el json para los recargos nocturnos dominicales
                 const HRNs = this.extraTimeHours([{ type: 'HRN', quantity: row.rn, payment: row.recargo_nocturno_35 }], 'HRNs', period.settlement_start_date, period.settlement_end_date, mes);
                 if (HRNs.data?.length > 0) {
                     payroll.accrued.HRNs = HRNs.data;
+                }
+
+                //Saco el json para las horas extra dominicales diurnos
+                const HEDDFs = this.extraTimeHours([{ type: 'HEDDF', quantity: row.hedd, payment: row.horas_extras_diurna_dominical_205 }], 'HEDDFs', period.settlement_start_date, period.settlement_end_date, mes);
+                if (HEDDFs.data?.length > 0) {
+                    payroll.accrued.HEDDFs = HEDDFs.data;
+                }
+
+                //Saco el json para los recargos dominicales diurnos
+                const HRDDFs = this.extraTimeHours([{ type: 'HRDDF', quantity: row.rd, payment: row.recargo_dominical_festivo_180 }], 'HRDDFs', period.settlement_start_date, period.settlement_end_date, mes);
+                if (HRDDFs.data?.length > 0) {
+                    payroll.accrued.HRDDFs = HRDDFs.data;
+                }
+
+                //Saco el json para los horas extra dominicales nocturnos
+                const HENDFs = this.extraTimeHours([{ type: 'HENDF', quantity: row.hedn, payment: row.horas_extras_nocturna_dominical_255 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date, mes);
+                if (HENDFs.data?.length > 0) {
+                    payroll.accrued.HENDFs = HENDFs.data;
+                }
+
+                //Saco el json para los recargos dominicales nocturnos
+                const HRNDFs = this.extraTimeHours([{ type: 'HRNDF', quantity: row.rdn, payment: row.recargo_dominical_festivo_nocturno_215 }], 'HRNDFs', period.settlement_start_date, period.settlement_end_date, mes);
+                if (HRNDFs.data?.length > 0) {
+                    payroll.accrued.HRNDFs = HRNDFs.data;
                 }
 
                 response.push(payroll)
@@ -1339,26 +1358,29 @@ const payrollService = {
                 return { statusCode: 400, message: `No se proporcionaron datos de horas extras`, data: [] };
             }
 
-            if (type !== 'HRNs' && type !== 'HENs' && type !== 'HRDDFs' && type !== 'HEDs' && type !== 'HRDs') {
+            if (type !== 'HRNs' && type !== 'HENs' && type !== 'HRDDFs' && type !== 'HEDs' && type !== 'HRDs' && type !== 'HEDDFs' && type !== 'HENDFs' && type !== 'HRNDFs') {
                 return { statusCode: 400, message: `El tipo de hora extra '${type}' no es válido`, data: [] };
             }
 
             const numberMaximumHoursExtra = {
                 'HED': 3,
-                'HRD': 3,
                 'HEN': 3,
                 'HRN': 3,
+                'HEDDF': 3,
                 'HRDDF': 3,
+                'HENDF': 3,
+                'HRNDF': 3,
+
             }
 
             const rangeHoursExtra = {
                 'HED': [18, 21],
-                'HRD': [18, 21],
                 'HEN': [21, 6],
                 'HRN': [21, 6],
+                'HEDDF': [8, 21],
                 'HRDDF': [8, 21],
-                'HEDDF': [18, 21],
                 'HENDF': [21, 6],
+                'HRNDF': [21, 6],
             }
 
             const pergentage = {
@@ -1402,7 +1424,7 @@ const payrollService = {
                     const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity) / laps) ? horasRestantes : Math.floor(Number(horaExtra.quantity) / laps)
                     dayEnd.setUTCHours(rangeHoursExtra[horaExtra.type][0] + hoursToAssign, 0, 0);
                     const payable_amount = pay * hoursToAssign;
-                    if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN' || horaExtra.type == 'HRD')) {
+                    if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN')) {
                         response.push({
                             start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
                             end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
@@ -1413,7 +1435,7 @@ const payrollService = {
 
                         horasRestantes -= Math.floor(horaExtra.quantity / laps);
 
-                    } else if (weekDay == 0 && (horaExtra.type == 'HRDDF' || horaExtra.type == 'HRN')) {
+                    } else if (weekDay == 0 && (horaExtra.type == 'HRDDF' || horaExtra.type == 'HEDDF' || horaExtra.type == 'HENDF' || horaExtra.type == 'HRNDF')) {
                         //Domingo
                         response.push({
                             start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
