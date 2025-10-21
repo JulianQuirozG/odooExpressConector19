@@ -969,23 +969,24 @@ const payrollService = {
                     account_type: row.tipo_cuenta
                 }
 
-
                 const accrued = {
                     worked_days: Number(row.dias.trim().replaceAll(',', '')) ? Number(row.dias.trim().replaceAll(',', '')) : 0,
                     salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')) ? Number(row.sueldo_contrato.trim().replaceAll(',', '')) : 0,
                     transportation_allowance: Number(row.auxilio_transporte.trim().replaceAll(',', '')) ? Number(row.auxilio_transporte.trim().replaceAll(',', '')) : 0,
                     accrued_total: Number(row.total_devengado.trim().replaceAll(',', '')) ? Number(row.total_devengado.trim().replaceAll(',', '')) : 0,
                 }
-                //console.log("Bonos: ", row.otros_devengos_no_salariales, row.otros_devengos_salariales);
 
-                if (row.otros_devengos_no_salariales && row.otros_devengos_no_salariales.trim() == ' - ' || row.otros_devengos_salariales && row.otros_devengos_salariales.trim() == ' - ') {
+                //Bonos salariales y no salariales
+                const devengados_salariales = Number(row.otros_devengos_no_salariales.trim().replaceAll(',', ''));
+                const devengados_no_salariales = Number(row.otros_devengos_salariales.trim().replaceAll(',', ''));
+                if (row.otros_devengos_no_salariales &&  !isNaN(devengados_salariales) || row.otros_devengos_salariales && !isNaN(devengados_no_salariales)) {
                     accrued.bonuses = [];
 
                     row.otros_devengos_no_salariales ? accrued.bonuses.push({
-                        non_salary_bonus: Number(row.otros_devengos_no_salariales.trim().replaceAll(',', ''))
+                        non_salary_bonus: devengados_salariales
                     }) : null;
                     row.otros_devengos_salariales ? accrued.bonuses.push({
-                        salary_bonus: Number(row.otros_devengos_salariales.trim().replaceAll(',', ''))
+                        salary_bonus: devengados_no_salariales
                     }) : null;
                 }
 
@@ -996,7 +997,6 @@ const payrollService = {
                     const vacationPayment = Number(row.vacaciones.trim().replaceAll(',', ''));
                     const start_date = new Date(row.vacaciones_salida);
                     const end_date = new Date(row.vacaciones_ingreso);
-                    console.log("Vacaciones disfrutadas: ", vacationDays, vacationPayment, start_date, end_date);
 
                     if (vacationDays != 0 && !isNaN(vacationDays)) {
                         accrued.common_vacation = [];
@@ -1078,7 +1078,6 @@ const payrollService = {
                 }
 
                 //Saco el json para las Horas Extra Nocturna
-                //console.log("Response final: ", this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date));
                 const HENs = this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENs', period.settlement_start_date, period.settlement_end_date);
                 if (HENs.data?.length > 0) {
                     payroll.accrued.HENs = HENs.data;
@@ -1139,17 +1138,15 @@ const payrollService = {
                 //saco el precio a calcular
                 const payable =  Number(horaExtra.payment.trim().replaceAll(',', ''));
                 let pay = payable / (horaExtra.quantity);
-                console.log("Procesando hora extra: ", horaExtra.payment);
+
                 //obtengo el dia de la semana
                 const initDay = new Date(dateFrom);
                 let weekDay = initDay.getUTCDay();
-                console.log("Inicio dia semana: ", weekDay, initDay);
 
                 for (let i = 0; horasRestantes > 0; i++) {
                     //ahora armo la lista de dias con las horas extras
                     //Para asignar necesito saber la fecha de inicio y fin del perido de nomina porque las horas extra vienen sin esa data
                     //para las horas extra entre semana voy a asignar los dias de lunes a sabado
-                    //console.log("weekDay: ", weekDay, " i: ", horasRestantes, " fecha: ", new Date(initDay.setDate(initDay.getDate() + i)).toString());
 
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN')) {
 
