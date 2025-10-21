@@ -906,7 +906,7 @@ const payrollService = {
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
             const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 66 };     // r = ultima row activa, BN = (col 65 (0-based) del archivo)
+            const end = { r: ref.e.r, c: 79 };     // r = ultima row activa, CB = (col 79 (0-based) del archivo)
             const rangeStr = XLSX.utils.encode_range(start, end);
 
             //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
