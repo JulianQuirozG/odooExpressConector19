@@ -942,7 +942,7 @@ const payrollService = {
             const response = [];
             for (const row of rows) {
                 if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
-
+                console.log("Procesando fila de nomina: ", row);
                 console.log("-------------------");
 
                 const worker = {
@@ -987,6 +987,51 @@ const payrollService = {
                     row.otros_devengos_salariales ? accrued.bonuses.push({
                         salary_bonus: Number(row.otros_devengos_salariales.trim().replaceAll(',', ''))
                     }) : null;
+                }
+
+                //Vacaciones disfrutadas
+                if (row.vacaciones_disfrutadas) {
+                    //Si hay dias de vacaciones disfrutadas
+                    const vacationDays = Number(row.vacaciones_disfrutadas.trim().replaceAll(',', ''));
+                    const vacationPayment = Number(row.vacaciones.trim().replaceAll(',', ''));
+                    const start_date = new Date(row.vacaciones_salida);
+                    const end_date = new Date(row.vacaciones_ingreso);
+
+
+                    if (vacationDays != 0 && vacationDays != null) {
+                        accrued.common_vacation = [];
+                        //Verificamos si existen los campos en el excel
+                        //Dias de vacaciones disfrutadas mayores a 0
+                        if(vacationDays <= 0){
+                            response.push({ error: `Error en los dias de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
+                            continue;
+                        }
+                        // Pago de vacaciones disfrutadas mayor a 0
+                        if (!vacationPayment || isNaN(vacationPayment) || vacationPayment <= 0) {
+                            response.push({ error: `Error en el pago de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                            continue;
+                        }
+
+                        // Fechas de vacaciones disfrutadas validas
+                        if (!start_date || !end_date) {
+                            response.push({ error: `Error en las fechas de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
+                            continue;
+                        }
+
+                        // Fecha de inicio menor a fecha de fin
+                        if (start_date > end_date) {
+                            response.push({ error: `Error en las fechas de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, la fecha de inicio es mayor a la fecha de fin` });
+                            continue;
+                        }
+
+                        // Agrego las vacaciones disfrutadas al objeto de devengados
+                        accrued.common_vacation.push({
+                            quantity: vacationDays,
+                            payment: vacationPayment,
+                            start_date: start_date.toISOString().split('T')[0],
+                            end_date: end_date.toISOString().split('T')[0]
+                        });
+                    }
                 }
 
                 const deductions = {
