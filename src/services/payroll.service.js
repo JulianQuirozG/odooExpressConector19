@@ -1078,6 +1078,7 @@ const payrollService = {
                 }
                 
                 //Saco el json para las Horas Extra Nocturna
+                console.log(row.head)
                 console.log("Response final: ", this.extraTimeHours([{ type: 'HEN', quantity: row.hed, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date));
                 const HENDFs = this.extraTimeHours([{ type: 'HEN', quantity: row.hed, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date);
                 if (HENDFs.data?.length > 0) {
