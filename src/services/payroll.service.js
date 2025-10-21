@@ -1224,7 +1224,6 @@ const payrollService = {
                     const payable_amount = pay * hoursToAssign;
                     console.log(horaExtra.type)
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN')) {
-                        console.log("Asignando hora extra para dia: ", "------------------------------------");
                         response.push({
                             start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
                             end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
@@ -1237,7 +1236,6 @@ const payrollService = {
 
                     } else if (weekDay == 0 && (horaExtra.type == 'HRDDF' || horaExtra.type == 'HRN')) {
                         //Domingo
-                         console.log("Asignando hora extra para dia: ", "------------------------------------");
                         response.push({
                             start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
                             end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
