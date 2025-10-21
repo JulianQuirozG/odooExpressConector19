@@ -1071,11 +1071,23 @@ const payrollService = {
                     payroll_period_id: periodData[3][0] ? Number(periodData[3][0]) : null,
                 }
 
+                //Saco el Json para las Horas Extra Diurna
+                const HEDDFs = this.extraTimeHours([{ type: 'HED', quantity: row.hed, payment: row.horas_extras_diurnas_125 }], 'HEDDFs', period.settlement_start_date, period.settlement_end_date);
+                if (HEDDFs.data?.length > 0) {
+                    payroll.HEDDFs = HEDDFs.data;
+                }
+                
+                //Saco el json para las Horas Extra Nocturna
+                console.log("Response final: ", this.extraTimeHours([{ type: 'HEN', quantity: row.hed, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date));
+                const HENDFs = this.extraTimeHours([{ type: 'HEN', quantity: row.hed, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date);
+                if (HENDFs.data?.length > 0) {
+                    payroll.HENDFs = HENDFs.data;
+                }
 
                 response.push(payroll)
             }
 
-            console.log("Response final: ", this.extraTimeHours([{ type: 'HED', quantity: 2, payment: 10000 }], 'HEDDFs', period.settlement_start_date, period.settlement_end_date));
+
 
             return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: response };
 
@@ -1085,7 +1097,7 @@ const payrollService = {
         }
     },
 
-    async extraTimeHours(horasExtrasData, type, dateFrom, dateTo) {
+    extraTimeHours(horasExtrasData, type, dateFrom, dateTo) {
         try {
             if (!horasExtrasData || horasExtrasData.length == 0) {
                 return { statusCode: 400, message: `No se proporcionaron datos de horas extras`, data: [] };
@@ -1107,6 +1119,16 @@ const payrollService = {
                 'HEN': [21, 6],
             }
 
+            const pergentage = {
+                'HED': 1,
+                'HEN': 2,
+                'HRN': 3,
+                'HEDDF': 4,
+                'HRDDF': 5,
+                'HENDF': 6,
+                'HRNDF':7
+            }
+
             const response = [];
             //me voy a recorrer el arreglo de horas extras y voy a validar que el tipo sea valido
             for (const horaExtra of horasExtrasData) {
@@ -1119,35 +1141,42 @@ const payrollService = {
 
                 //obtengo el dia de la semana
                 const initDay = new Date(dateFrom);
-                let weekDay = initDay.getDay();
+                let weekDay = initDay.getUTCDay();
+                console.log("Inicio dia semana: ", weekDay, initDay);
 
                 for (let i = 0; horasRestantes > 0; i++) {
                     //ahora armo la lista de dias con las horas extras
                     //Para asignar necesito saber la fecha de inicio y fin del perido de nomina porque las horas extra vienen sin esa data
                     //para las horas extra entre semana voy a asignar los dias de lunes a sabado
-                    console.log("weekDay: ", weekDay, " i: ", horasRestantes, " fecha: ", new Date(initDay.setDate(initDay.getDate() + i)).toString());
+                    //console.log("weekDay: ", weekDay, " i: ", horasRestantes, " fecha: ", new Date(initDay.setDate(initDay.getDate() + i)).toString());
 
-                    if (weekDay != 6 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN')) {
-                        console.log("Asignando horas extra entre semana", horaExtra.type);
+                    if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN')) {
+                        const dayInit = new Date(dateFrom);
+                        const dayEnd = new Date(dateFrom);
+
+                        if (horaExtra.type == 'HED') dayInit.setUTCHours(rangeHoursExtra['HED'][0], 0, 0); //18:00 que son las 
+                        if (horaExtra.type == 'HEN') dayInit.setUTCHours(rangeHoursExtra['HEN'][0], 0, 0); //21:00
+
+                        const hoursToAssign = horasRestantes < Math.floor(horaExtra.quantity / laps) ? horasRestantes : Math.floor(horaExtra.quantity / laps)
+
+                        if (horaExtra.type == 'HED') dayEnd.setUTCHours(rangeHoursExtra['HED'][0] + hoursToAssign, 0, 0); //21:00 que son las 
+                        if (horaExtra.type == 'HEN') dayEnd.setUTCHours(rangeHoursExtra['HEN'][0] + hoursToAssign, 0, 0); //6:00
+
                         response.push({
-                            start_time: new Date(initDay.setDate(initDay.getDate() + i)).toString(),
-                            end_time: new Date(initDay.setDate(initDay.getDate() + i)).toString(),
-                            quantity: horasRestantes > laps ? laps : horasRestantes,
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
+                            quantity: hoursToAssign,
                             payment: horaExtra.payment,
+                            percentage: pergentage[horaExtra.type]
                         });
+
                         pay -= horaExtra.payment;
-                        horasRestantes -= laps;
+                        horasRestantes -= Math.floor(horaExtra.quantity / laps);
 
                     }
                     (weekDay + 1) == 7 ? weekDay = 0 : weekDay++;
                 }
 
-                response.push({
-                    start_time: new Date().toString(),
-                    end_time: new Date().toString(),
-                    quantity: horaExtra.quantity,
-                    payment: horaExtra.payment,
-                });
 
             }
             console.log("Response final horas extras: ", response);
