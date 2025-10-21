@@ -902,11 +902,11 @@ const payrollService = {
 
             // Procesar cada hoja del libro
 
-            //defino el rango de la A a la AU
+            //defino el rango de la A a la BN
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
-            const start = { r: 8, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 65 };     // r = ultima row activa, AU = (col 46 (0-based) del archivo)
+            const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
+            const end = { r: ref.e.r, c: 65 };     // r = ultima row activa, BN = (col 65 (0-based) del archivo)
             const rangeStr = XLSX.utils.encode_range(start, end);
 
             //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
@@ -963,7 +963,7 @@ const payrollService = {
                 }
 
                 const payment = {
-                    payment_method_id: row.metodo_pago,
+                    payment_method_id: Number(row.metodo_pago.trim().replaceAll(',', '')) ? Number(row.metodo_pago.trim().replaceAll(',', '')) : null,
                     bank_name: row.banco,
                     account_number: row.numero_cuenta,
                     account_type: row.tipo_cuenta
@@ -1018,7 +1018,7 @@ const payrollService = {
                     payment: payment,
                     deductions: deductions,
                     consecutive: row.numero ? Number(row.numero.trim().replaceAll(',', '')) : null,
-                    worker_code: row.cedula ? Number(row.cedula.trim().replaceAll(',', '')) : null,
+                    worker_code: row.cedula ? row.cedula.trim().replaceAll(',', '') : null,
                     sendmailtome: false,
                     payment_dates: payment_dates,
                     type_document_id: 9,
@@ -1029,7 +1029,7 @@ const payrollService = {
                 response.push(payroll)
             }
 
-            console.log("Response final: ", this.extraTimeHours([{ type: 'HED', quantity: 2 ,payment: 10000}], 'HEDDFs', null, null));
+            console.log("Response final: ", this.extraTimeHours([{ type: 'HED', quantity: 2, payment: 10000 }], 'HEDDFs', period.settlement_start_date, period.settlement_end_date));
 
             return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: response };
 
@@ -1048,7 +1048,7 @@ const payrollService = {
             if (type !== 'HEDDFs' && type !== 'HENs' && type !== 'HENDFs') {
                 return { statusCode: 400, message: `El tipo de hora extra '${type}' no es válido`, data: [] };
             }
-            
+
             const numberMaximumHoursExtra = {
                 'HED': 3,
                 'HEN': 3,
@@ -1064,18 +1064,38 @@ const payrollService = {
             const response = [];
             //me voy a recorrer el arreglo de horas extras y voy a validar que el tipo sea valido
             for (const horaExtra of horasExtrasData) {
-                //saco la cantidad de dias 
-                const laps = horaExtra.quantity / numberMaximumHoursExtra[horaExtra.type];
+                //saco la cantidad de dias en base a las horas y las horas maximas por dia 
+                let laps = horaExtra.quantity <= numberMaximumHoursExtra[horaExtra.type] ? horaExtra.quantity : Math.floor(horaExtra.quantity / numberMaximumHoursExtra[horaExtra.type]);
+                let horasRestantes = horaExtra.quantity;
 
-                for (const lap of laps){
-                    //
+                //saco el precio a calcular
+                let pay = horaExtra.payment;
+
+                //obtengo el dia de la semana
+                const initDay = new Date(dateFrom);
+                let weekDay = initDay.getDay();
+
+                for (let i = 0; horasRestantes > 0; i++) {
+                    //ahora armo la lista de dias con las horas extras
+                    //Para asignar necesito saber la fecha de inicio y fin del perido de nomina porque las horas extra vienen sin esa data
+                    //para las horas extra entre semana voy a asignar los dias de lunes a sabado
+                    console.log("weekDay: ", weekDay, " i: ", horasRestantes, " fecha: ", new Date(initDay.setDate(initDay.getDate() + i)).toString());
+                    
+                    if (weekDay != 6 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN')) {
+                        console.log("Asignando horas extra entre semana", horaExtra.type);
+                        response.push({
+                            start_time: new Date(initDay.setDate(initDay.getDate() + i)).toString(),
+                            end_time: new Date(initDay.setDate(initDay.getDate() + i)).toString(),
+                            quantity: horasRestantes > laps ? laps : horasRestantes,
+                            payment: horaExtra.payment,
+                        });
+                        pay -= horaExtra.payment;
+                        horasRestantes -= laps;
+
+                    } 
+                    (weekDay+1) == 7 ? weekDay = 0 : weekDay++;
                 }
-                response.push({
-                    start_time: new Date().toString(),
-                    end_time: new Date().toString(),
-                    quantity: horaExtra.quantity,
-                    payment: horaExtra.payment,
-                });
+                
 
             }
             console.log("Response final horas extras: ", response);
