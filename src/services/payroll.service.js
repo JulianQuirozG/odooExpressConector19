@@ -942,7 +942,7 @@ const payrollService = {
             const response = [];
             for (const row of rows) {
                 if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
-
+                console.log("Procesando fila de nomina: ", row);
                 console.log("-------------------");
 
                 const worker = {
@@ -987,6 +987,51 @@ const payrollService = {
                     row.otros_devengos_salariales ? accrued.bonuses.push({
                         salary_bonus: Number(row.otros_devengos_salariales.trim().replaceAll(',', ''))
                     }) : null;
+                }
+
+                //Vacaciones disfrutadas
+                if (row.vacaciones_disfrutadas) {
+                    //Si hay dias de vacaciones disfrutadas
+                    const vacationDays = Number(row.vacaciones_disfrutadas.trim().replaceAll(',', ''));
+                    const vacationPayment = Number(row.vacaciones.trim().replaceAll(',', ''));
+                    const start_date = new Date(row.vacaciones_salida);
+                    const end_date = new Date(row.vacaciones_ingreso);
+
+
+                    if (vacationDays != 0 && vacationDays != null) {
+                        accrued.common_vacation = [];
+                        //Verificamos si existen los campos en el excel
+                        //Dias de vacaciones disfrutadas mayores a 0
+                        if(vacationDays <= 0){
+                            response.push({ error: `Error en los dias de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
+                            continue;
+                        }
+                        // Pago de vacaciones disfrutadas mayor a 0
+                        if (!vacationPayment || isNaN(vacationPayment) || vacationPayment <= 0) {
+                            response.push({ error: `Error en el pago de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                            continue;
+                        }
+
+                        // Fechas de vacaciones disfrutadas validas
+                        if (!start_date || !end_date) {
+                            response.push({ error: `Error en las fechas de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
+                            continue;
+                        }
+
+                        // Fecha de inicio menor a fecha de fin
+                        if (start_date > end_date) {
+                            response.push({ error: `Error en las fechas de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, la fecha de inicio es mayor a la fecha de fin` });
+                            continue;
+                        }
+
+                        // Agrego las vacaciones disfrutadas al objeto de devengados
+                        accrued.common_vacation.push({
+                            quantity: vacationDays,
+                            payment: vacationPayment,
+                            start_date: start_date.toISOString().split('T')[0],
+                            end_date: end_date.toISOString().split('T')[0]
+                        });
+                    }
                 }
 
                 const deductions = {
@@ -1080,7 +1125,7 @@ const payrollService = {
                     //Para asignar necesito saber la fecha de inicio y fin del perido de nomina porque las horas extra vienen sin esa data
                     //para las horas extra entre semana voy a asignar los dias de lunes a sabado
                     console.log("weekDay: ", weekDay, " i: ", horasRestantes, " fecha: ", new Date(initDay.setDate(initDay.getDate() + i)).toString());
-                    
+
                     if (weekDay != 6 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN')) {
                         console.log("Asignando horas extra entre semana", horaExtra.type);
                         response.push({
@@ -1092,10 +1137,10 @@ const payrollService = {
                         pay -= horaExtra.payment;
                         horasRestantes -= laps;
 
-                    } 
-                    (weekDay+1) == 7 ? weekDay = 0 : weekDay++;
+                    }
+                    (weekDay + 1) == 7 ? weekDay = 0 : weekDay++;
                 }
-                
+
                 response.push({
                     start_time: new Date().toString(),
                     end_time: new Date().toString(),
