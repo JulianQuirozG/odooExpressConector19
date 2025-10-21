@@ -1179,6 +1179,8 @@ const payrollService = {
                 'HEN': [21, 6],
                 'HRN': [21, 6],
                 'HRDDF': [8, 21],
+                'HEDDF': [18, 21],
+                'HENDF': [21, 6],
             }
 
             const pergentage = {
