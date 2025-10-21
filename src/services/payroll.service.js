@@ -996,9 +996,9 @@ const payrollService = {
                     const vacationPayment = Number(row.vacaciones.trim().replaceAll(',', ''));
                     const start_date = new Date(row.vacaciones_salida);
                     const end_date = new Date(row.vacaciones_ingreso);
+                    console.log("Vacaciones disfrutadas: ", vacationDays, vacationPayment, start_date, end_date);
 
-
-                    if (vacationDays != 0 && vacationDays != null) {
+                    if (vacationDays != 0 && !isNaN(vacationDays)) {
                         accrued.common_vacation = [];
                         //Verificamos si existen los campos en el excel
                         //Dias de vacaciones disfrutadas mayores a 0
