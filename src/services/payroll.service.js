@@ -989,23 +989,23 @@ const payrollService = {
 
                 //Vacaciones disfrutadas
                 if (row.vacaciones_disfrutadas && String(row.vacaciones_disfrutadas).trim() != '-') {
-                    //Si hay dias de vacaciones disfrutadas
-                    const vacationDays = Number(row.vacaciones_disfrutadas.trim().replaceAll(',', ''));
-                    const vacationPayment = Number(row.vacaciones.trim().replaceAll(',', ''));
+                    const vacation_days = Number(row.vacaciones_disfrutadas.trim().replaceAll(',', ''));
+                    const vacation_payment = Number(row.vacaciones.trim().replaceAll(',', ''));
                     const start_date = new Date(row.vacaciones_salida);
                     const end_date = new Date(row.vacaciones_ingreso);
 
-                    if (vacationDays != 0 && !isNaN(vacationDays)) {
+                    //Si hay dias de vacaciones disfrutadas
+                    if (vacation_days != 0 && !isNaN(vacation_days)) {
                         accrued.common_vacation = [];
                         //Verificamos si existen los campos en el excel
                         //Dias de vacaciones disfrutadas mayores a 0
-                        if (vacationDays <= 0) {
+                        if (vacation_days <= 0) {
                             response.push({ error: `Error en los dias de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
                             continue;
                         }
 
                         // Pago de vacaciones disfrutadas mayor a 0
-                        if (!vacationPayment || isNaN(vacationPayment) || vacationPayment <= 0) {
+                        if (!vacation_payment || isNaN(vacation_payment) || vacation_payment <= 0) {
                             response.push({ error: `Error en el pago de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
                             continue;
                         }
@@ -1024,8 +1024,8 @@ const payrollService = {
 
                         // Agrego las vacaciones disfrutadas al objeto de devengados
                         accrued.common_vacation.push({
-                            quantity: vacationDays,
-                            payment: vacationPayment,
+                            quantity: vacation_days,
+                            payment: vacation_payment,
                             start_date: start_date.toISOString().split('T')[0],
                             end_date: end_date.toISOString().split('T')[0]
                         });
@@ -1036,7 +1036,7 @@ const payrollService = {
                 if (row.ieg && String(row.ieg).trim() != '-') {
                     const disability_days = Number(String(row.ieg).trim().replaceAll(',', ''));
                     const disability_payment = Number(String(row.incapacidad_general).trim().replaceAll(',', ''));
-                    const type_disability = 1;
+                    const type_disability = Number(String(row.tipo_de_incapacidad).trim().replaceAll(',', ''));
 
                     if (isNaN(disability_days) || disability_days <= 0) {
                         response.push({ error: `Error en los dias de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
@@ -1048,6 +1048,11 @@ const payrollService = {
                         continue;
                     }
 
+                    // if (isNaN(type_disability) || type_disability > 4 && type_disability < 0) {
+                    //     response.push({ error: `Error en el tipo de incapacidad para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                    //     continue;
+                    // }
+
                     //Agrego las incapacidades al objeto de devengados
                     accrued.work_disabilities = [];
                     accrued.work_disabilities.push({
@@ -1056,6 +1061,31 @@ const payrollService = {
                         type: type_disability
                     });
                 }
+
+                //Cesantias
+                if (row.cesantia && String(row.cesantia).trim() != '-' && row.intereses_cesantias && String(row.intereses_cesantias).trim() != '-') {
+                    const payment = Number(String(row.cesantia).trim().replaceAll(',', ''));
+                    const interest_payment = Number(String(row.intereses_cesantias).trim().replaceAll(',', ''));
+
+                    if (isNaN(payment) || payment <= 0) {
+                        response.push({ error: `Error en el pago de cesantias para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                        continue;
+                    }
+
+                    if (isNaN(interest_payment) || interest_payment <= 0) {
+                        response.push({ error: `Error en el pago de intereses de cesantias para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                        continue;
+                    }
+
+                    //Agrego las cesantias al objeto de devengados
+                    accrued.severance = {
+                        payment: payment,
+                        interest_payment: interest_payment,
+                        percentage: "12"
+                    }
+                }
+
+
 
                 const deductions = {
                     eps_type_law_deductions_id: 3,

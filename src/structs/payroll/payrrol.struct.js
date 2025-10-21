@@ -66,6 +66,7 @@ const payrollStruct = {
     metodo_pago: 'metodo_pago',
     fecha_pago1: 'fecha_pago1',
     fecha_pago2: 'fecha_pago2',
+    tipo_de_incapacidad: 'tipo_de_incapacidad'
 }
 
 module.exports = { payrollStruct };
