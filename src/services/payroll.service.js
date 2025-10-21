@@ -1201,7 +1201,6 @@ const payrollService = {
                 //saco el precio a calcular
                 const payable = Number(horaExtra.payment.trim().replaceAll(',', ''));
                 let pay = payable / (horaExtra.quantity);
-                console.log("Procesando hora extra: ", horaExtra.payment);
 
                 //obtengo el dia de la semana
                 const initDay = new Date(dateFrom);
@@ -1222,7 +1221,6 @@ const payrollService = {
                     const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity.trim()) / laps) ? horasRestantes : Math.floor(Number(horaExtra.quantity.trim()) / laps)
                     dayEnd.setUTCHours(rangeHoursExtra[horaExtra.type][0] + hoursToAssign, 0, 0);
                     const payable_amount = pay * hoursToAssign;
-                    console.log(horaExtra.type)
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN')) {
                         response.push({
                             start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
