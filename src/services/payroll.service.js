@@ -942,8 +942,6 @@ const payrollService = {
             const response = [];
             for (const row of rows) {
                 if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
-                console.log("Procesando fila de nomina: ");
-                console.log("-------------------");
                 const worker = {
                     salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')),
                     address: row.direccion ? row.direccion.trim() : '',
@@ -967,7 +965,7 @@ const payrollService = {
                     account_number: row.numero_cuenta,
                     account_type: row.tipo_cuenta
                 }
-                console.log("Procesando pago: ", row);
+
                 const accrued = {
                     worked_days: Number(row.dias.trim().replaceAll(',', '')) ? Number(row.dias.trim().replaceAll(',', '')) : 0,
                     salary: Number(row.sueldo_contrato.trim().replaceAll(',', '')) ? Number(row.sueldo_contrato.trim().replaceAll(',', '')) : 0,
@@ -978,7 +976,7 @@ const payrollService = {
                 //Bonos salariales y no salariales
                 const devengados_salariales = Number(row.otros_devengos_no_salariales.trim().replaceAll(',', ''));
                 const devengados_no_salariales = Number(row.otros_devengos_salariales.trim().replaceAll(',', ''));
-                if (row.otros_devengos_no_salariales &&  !isNaN(devengados_salariales) || row.otros_devengos_salariales && !isNaN(devengados_no_salariales)) {
+                if (row.otros_devengos_no_salariales && !isNaN(devengados_salariales) || row.otros_devengos_salariales && !isNaN(devengados_no_salariales)) {
                     accrued.bonuses = [];
 
                     row.otros_devengos_no_salariales ? accrued.bonuses.push({
@@ -990,7 +988,7 @@ const payrollService = {
                 }
 
                 //Vacaciones disfrutadas
-                if (row.vacaciones_disfrutadas) {
+                if (row.vacaciones_disfrutadas && String(row.vacaciones_disfrutadas).trim() != '-') {
                     //Si hay dias de vacaciones disfrutadas
                     const vacationDays = Number(row.vacaciones_disfrutadas.trim().replaceAll(',', ''));
                     const vacationPayment = Number(row.vacaciones.trim().replaceAll(',', ''));
@@ -1005,7 +1003,7 @@ const payrollService = {
                             response.push({ error: `Error en los dias de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
                             continue;
                         }
-                        
+
                         // Pago de vacaciones disfrutadas mayor a 0
                         if (!vacationPayment || isNaN(vacationPayment) || vacationPayment <= 0) {
                             response.push({ error: `Error en el pago de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
@@ -1032,6 +1030,31 @@ const payrollService = {
                             end_date: end_date.toISOString().split('T')[0]
                         });
                     }
+                }
+
+                //Incapacidades
+                if (row.ieg && String(row.ieg).trim() != '-') {
+                    const disability_days = Number(String(row.ieg).trim().replaceAll(',', ''));
+                    const disability_payment = Number(String(row.incapacidad_general).trim().replaceAll(',', ''));
+                    const type_disability = 1;
+
+                    if (isNaN(disability_days) || disability_days <= 0) {
+                        response.push({ error: `Error en los dias de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
+                        continue;
+                    }
+
+                    if (isNaN(disability_payment) || disability_payment <= 0) {
+                        response.push({ error: `Error en el pago de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                        continue;
+                    }
+
+                    //Agrego las incapacidades al objeto de devengados
+                    accrued.work_disabilities = [];
+                    accrued.work_disabilities.push({
+                        quantity: disability_days,
+                        payment: disability_payment,
+                        type: type_disability
+                    });
                 }
 
                 const deductions = {
@@ -1082,7 +1105,7 @@ const payrollService = {
                     payroll.accrued.HENs = HENs.data;
                 }
 
-                 //Saco el json para los recargos diurnos dominicales
+                //Saco el json para los recargos diurnos dominicales
                 //console.log("Response final: ", this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date));
                 const HRDDFs = this.extraTimeHours([{ type: 'HRDDF', quantity: row.rd, payment: row.recargo_dominical_festivo_180 }], 'HRDDFs', period.settlement_start_date, period.settlement_end_date);
                 if (HRDDFs.data?.length > 0) {
@@ -1208,7 +1231,7 @@ const payrollService = {
                 let weekDay = initDay.getUTCDay();
 
                 for (let i = 0; horasRestantes > 0; i++) {
-                   
+
                     //ahora armo la lista de dias con las horas extras
                     //Para asignar necesito saber la fecha de inicio y fin del perido de nomina porque las horas extra vienen sin esa data
                     //para las horas extra entre semana voy a asignar los dias de lunes a sabado
@@ -1241,7 +1264,7 @@ const payrollService = {
                             payment: payable_amount,
                             percentage: pergentage[horaExtra.type]
                         });
-                         horasRestantes -= Math.floor(horaExtra.quantity / laps);
+                        horasRestantes -= Math.floor(horaExtra.quantity / laps);
                     }
                     (weekDay + 1) == 7 ? weekDay = 0 : weekDay++;
                 }
