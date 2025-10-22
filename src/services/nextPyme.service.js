@@ -189,7 +189,7 @@ const nextPymeService = {
                     });
                     continue;
                 }
-
+                console.log(`Enviando nómina de empleado ${payroll.worker.first_name} a DIAN vía NextPyme...`);
                 //Envio la nomina a nextpyme
                 const response = await nextPymeConnection.nextPymeRequest("payroll", "post", payroll);
                 if (response.error) return { statusCode: 500, message: `Error al enviar la nómina de empleado ${payroll.worker.first_name} a DIAN`, error: response.message };
