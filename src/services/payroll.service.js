@@ -218,7 +218,7 @@ const payrollService = {
             accrued.accrued_salary = salary;
 
             //Subsidio de transporte
-            const transportaion_allowance =
+            //const transportaion_allowance =
 
 
 
@@ -1017,9 +1017,11 @@ const payrollService = {
 
                 const accrued = {
                     worked_days: Number(row.dias) ? Number(row.dias) : 0,
-                    salary: Number(row.sueldo_contrato) ? Number(row.sueldo_contrato).toFixed(2) : "0.00",
-                    transportation_allowance: Number(row.auxilio_transporte) ? Number(row.auxilio_transporte).toFixed(2) : "0.00",
+                    salary: Number(row.sueldo_basico) ? Number(row.sueldo_basico).toFixed(2) : "0.00",
                     accrued_total: Number(row.total_devengado) ? Number(row.total_devengado).toFixed(2) : "0.00",
+                }
+                if (row.auxilio_transporte) {
+                     accrued.transportation_allowance = Number(row.auxilio_transporte) ? Number(row.auxilio_transporte).toFixed(2) : Number("0.00").toFixed(2)
                 }
 
                 //Bonos salariales y no salariales
@@ -1104,6 +1106,7 @@ const payrollService = {
 
                     //Verifico que las fechas de incapacidad sean validas
                     if (!start_date || !end_date || !row.incapacidad_fecha_inicial || !row.incapacidad_fecha_final) {
+                        console.log(!start_date, !end_date, !row.incapacidad_fecha_inicial, !row.incapacidad_fecha_final);
                         response.push({ error: `Error en las fechas de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
                         continue;
                     }
@@ -1133,30 +1136,6 @@ const payrollService = {
                     });
                 }
 
-                //Cesantias
-                if (row.cesantia && row.intereses_cesantias) {
-                    const payment = Number(String(row.cesantia));
-                    const interest_payment = Number(String(row.intereses_cesantias));
-
-                    //Verifico que el pago de cesantias sea valido
-                    if (isNaN(payment) || payment <= 0) {
-                        response.push({ error: `Error en el pago de cesantias para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    //Verifico que el pago de intereses de cesantias sea valido
-                    if (isNaN(interest_payment) || interest_payment <= 0) {
-                        response.push({ error: `Error en el pago de intereses de cesantias para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    //Agrego las cesantias al objeto de devengados
-                    accrued.severance = [{
-                        payment: payment,
-                        interest_payment: interest_payment,
-                        percentage: "12"
-                    }];
-                }
 
                 //Licencias de maternidad
                 if (row.lm) {
@@ -1410,7 +1389,7 @@ const payrollService = {
             const nextPymeResponse = await nextPymeService.nextPymeService.sendPayrolltoDian(jsonPayrolls.data);
             if (nextPymeResponse.statusCode !== 200) return nextPymeResponse;
 
-            return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: { data: nextPymeResponse.data, errors: nextPymeResponse.errors } };
+            return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: { data: nextPymeResponse.data, errors: nextPymeResponse.errors, jsons: jsonPayrolls.data } };
 
         } catch (error) {
             console.error('Error al conectar con Radian:', error);
@@ -1540,8 +1519,8 @@ const payrollService = {
                     const payable_amount = (pay * hoursToAssign).toFixed(2);
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN')) {
                         response.push({
-                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().replace('Z', ''),
-                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().replace('Z', ''),
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().split('.')[0].replace('Z', ''),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().split('.')[0].replace('Z', ''),
                             quantity: hoursToAssign,
                             percentage: pergentage[horaExtra.type],
                             payment: payable_amount,
@@ -1552,8 +1531,8 @@ const payrollService = {
                     } else if (weekDay == 0 && (horaExtra.type == 'HRDDF' || horaExtra.type == 'HEDDF' || horaExtra.type == 'HENDF' || horaExtra.type == 'HRNDF')) {
                         //Domingo
                         response.push({
-                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
-                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().split('.')[0].replace('Z', ''),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().split('.')[0].replace('Z', ''),
                             quantity: hoursToAssign,
                             payment: payable_amount,
                             percentage: pergentage[horaExtra.type]

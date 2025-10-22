@@ -208,7 +208,7 @@ const nextPymeService = {
                     if (!valid) {
                         errors.push({
                             message: `Nómina de empleado ${payroll.worker.first_name} rechazada por DIAN: ${result.StatusDescription}`,
-                            data: [result.ErrorMessage]
+                            error: [result.ErrorMessage]
                         });
                     } else {
                         data.push({
