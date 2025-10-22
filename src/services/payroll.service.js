@@ -889,52 +889,55 @@ const payrollService = {
     },
 
     /**
-     * Procesa un archivo Excel de nómina (.xlsx) y construye un array de objetos
-     * de nómina listos para enviar al sistema (no persiste nada).
+     * Lee un archivo Excel (.xlsx) de nómina y genera un arreglo de objetos `payroll`
+     * listos para reportar (no persiste nada).
      *
-     * Comportamiento principal:
-     * - Lee el buffer del archivo (objeto multer: file.buffer).
-     * - Busca la hoja "Nomina" (se busca por nombre exacto en SheetNames).
-     * - Lee un rango fijo de columnas/filas y mapea columnas a las claves definidas en `payrollStruct`.
-     * - Extrae las fechas del periodo desde el encabezado y convierte valores Excel a JS con `excelDateToJSDate`.
-     * - Recorre cada fila, valida campos (vacaciones, incapacidades, cesantías, dotación, fechas de pago, etc.)
-     *   y arma los objetos: worker, payment, accrued, deductions, payment_dates, period, etc.
-     * - Calcula horas extras llamando a `extraTimeHours` y marca días ocupados con `arregloDiasOcupados`.
+     * Flujo resumido:
+     *  - Lee el buffer del fichero (objeto multer: file.buffer) con `xlsx`.
+     *  - Busca la hoja de nombre "Nomina" (búsqueda case-insensitive mediante `.toLowerCase().trim()`).
+     *  - Lee las filas del rango fijo (fila 8 en adelante, columnas hasta índice 83) y mapea columnas
+     *    según las claves definidas en `payrollStruct`.
+     *  - Extrae fechas del periodo desde el encabezado (c:13, filas r:1..3) y convierte valores Excel => JS con `excelDateToJSDate`.
+     *  - Recorre cada fila válida, valida campos (vacaciones, incapacidades, cesantías, dotación, fechas de pago, etc.)
+     *    y construye objetos: worker, payment, accrued, deductions, payment_dates, period, etc.
+     *  - Calcula detalles de horas extra llamando a `extraTimeHours` y marca días ocupados con `arregloDiasOcupados`.
      *
-     * Notas:
-     * - No lanza excepciones: en errores internos devuelve un objeto { success: false, error: true, message }.
-     * - Omite filas cuyo `numero` no exista, sea 0 o sea "TOTALES".
+     * Comportamiento de errores:
+     *  - Si la hoja "Nomina" no se encuentra devuelve { statusCode: 400, message, data: [] }.
+     *  - Validaciones por fila no abortan: se agregan objetos `{ error: 'mensaje' }` al array `response`.
+     *  - En errores internos devuelve { statusCode: 500, success: false, error: true, message, data: [] }.
      *
      * @async
-     * @param {Object} file - Objeto multer del archivo subido.
-     * @param {Buffer} file.buffer - Buffer del .xlsx (requerido).
-     * @param {string} [file.originalname] - Nombre original (opcional, útil para logs/validación).
+     * @param {Object} file
+     *        Objeto multer con el Excel subido.
+     * @param {Buffer} file.buffer
+     *        Buffer del .xlsx (requerido).
+     * @param {string} [file.originalname]
+     *        Nombre original del archivo (opcional, útil para logging).
      *
      * @returns {Promise<
      *   { statusCode: number, message: string, data: Array<Object> } |
-     *   { success: false, error: true, message: string }
+     *   { statusCode: 400, message: string, data: [] } |
+     *   { statusCode: 500, success: false, error: true, message: string, data: [] }
      * >}
      *
-     * - En éxito: { statusCode: 200, message, data: response } donde `response` es array de payrolls.
-     * - En validación por fila: se incluyen objetos de error en el array `response` (no se lanza).
-     * - En error interno: { success: false, error: true, message: 'Error interno del servidor' }.
+     * Estructura y requisitos del Excel esperado:
+     *  - Hoja con nombre "Nomina" (se busca insensitivo a mayúsculas/espacios).
+     *  - Datos de empleados empiezan en la fila 8 (0-based r:7).
+     *  - Se lee hasta la columna índice 83.
+     *  - Periodo en c:13 filas r:1..3 (issue_date, settlement_start_date, settlement_end_date).
+     *  - Columnas mapeadas según `Object.keys(payrollStruct)`.
      *
-     * Requisitos del Excel esperado:
-     * - Hoja con nombre "Nomina" (SheetNames.indexOf('Nomina') debe existir).
-     * - Datos empiezan en fila 8 (0-based r:7), columnas hasta índice 83.
-     * - Encabezado del periodo en c:13 filas r:1..3 (issue_date, settlement_start_date, settlement_end_date).
-     * - Columnas/keys mapeadas según Object.keys(payrollStruct).
+     * Notas / recomendaciones:
+     *  - El método normaliza números y fechas con `Number(...)` y `excelDateToJSDate`.
+     *  - Puede devolver mezcla de payrolls válidos y objetos de error en `data`.
+     *  - Mejora recomendada: permitir búsqueda de hoja tolerante a acentos y validar extensión/signature del buffer.
      *
-     * Ejemplo de uso:
-     * const res = await payrollService.reportPayrollsByExcel(req.file);
-     * if (res.statusCode === 200) console.log(res.data);
-     *
-     * Posibles mejoras:
-     * - Validar signature/extension del buffer antes de XLSX.read.
-     * - Permitir buscar la hoja por nombre tolerante a mayúsculas/acentos.
-     * - Centralizar parseo de números/fechas y normalizar defval en sheet_to_json.
+     * Ejemplo:
+     *  const res = await payrollService.generate_json_excel_payroll(req.file);
+     *  if (res.statusCode === 200) { console.log(res.data); } else { console.error(res.message); }
      */
-    async reportPayrollsByExcel(file) {
+    async generate_json_excel_payroll(file) {
         try {
             //if (!file) return { statusCode: 400, message: 'Archivo Excel es requerido', data: [] };
             const workbook = XLSX.read(file.buffer, { type: 'buffer' });
@@ -963,7 +966,7 @@ const payrollService = {
                 header: KEYS,
                 range: rangeStr,
                 raw: true,
-                blankrows: true, // ya omite filas 100% vacías
+                blankrows: false, // ya omite filas 100% vacías
                 defval: null,      // rellena celdas vacías con 0
             });
 
@@ -1349,11 +1352,65 @@ const payrollService = {
 
                 response.push(payroll)
             }
+            return { statusCode: 200, message: `Nóminas generadas desde archivo Excel`, data: response };
+        } catch (error) {
+            console.error('Error al generar el JSON de la nómina desde Excel:', error);
+            return { statusCode: 500, success: false, error: true, message: error.message, data: [] };
+        }
 
-            const nextPymeResponse = await nextPymeService.nextPymeService.sendPayrolltoDian(response);
-            if(nextPymeResponse.statusCode !== 200) return nextPymeResponse;
+    },
 
-            return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: {data: nextPymeResponse.data, errors: nextPymeResponse.errors} };
+    /**
+     * Procesa un archivo Excel de nómina y reporta las nóminas a NextPyme (Dian).
+     *
+     * Flujo:
+     *  1. Convierte el Excel a JSON llamando a `generate_json_excel_payroll(file)`.
+     *  2. Si la conversión es exitosa, envía los payrolls a NextPyme mediante
+     *     `nextPymeService.nextPymeService.sendPayrolltoDian`.
+     *  3. Devuelve el resultado combinado (datos y errores) reportados por NextPyme.
+     *
+     * Observaciones:
+     *  - Propaga y retorna directamente los objetos de error devueltos por
+     *    `generate_json_excel_payroll` o por el servicio NextPyme.
+     *  - Realiza llamadas externas (I/O / red) y puede fallar por problemas de conexión.
+     *
+     * @async
+     * @param {Object} file
+     *        Objeto multer del archivo subido.
+     * @param {Buffer} file.buffer
+     *        Buffer del .xlsx (requerido).
+     * @param {string} [file.originalname]
+     *        Nombre original del archivo (opcional, útil para logs).
+     *
+     * @returns {Promise<
+     *   { statusCode: 200, message: string, data: { data: any, errors: any } } |
+     *   { statusCode: number, message: string, data?: any } |
+     *   { success: false, error: true, message: string }
+     * >}
+     *
+     * - Éxito: statusCode 200 y `data` contiene { data: <resultados NextPyme>, errors: <errores NextPyme> }.
+     * - Si `generate_json_excel_payroll` o NextPyme devuelven un error, la función retorna ese mismo objeto.
+     * - En excepción interna retorna { success: false, error: true, message: 'Error interno del servidor' }.
+     *
+     * @example
+     * const res = await payrollService.reportPayrollsByExcel(req.file);
+     * if (res.statusCode === 200) {
+     *   console.log('Reportado:', res.data.data);
+     *   console.log('Errores:', res.data.errors);
+     * } else {
+     *   console.error('Error:', res.message);
+     * }
+     */
+    async reportPayrollsByExcel(file) {
+        try {
+
+            const jsonPayrolls = await this.generate_json_excel_payroll(file);
+            if (jsonPayrolls.statusCode !== 200) return jsonPayrolls;
+
+            const nextPymeResponse = await nextPymeService.nextPymeService.sendPayrolltoDian(jsonPayrolls.data);
+            if (nextPymeResponse.statusCode !== 200) return nextPymeResponse;
+
+            return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: { data: nextPymeResponse.data, errors: nextPymeResponse.errors } };
 
         } catch (error) {
             console.error('Error al conectar con Radian:', error);
