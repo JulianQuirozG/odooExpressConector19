@@ -887,13 +887,60 @@ const payrollService = {
         }
     },
 
+    /**
+     * Procesa un archivo Excel de nómina (.xlsx) y construye un array de objetos
+     * de nómina listos para enviar al sistema (no persiste nada).
+     *
+     * Comportamiento principal:
+     * - Lee el buffer del archivo (objeto multer: file.buffer).
+     * - Busca la hoja "Nomina" (se busca por nombre exacto en SheetNames).
+     * - Lee un rango fijo de columnas/filas y mapea columnas a las claves definidas en `payrollStruct`.
+     * - Extrae las fechas del periodo desde el encabezado y convierte valores Excel a JS con `excelDateToJSDate`.
+     * - Recorre cada fila, valida campos (vacaciones, incapacidades, cesantías, dotación, fechas de pago, etc.)
+     *   y arma los objetos: worker, payment, accrued, deductions, payment_dates, period, etc.
+     * - Calcula horas extras llamando a `extraTimeHours` y marca días ocupados con `arregloDiasOcupados`.
+     *
+     * Notas:
+     * - No lanza excepciones: en errores internos devuelve un objeto { success: false, error: true, message }.
+     * - Omite filas cuyo `numero` no exista, sea 0 o sea "TOTALES".
+     *
+     * @async
+     * @param {Object} file - Objeto multer del archivo subido.
+     * @param {Buffer} file.buffer - Buffer del .xlsx (requerido).
+     * @param {string} [file.originalname] - Nombre original (opcional, útil para logs/validación).
+     *
+     * @returns {Promise<
+     *   { statusCode: number, message: string, data: Array<Object> } |
+     *   { success: false, error: true, message: string }
+     * >}
+     *
+     * - En éxito: { statusCode: 200, message, data: response } donde `response` es array de payrolls.
+     * - En validación por fila: se incluyen objetos de error en el array `response` (no se lanza).
+     * - En error interno: { success: false, error: true, message: 'Error interno del servidor' }.
+     *
+     * Requisitos del Excel esperado:
+     * - Hoja con nombre "Nomina" (SheetNames.indexOf('Nomina') debe existir).
+     * - Datos empiezan en fila 8 (0-based r:7), columnas hasta índice 83.
+     * - Encabezado del periodo en c:13 filas r:1..3 (issue_date, settlement_start_date, settlement_end_date).
+     * - Columnas/keys mapeadas según Object.keys(payrollStruct).
+     *
+     * Ejemplo de uso:
+     * const res = await payrollService.reportPayrollsByExcel(req.file);
+     * if (res.statusCode === 200) console.log(res.data);
+     *
+     * Posibles mejoras:
+     * - Validar signature/extension del buffer antes de XLSX.read.
+     * - Permitir buscar la hoja por nombre tolerante a mayúsculas/acentos.
+     * - Centralizar parseo de números/fechas y normalizar defval en sheet_to_json.
+     */
     async reportPayrollsByExcel(file) {
         try {
             //if (!file) return { statusCode: 400, message: 'Archivo Excel es requerido', data: [] };
             const workbook = XLSX.read(file.buffer, { type: 'buffer' });
 
             //obtengo la hoja Nomina
-            const sheetName = workbook.SheetNames[2];
+            const idSheet = workbook.SheetNames.map(name => name.toLowerCase().trim()).indexOf('nomina');
+            const sheetName = workbook.SheetNames[idSheet];
 
             if (!sheetName) return { statusCode: 400, message: `Hoja Nomina no encontrada`, data: [] };
             const ws = workbook.Sheets[sheetName];
@@ -1100,7 +1147,7 @@ const payrollService = {
                     }
 
                     //Agrego las cesantias al objeto de devengados
-                    accrued.severance =  [   {
+                    accrued.severance = [{
                         payment: payment,
                         interest_payment: interest_payment,
                         percentage: "12"
@@ -1229,7 +1276,7 @@ const payrollService = {
                 if (row.fecha_pago1 && row.fecha_pago1 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago1) });
                 if (row.fecha_pago2 && row.fecha_pago2 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago2) });
 
-                if(row.Dias_en_la_empresa && isNaN(Number(row.Dias_en_la_empresa))){
+                if (row.Dias_en_la_empresa && isNaN(Number(row.Dias_en_la_empresa))) {
                     response.push({ error: `Error en los dias trabajados para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
                     continue;
                 }
@@ -1434,14 +1481,14 @@ const payrollService = {
                     const payable_amount = (pay * hoursToAssign).toFixed(2);
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN')) {
                         response.push({
-                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().replace('Z',''),
-                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().replace('Z',''),
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().replace('Z', ''),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().replace('Z', ''),
                             quantity: hoursToAssign,
                             percentage: pergentage[horaExtra.type],
                             payment: payable_amount,
                         });
 
-                        horasRestantes -=hoursToAssign;
+                        horasRestantes -= hoursToAssign;
 
                     } else if (weekDay == 0 && (horaExtra.type == 'HRDDF' || horaExtra.type == 'HEDDF' || horaExtra.type == 'HENDF' || horaExtra.type == 'HRNDF')) {
                         //Domingo
