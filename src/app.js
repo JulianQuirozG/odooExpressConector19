@@ -18,8 +18,18 @@ const salesRoutes = require('./routes/sale.routes');
 const purchaseOrderRoutes = require('./routes/purchasOrder.routes');
 const paymentMethodRoutes = require('./routes/paymentMethod.routes');
 const currencyRoutes = require('./routes/currency.routes');
-const DbConfig = require('./config/db');
+const radianRoutes = require('./routes/radian.routes');
+const workEntryRoutes = require('./routes/workEntry.routes');
 
+//Importar repositorios y servicios necesarios para el cron
+const DbConfig = require('./config/db');
+const { cron } = require('./job/corn');
+const { getBillsStay } = require('./Repository/lotesprocesarfactura/lotesprocesarfactura.repository');
+const { lotesService } = require('./services/BillLotesDb.service');
+const { getCreditNotesStay } = require('./Repository/lotesprocesarnotacredito/lotesprocesarnotacredito.repository');
+const { getDebitNotesStay } = require('./Repository/lotesprocesarnotadebito/lotesprocesarnotadebito.repository');
+const payrollRoutes = require('./routes/payroll.routes');
+const employeeRoutes = require('./routes/employee.routes');
 const app = express();
 
 app.use(express.json());
@@ -32,11 +42,15 @@ app.use('/api/product', productRoutes);
 app.use('/api/bills', billsRoutes);
 app.use('/api/attachments', attachmentsRoutes);
 app.use('/api/journal', journalRoutes);
-app.use('/api/quotation',quotationRoutes)
+app.use('/api/quotation', quotationRoutes)
 app.use('/api/sales', salesRoutes);
-app.use('/api/purchase-order',purchaseOrderRoutes)
+app.use('/api/purchase-order', purchaseOrderRoutes)
 app.use('/api/payment-method', paymentMethodRoutes);
 app.use('/api/currency', currencyRoutes);
+app.use('/api/radian', radianRoutes);
+app.use('/api/payroll', payrollRoutes);
+app.use('/api/employee', employeeRoutes);
+app.use('/api/work-entries', workEntryRoutes);
 
 // Initialize the database connection
 
@@ -70,6 +84,26 @@ app.use('*', (req, res) => {
     path: req.originalUrl
   });
 });
+
+cron.schedule('*/10 * * * *', async () => {
+  try {
+    console.log(`[CRON] Tarea cada 10 minutos ${JSON.stringify((await getBillsStay()).data.map(item => item.idexterno))}`, new Date().toISOString());
+
+    const idsBills = (await getBillsStay()).data.map(item => item.idexterno);
+    const idsCreditNote = (await getCreditNotesStay()).data.map(item => item.idexterno);
+    const idsDebitNote = (await getDebitNotesStay()).data.map(item => item.idexterno);
+
+
+    await lotesService.processJobFacturas(idsBills, '01');
+    await lotesService.processJobFacturas(idsCreditNote, '91');
+    await lotesService.processJobFacturas(idsDebitNote, '92');
+
+  } catch (e) {
+    console.error('Error en el cron:', e.message || e);
+    return;
+  }
+
+}, { scheduled: true, timezone: 'America/Bogota' });
 
 const PORT = config.port || 3000;
 

@@ -1,69 +1,97 @@
 const { z } = require('zod');
 const nitRegex = /^\d{7,10}(-\d)?$/;
 
-const bankSchema = z.object({
-  bank_name: z.string(),
-  bic: z.string()
-});
 
 const bankAccountSchema = z.object({
-  acc_number: z.string(),
-  currency_id: z.number(),
-  acc_holder_name: z.string(),
-  bank: bankSchema
+  acc_number: z.string().min(1),
+  currency_id: z.coerce.number().int().min(1),
+  acc_holder_name: z.string().min(1),
+  bank_name: z.string().min(1),
+  bic: z.string().min(3)
 });
 
+
 const clientSchema = z.object({
-  name: z.string()
-    .min(1, 'El nombre no puede estar vacío'),
+  // Identificación básica
+  is_company: z.boolean(),
+  company_type: z.enum(['company', 'person']),
+  parent_id: z.number().int().min(1).nullable().optional(),
 
-  company_type: z.enum(['person', 'company'], {
-    required_error: 'Debe especificar si es persona o empresa',
-    invalid_type_error: 'Tipo de compañía inválido'
-  }),
+  // Datos generales
+  name: z.string().min(1),
+  email: z.string().email(),
+  phone: z.string().min(1),
+  street: z.string().min(1),
+  street2: z.string().optional().default(''),
+  lang: z.string().regex(/^[a-z]{2}_[A-Z]{2}$/, 'Formato idioma ej: es_CO'),
+  city: z.string().min(1),
+  city_id: z.coerce.number().int().min(1),
+  zip: z.string().min(1),
+  state_id: z.coerce.number().int().min(1),
+  country_id: z.coerce.number().int().min(1),
+  function: z.string().optional().default(''),
 
-  lang: z.string()
-    .regex(/^[a-z]{2}_[A-Z]{2}$/, 'El idioma debe tener el formato correcto (por ejemplo: es_CO)').optional(),
-  is_company: z.boolean().optional(),
-  bankAccounts: z.array(bankAccountSchema).optional(),
-  street2: z.string().optional(),
-  zip: z.string().optional(),
-  state_id: z.number().optional(),
-  website: z.string().optional(),
-  category_id: z.array(z.number()).optional(),
-  active: z.boolean().optional(),
-  function: z.string().optional(),
-  comment: z.string().optional(),
-  mobile: z.string()
-    .min(7, 'El número de celular debe tener al menos 7 dígitos').optional(),
+  // Identificación fiscal
+  l10n_latam_identification_type_id: z.coerce.number().int().min(1),
+  vat: z.string().min(3),
+  website: z.string().min(1), // puede ser email/URL según tu uso
+  category_id: z.null().or(z.array(z.coerce.number().int().min(1))).optional(),
 
-  phone: z.string()
-    .min(7, 'El teléfono debe tener al menos 7 dígitos').optional(),
+  company_id: z.coerce.number().int().min(1),
 
-  vat: z.string().regex(nitRegex, {
-    message: 'El NIT debe tener un formato válido (ejemplo: 900123456-7)'
-  }).optional(),
+  // Ranks
+  customer_rank: z.coerce.number().int().min(0),
+  supplier_rank: z.coerce.number().int().min(0),
 
-  email: z.email({ message: 'Debe proporcionar un correo electrónico válido' }).optional(),
+  // Ventas/Compras
+  user_id: z.coerce.number().int().min(1).optional(),
+  property_payment_term_id: z.coerce.number().int().min(1),
+  property_inbound_payment_method_line_id: z.coerce.number().int().min(1),
 
-  street: z.string()
-    .min(1, 'La dirección no puede estar vacía').optional(),
+  property_supplier_payment_term_id: z.coerce.number().int().min(1),
+  property_outbound_payment_method_line_id: z.coerce.number().int().min(1),
+  property_purchase_currency_id: z.coerce.number().int().min(1),
 
-  city: z.string()
-    .min(1, 'La ciudad no puede estar vacía').optional(),
+  // Fiscal DIAN
+  l10n_co_edi_obligation_type_ids: z.array(z.coerce.number().int().min(1)).min(1),
+  l10n_co_edi_large_taxpayer: z.boolean(),
+  l10n_co_edi_fiscal_regimen: z.enum(['48', '49']),
+  l10n_co_edi_commercial_name: z.string().min(1),
 
-  customer_rank: z.number()
-    .int()
-    .min(0, 'El rango del cliente debe ser al menos 0 ').optional(),
-  supplier_rank: z.number()
-    .int()
-    .min(0, 'El rango del proveedor debe ser al menos 0').optional(),
-  country_id: z.number()
-    .int()
-    .min(1, 'Debe proporcionar un ID de país válido y mayor que 0').optional(),
-  company_id: z.number()
-    .int()
-    .min(1, 'Debe proporcionar un ID de compañía válido y mayor que 0').optional(),
+  // Varios
+  industry_id: z.coerce.number().int().min(1).optional(),
+
+  // Inventario
+  property_stock_customer: z.coerce.number().int().min(1),
+  property_stock_supplier: z.coerce.number().int().min(1),
+
+  // Seguimiento de facturas
+  followup_reminder_type: z.enum(['automatic', 'manual', 'none']).default('automatic'),
+
+  // Contabilidad
+  // aceptar número o [id] (como en tu ejemplo)
+  property_account_receivable_id: z.union([
+    z.coerce.number().int().min(1),
+    z.tuple([z.coerce.number().int().min(1)])
+  ]),
+  property_account_payable_id: z.union([
+    z.coerce.number().int().min(1),
+    z.tuple([z.coerce.number().int().min(1)])
+  ]),
+  autopost_bills: z.enum(['ask', 'never', 'always']).default('never'),
+  ignore_abnormal_invoice_amount: z.union([z.boolean(), z.literal(0), z.literal(1)]),
+  ignore_abnormal_invoice_date: z.union([z.boolean(), z.literal(0), z.literal(1)]),
+  x_studio_registro_mercantil: z.string().optional().default('000000'),
+  // Invoicing
+  invoice_sending_method: z.enum(['email', 'manual', 'none']).default('email'),
+  // opcionales
+  invoice_edi_format: z.string().optional(),
+  peppol_eas: z.string().optional(),
+  peppol_endpoint: z.string().optional(),
+  comment: z.string().optional().default(''),
+
+  // Cuentas bancarias
+  bankAccounts: z.array(bankAccountSchema).min(0)
 }).strict(); // ← impide campos no definidos
 
-module.exports = clientSchema;
+module.exports = {clientSchema};

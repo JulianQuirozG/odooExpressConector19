@@ -1,11 +1,17 @@
-const { CLIENT_FIELDS, BANK_ACCOUNT_FIELDS, BANK_ACCOUNT_PARTNER_FIELDS } = require("../utils/fields");
+const { CLIENT_FIELDS, BANK_ACCOUNT_PARTNER_FIELDS } = require("../utils/fields");
 const odooConector = require("../utils/odoo.service");
 const { pickFields } = require("../utils/util");
-const bankService = require("./bank.service");
 const bankAccountService = require("./bankAccount.service");
 
 const partnerService = {
-    //obtener todos los partners
+    /**
+     * Obtener la lista de partners (res.partner) desde Odoo.
+     *
+     * @async
+     * @param {string[]} [partnerFields=['name','email','phone']] - Campos a recuperar por partner.
+     * @param {Array} [domain=[]] - Dominio Odoo para filtrar la búsqueda.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (array de partners) o error.
+     */
     async getPartners(partnerFields = ['name', 'email', 'phone'], domain = []) {
         try {
             const response = await odooConector.executeOdooRequest('res.partner', 'search_read', {
@@ -23,7 +29,13 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al obtener partners', error: error.message };
         }
     },
-    //obtener un partner por id
+    /**
+     * Obtener un partner por su ID.
+     *
+     * @async
+     * @param {number|string} id - ID del partner a recuperar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (detalle del partner) o error.
+     */
     async getOnePartner(id) {
         try {
             const response = await odooConector.executeOdooRequest('res.partner', 'search_read', {
@@ -45,7 +57,13 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al obtener partner', error: error.message };
         }
     },
-    //crear un partner
+    /**
+     * Crear un nuevo partner (res.partner) en Odoo.
+     *
+     * @async
+     * @param {Object} dataPartner - Datos del partner. Se filtran por CLIENT_FIELDS.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado o respuesta) o error.
+     */
     async createPartner(dataPartner) {
         try {
             const partner = pickFields(dataPartner, CLIENT_FIELDS)
@@ -64,7 +82,14 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al crear partner', error: error.message };
         }
     },
-    //actualizar un partner
+    /**
+     * Actualizar un partner existente.
+     *
+     * @async
+     * @param {number|string} id - ID del partner a actualizar.
+     * @param {Object} dataPartner - Campos a actualizar (filtrados por CLIENT_FIELDS).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     */
     async updatePartner(id, dataPartner) {
         try {
             const partnerExists = await this.getOnePartner(id);
@@ -88,7 +113,13 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al actualizar partner', error: error.message };
         }
     },
-    //eliminar un partner
+    /**
+     * Eliminar un partner por ID.
+     *
+     * @async
+     * @param {number|string} id - ID del partner a eliminar.
+     * @returns {Promise<Object>} Resultado con statusCode y message. Si hay error, incluye error o data.
+     */
     async deletePartner(id) {
         try {
             const partnerExists = await this.getOnePartner(id);
@@ -111,11 +142,24 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al eliminar partner', error: error.message };
         }
     },
-    //crear un partner con cuenta bancaria
+    /**
+     * Crear un partner y, opcionalmente, cuentas bancarias asociadas.
+     *
+     * Proceso:
+     *  - Crea el partner usando `createPartner`.
+     *  - Crea las cuentas bancarias indicadas en `dataPartner.bankAccounts` y las asocia al partner.
+     *
+     * @async
+     * @param {Object} dataPartner - Datos del partner y opcionalmente `bankAccounts` (array).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (partner creado y arrays de éxito/error) o error.
+     */
     async createPartnerWithAccount(dataPartner) {
         try {
             const partner = pickFields(dataPartner, CLIENT_FIELDS);
             const response = await this.createPartner(partner);
+            if (response.statusCode !== 201) {
+                return { statusCode: response.statusCode, message: response.message, data: response.data };
+            }
             const BankAccountError = [];
             const BankAccountSuccess = [];
             if (dataPartner.bankAccounts && dataPartner.bankAccounts.length > 0) {
@@ -138,7 +182,6 @@ const partnerService = {
             }
 
             const partnerCreated = await this.getOnePartner(response.data[0]);
-            console.log(partnerCreated);
             if (partnerCreated.statusCode !== 200) {
                 return { statusCode: 400, message: 'Error al crear partner con cuenta', data: { partner: partnerCreated.data, BankAccountSuccess, BankAccountError } };
             }
@@ -148,7 +191,17 @@ const partnerService = {
             return { statusCode: 500, message: 'Error al crear partner con cuenta', error: error.message };
         }
     },
-    //actualizar un partner con cuenta bancaria
+    /**
+     * Actualizar un partner y gestionar cuentas bancarias asociadas.
+     *
+     * - Actualiza el partner con `updatePartner`.
+     * - Si se incluyen `bankAccounts`, intenta crear/actualizar las cuentas y reporta éxitos/errores.
+     *
+     * @async
+     * @param {number|string} id - ID del partner a actualizar.
+     * @param {Object} dataPartner - Datos del partner y opcionalmente `bankAccounts`.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     */
     async updatePartnerWithAccount(id, dataPartner) {
         try {
             const partner = pickFields(dataPartner, CLIENT_FIELDS);

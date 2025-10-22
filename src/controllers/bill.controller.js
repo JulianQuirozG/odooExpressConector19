@@ -141,6 +141,16 @@ const billController = {
             console.error('Error en billController.getBillDianJson:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al obtener JSON DIAN de la factura', error: error.message });
         }
+    },
+    async confirmCreditNote(req, res) {
+        try {
+            const { id } = req.params;
+            const result = await billService.confirmCreditNote(id);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.confirmCreditNote:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al confirmar nota de crédito', error: error.message });
+        }
     }
 }
 

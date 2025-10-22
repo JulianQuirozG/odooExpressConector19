@@ -17,6 +17,7 @@ const CLIENT_FIELDS = [
     "vat",
     "website",
     "category_id",
+    "city_id",
     "company_id",
     "customer_rank",
     "supplier_rank",
@@ -41,7 +42,13 @@ const CLIENT_FIELDS = [
     "l10n_co_edi_large_taxpayer",
     "property_account_receivable_id",
     "property_account_payable_id",
-    "property_purchase_currency_id"
+    "property_purchase_currency_id",
+    "l10n_co_edi_fiscal_regimen",
+    "l10n_co_edi_comercial_name",
+    "property_stock_supplier",
+    "followup_reminder_type",
+    "autopost_bills",
+    "l10n_co_edi_commercial_name"
 
 
     // ...otros campos de cliente
@@ -70,6 +77,7 @@ const PROVIDER_FIELDS = [
     "email",
     "phone",
     "street",
+    "city_id",
     "street2",
     "lang",
     "city",
@@ -105,7 +113,13 @@ const PROVIDER_FIELDS = [
     "l10n_co_edi_large_taxpayer",
     "property_account_receivable_id",
     "property_account_payable_id",
-    "property_purchase_currency_id"
+    "property_purchase_currency_id",
+    "l10n_co_edi_fiscal_regimen",
+    "l10n_co_edi_comercial_name",
+    "property_stock_supplier",
+    "followup_reminder_type",
+    "autopost_bills",
+    "l10n_co_edi_commercial_name",
 
 ];
 
@@ -114,7 +128,7 @@ const PRODUCT_FIELDS = [
     "list_price", "standard_price", "categ_id", "uom_id", "uom_po_id", "barcode",
     "sale_ok", "purchase_ok", "active", "description", "image_1920", "company_id",
     "taxes_id", "supplier_taxes_id", "weight", "volume", "tracking", "service_to_purchase", "l10n_co_dian_mandate_contract",
-    "property_account_income_id", "property_account_expense_id", "property_stock_account_input", "purchase_method"
+    "property_account_income_id", "property_account_expense_id", "property_stock_account_input", "purchase_method", "uom_id"
 ];
 
 const PRODUCT_FIELDS_BILL = [
@@ -126,8 +140,8 @@ const PRODUCT_FIELDS_BILL = [
 
 const BILL_FIELDS = [
     "move_type", "partner_id", "invoice_date", "invoice_date_due", "ref",
-    "currency_id", "company_id", "journal_id", "narration", "payment_reference",
-    "payment_reference", "invoice_origin", "state", "partner_bank_id", "invoice_vendor_bill_id", "amount_residual"
+    "currency_id", "company_id", "journal_id", "narration", "payment_reference", "l10n_co_edi_operation_type", "l10n_co_edi_payment_option_id", "x_studio_uuid_dian",
+    "payment_reference", "invoice_origin", "state", "partner_bank_id", "invoice_vendor_bill_id", "amount_residual", "l10n_co_edi_type","l10n_co_edi_obligation_type_id","l10n_co_edi_cufe_cude_ref", "invoice_payment_term_id", 
 ];
 
 const INVOICE_LINE_FIELDS = [
@@ -215,7 +229,7 @@ const QUOTATION_LINES = [
 ];
 
 const QUOTATION_FIELDS = ["partner_id",
-    "order_line"];
+    "order_line", "payment_term_id"];
 
 module.exports = {
     CLIENT_FIELDS,

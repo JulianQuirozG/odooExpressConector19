@@ -1,9 +1,7 @@
-const { pick } = require('../schemas/bill.schema');
 const { PURCHASE_ORDER_FIELDS, SALE_ORDER_FIELDS } = require('../utils/fields');
 const odooConector = require('../utils/odoo.service');
 const { pickFields } = require('../utils/util');
 const billService = require('./bills.service');
-const { createBill } = require('./bills.service');
 const partnerService = require('./partner.service');
 const productService = require('./products.service');
 
