@@ -955,7 +955,7 @@ const payrollService = {
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
             const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 83 };     // r = ultima row activa, CB = (col 79 (0-based) del archivo)
+            const end = { r: ref.e.r, c: 85 };     // r = ultima row activa, CB = (col 79 (0-based) del archivo)
             const rangeStr = XLSX.utils.encode_range(start, end);
 
             //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
@@ -1040,7 +1040,7 @@ const payrollService = {
                 }
 
                 //Vacaciones disfrutadas
-                if (row.vacaciones_dias && row.vacaciones_dias) {
+                if (row.vacaciones_dias) {
                     const vacation_days = Number(String(row.vacaciones_dias));
                     const vacation_payment = Number(String(row.vacaciones_disfrutadas));
                     const start_date = new Date(excelDateToJSDate(row.vacaciones_salida));
@@ -1082,6 +1082,39 @@ const payrollService = {
                             end_date: end_date.toISOString().split('T')[0]
                         });
                     }
+                }
+
+                // Vacaciones compensadas
+                if (row.vacaciones_compensadas_dias || row.vacaciones_compensadas) {
+                    if (!row.vacaciones_compensadas_dias ) {
+                        response.push({ error: `Error en los dias de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                        continue;
+                    }
+
+                    if (!row.vacaciones_compensadas) {
+                        response.push({ error: `Error en el pago de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor de pago no definido o invalido` });
+                        continue;
+                    }
+
+                    const compensated_vacation_days = Number(String(row.vacaciones_compensadas_dias));
+                    const compensated_vacation_payment = Number(String(row.vacaciones_compensadas));
+
+                    if ( row.vacaciones_compensadas_dias <= 0) {
+                        response.push({ error: `Error en los dias de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
+                        continue;
+                    }
+
+                    if ( row.vacaciones_compensadas <= 0) {
+                        response.push({ error: `Error en el pago de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor de pago debe ser mayor a 0` });
+                        continue;
+                    }
+
+                    accrued.paid_vacation = [
+                        {
+                            quantity: compensated_vacation_days,
+                            payment: compensated_vacation_payment
+                        }
+                    ]
                 }
 
                 //Incapacidades
