@@ -1358,7 +1358,7 @@ const payrollService = {
                 return { statusCode: 400, message: `No se proporcionaron datos de horas extras`, data: [] };
             }
 
-            if (type !== 'HRNs' && type !== 'HENs' && type !== 'HRDDFs' && type !== 'HEDs' && type !== 'HRDs' && type !== 'HEDDFs' && type !== 'HENDFs' && type !== 'HRNDFs') {
+            if (type !== 'HRNs' && type !== 'HENs' && type !== 'HRDDFs' && type !== 'HEDs' && type !== 'HEDDFs' && type !== 'HENDFs' && type !== 'HRNDFs') {
                 return { statusCode: 400, message: `El tipo de hora extra '${type}' no es válido`, data: [] };
             }
 
@@ -1421,7 +1421,7 @@ const payrollService = {
                     const dayEnd = new Date(dateFrom);
 
                     dayInit.setUTCHours(rangeHoursExtra[horaExtra.type][0], 0, 0);
-                    const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity) / laps) ? horasRestantes : Math.floor(Number(horaExtra.quantity) / laps)
+                    const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity) / laps) ? horasRestantes : Math.ceil(Number(horaExtra.quantity) / laps)
                     dayEnd.setUTCHours(rangeHoursExtra[horaExtra.type][0] + hoursToAssign, 0, 0);
                     const payable_amount = pay * hoursToAssign;
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN')) {
@@ -1433,7 +1433,7 @@ const payrollService = {
                             percentage: pergentage[horaExtra.type]
                         });
 
-                        horasRestantes -= Math.floor(horaExtra.quantity / laps);
+                        horasRestantes -=hoursToAssign;
 
                     } else if (weekDay == 0 && (horaExtra.type == 'HRDDF' || horaExtra.type == 'HEDDF' || horaExtra.type == 'HENDF' || horaExtra.type == 'HRNDF')) {
                         //Domingo
@@ -1444,7 +1444,7 @@ const payrollService = {
                             payment: payable_amount,
                             percentage: pergentage[horaExtra.type]
                         });
-                        horasRestantes -= Math.floor(horaExtra.quantity / laps);
+                        horasRestantes -= hoursToAssign;
                     }
                     (weekDay + 1) == 7 ? weekDay = 0 : weekDay++;
                 }
