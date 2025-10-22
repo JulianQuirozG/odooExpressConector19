@@ -1229,8 +1229,12 @@ const payrollService = {
                 if (row.fecha_pago1 && row.fecha_pago1 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago1) });
                 if (row.fecha_pago2 && row.fecha_pago2 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago2) });
 
+                if(row.Dias_en_la_empresa && isNaN(Number(row.Dias_en_la_empresa))){
+                    response.push({ error: `Error en los dias trabajados para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                    continue;
+                }
 
-                period.worked_time = row.Dias_en_la_empresa ? Number(row.Dias_en_la_empresa) : null;
+                period.worked_time = row.Dias_en_la_empresa ? (row.Dias_en_la_empresa).toString() : null;
                 period.admision_date = excelDateToJSDate(row.fecha_ingreso);
 
                 const payroll = {
