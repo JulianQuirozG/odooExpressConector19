@@ -1017,9 +1017,10 @@ const payrollService = {
 
                 const accrued = {
                     worked_days: Number(row.dias) ? Number(row.dias) : 0,
-                    salary: Number(row.sueldo_contrato) ? Number(row.sueldo_contrato).toFixed(2) : "0.00",
-                    transportation_allowance: Number(row.auxilio_transporte) ? Number(row.auxilio_transporte).toFixed(2) : "0.00",
+                    salary: Number(row.sueldo_basico) ? Number(row.sueldo_basico).toFixed(2) : "0.00",
+                    transportation_allowance: Number(row.auxilio_transporte) ? Number(row.auxilio_transporte).toFixed(2) : undefined,
                     accrued_total: Number(row.total_devengado) ? Number(row.total_devengado).toFixed(2) : "0.00",
+                    endowment: Number(row.dotacion) ? Number(row.dotacion).toFixed(2) : undefined,
                 }
 
                 //Bonos salariales y no salariales
@@ -1116,7 +1117,7 @@ const payrollService = {
 
                     //Verificar que la diferencia entre las fechas sea igual a los dias de incapacidad
                     const diffTime = Math.abs(end_date - start_date);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))+1;
                     if (diffDays !== disability_days) {
                         response.push({ error: `Error en los dias de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de incapacidad` });
                         continue;
@@ -1186,7 +1187,7 @@ const payrollService = {
 
                     //Verificar que la diferencia entre las fechas sea igual a los dias de licencia de maternidad
                     const diffTime = Math.abs(end_date - start_date);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))+1;
                     if (diffDays !== maternity_days) {
                         response.push({ error: `Error en los dias de licencia de maternidad para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de licencia de maternidad` });
                         continue;
@@ -1230,7 +1231,7 @@ const payrollService = {
 
                     //Verificar que la diferencia entre las fechas sea igual a los dias de licencia de paternidad
                     const diffTime = Math.abs(end_date - start_date);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))+1;
                     if (diffDays !== paternity_days) {
                         response.push({ error: `Error en los dias de licencia de paternidad para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de licencia de paternidad` });
                         continue;
@@ -1248,13 +1249,18 @@ const payrollService = {
                 }
 
                 const deductions = {
-                    eps_type_law_deductions_id: 3,
+                    eps_type_law_deductions_id: row.salud_empresa ? 1 : 3,
                     pension_type_law_deductions_id: 5,
                     eps_deduction: (row.aportes_salud).toFixed(2),
-                    pension_deduction: (row.aportes_pension).toFixed(2),
+                    pension_deduction: ((row.aportes_pension).toFixed(2)),
                     //cooperativa: 0,
                     //fondosp_deduction_SP: 0,
-                    deductions_total: (row.total_deducciones).toFixed(2)
+                    deductions_total: (row.total_deducciones).toFixed(2),
+                    fondosp_deduction_SP: row.fsp ? ((row.fsp).toFixed(2)) : undefined,
+                    withholding_at_source: row.retencion_fuente ? ((row.retencion_fuente).toFixed(2)) : undefined,
+                    other_deductions: row.otras_deducciones ? [{ other_deduction: (Math.floor(row.otras_deducciones*100)/100) }] : undefined,
+
+
                 }
 
                 //Dotaciones
@@ -1352,6 +1358,8 @@ const payrollService = {
 
                 response.push(payroll)
             }
+
+
             return { statusCode: 200, message: `Nóminas generadas desde archivo Excel`, data: response };
         } catch (error) {
             console.error('Error al generar el JSON de la nómina desde Excel:', error);
@@ -1411,7 +1419,7 @@ const payrollService = {
             if (nextPymeResponse.statusCode !== 200) return nextPymeResponse;
 
             return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: { data: nextPymeResponse.data, errors: nextPymeResponse.errors } };
-
+            //return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: jsonPayrolls.data };
         } catch (error) {
             console.error('Error al conectar con Radian:', error);
             return { success: false, error: true, message: 'Error interno del servidor' };
@@ -1540,8 +1548,8 @@ const payrollService = {
                     const payable_amount = (pay * hoursToAssign).toFixed(2);
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN')) {
                         response.push({
-                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().replace('Z', ''),
-                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().replace('Z', ''),
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().replace('.000Z', ''),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().replace('.000Z', ''),
                             quantity: hoursToAssign,
                             percentage: pergentage[horaExtra.type],
                             payment: payable_amount,
@@ -1552,8 +1560,8 @@ const payrollService = {
                     } else if (weekDay == 0 && (horaExtra.type == 'HRDDF' || horaExtra.type == 'HEDDF' || horaExtra.type == 'HENDF' || horaExtra.type == 'HRNDF')) {
                         //Domingo
                         response.push({
-                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
-                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().replace('.000Z', ''),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().replace('.000Z', ''),
                             quantity: hoursToAssign,
                             payment: payable_amount,
                             percentage: pergentage[horaExtra.type]
