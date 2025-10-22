@@ -904,7 +904,7 @@ const payrollService = {
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
             const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 81 };     // r = ultima row activa, CB = (col 79 (0-based) del archivo)
+            const end = { r: ref.e.r, c: 83 };     // r = ultima row activa, CB = (col 79 (0-based) del archivo)
             const rangeStr = XLSX.utils.encode_range(start, end);
 
             //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
@@ -1100,15 +1100,15 @@ const payrollService = {
                     }
 
                     //Agrego las cesantias al objeto de devengados
-                    accrued.severance = {
+                    accrued.severance =  [   {
                         payment: payment,
                         interest_payment: interest_payment,
                         percentage: "12"
-                    }
+                    }];
                 }
 
                 //Licencias de maternidad
-                if(row.lm) {
+                if (row.lm) {
                     //Prepraro la informacion de la licencia de maternidad
                     const maternity_days = Number(row.lm);
                     const maternity_payment = Number(row.licencia_maternidad);
@@ -1151,8 +1151,8 @@ const payrollService = {
                     });
                 }
 
-                //Licencias de maternidad
-                if(row.lp) {
+                //Licencias de paternidad
+                if (row.lp) {
                     //Prepraro la informacion de la licencia de paternidad
                     const paternity_days = Number(row.lp);
                     const paternity_payment = Number(row.licencia_paternidad);
@@ -1186,7 +1186,7 @@ const payrollService = {
                     }
 
                     //Agrego las licencias de paternidad al objeto de devengados
-                    if(!accrued.maternity_leave) accrued.maternity_leave = []
+                    if (!accrued.maternity_leave) accrued.maternity_leave = []
 
                     accrued.maternity_leave.push({
                         quantity: paternity_days,
@@ -1221,13 +1221,16 @@ const payrollService = {
                 }
 
                 const payment_dates = []
-
-                if (row.fecha_pago1 || row.fecha_pago2) {
-                    if (row.fecha_pago1 && row.fecha_pago1 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago1) });
-                    if (row.fecha_pago2 && row.fecha_pago2 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago2) });
+                if (!row.fecha_pago1 && !row.fecha_pago2) {
+                    response.push({ error: `Error en las fechas de pago para el empleado ${worker.first_name} ${worker.surname}, al menos una fecha de pago debe estar definida` });
+                    continue;
                 }
 
-                period.worked_time = row.Dias_en_la_empresa ? (row.Dias_en_la_empresa).toString() : null;
+                if (row.fecha_pago1 && row.fecha_pago1 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago1) });
+                if (row.fecha_pago2 && row.fecha_pago2 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago2) });
+
+
+                period.worked_time = row.Dias_en_la_empresa ? Number(row.Dias_en_la_empresa) : null;
                 period.admision_date = excelDateToJSDate(row.fecha_ingreso);
 
                 const payroll = {
