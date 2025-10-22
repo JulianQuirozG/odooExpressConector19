@@ -1,3 +1,4 @@
+const { response } = require("express");
 const config = require("../config/config");
 const nextPymeConnection = require("../utils/nextPyme.service");
 require('dotenv').config();
@@ -164,10 +165,64 @@ const nextPymeService = {
             if (!response.success) return { statusCode: 400, message: 'Error al enviar los datos a Radian', data: response.data };
 
             return { statusCode: 200, message: 'Datos enviados a Radian', data: response.data };
-            
+
         } catch (error) {
             console.log('Error en nextPymeService.sendRadianData:', error);
             return { statusCode: 500, message: 'Error al enviar los datos a Radian', error: error.message };
+        }
+    },
+
+    async sendPayrolltoDian(payrolls = []) {
+        try {
+            // Validar que se proporcionen nóminas
+            if (!payrolls || payrolls.length == 0) return { statusCode: 400, message: `No se proporcionaron nóminas para enviar a DIAN`, data: [] };
+            
+            //Envio nomina por nomina a nextpyme
+            const data = [];
+            const errors = [];
+            for (const payroll of payrolls) {
+                //Verifico que los datos de nomina no contengan errores
+                if(payroll.error){
+                    errors.push({
+                        message: `Error en la nómina ${payroll.error}`,
+                        data: []
+                    });
+                    continue;
+                }
+
+                //Envio la nomina a nextpyme
+                const response = await nextPymeConnection.nextPymeRequest("payroll", "post", payroll);
+                if (response.error) return { statusCode: 500, message: `Error al enviar la nómina de empleado ${payroll.worker.first_name} a DIAN`, error: response.message };
+                if (!response.success) { return { statusCode: 400, message: `Error al enviar la nómina de empleado ${payroll.worker.first_name} a DIAN`, data: response.data }; }
+                if (response.data.errors) {
+                    errors.push({
+                        message: `Error al enviar nómina de empleado ${payroll.worker.first_name} : ${response.message}`,
+                        data: [errors]
+                    });
+                }
+                //Si nextpyme regresa exito, verifico la respuesta de DIAN
+                if (response.data.success) {
+                    const result = response.data.ResponseDian.Envelope.Body.SendNominaSyncResponse.SendNominaSyncResult;
+                    const valid = result.IsValid == 'true';
+                    //Si no es valida, guardo el error
+                    if (!valid) {
+                        errors.push({
+                            message: `Nómina de empleado ${payroll.worker.first_name} rechazada por DIAN: ${result.StatusDescription}`,
+                            data: [result.ErrorMessage]
+                        });
+                    } else {
+                        data.push({
+                            message: `Nómina de empleado ${payroll.worker.first_name} aceptada por DIAN.`,
+                            data: [result]
+                        });
+                    }
+                }
+            }
+            return { statusCode: 200, message: 'Nóminas procesadas para envío a DIAN', data: data, errors: errors }
+
+        } catch (error) {
+            console.error('Error al enviar nómina a DIAN:', error);
+            return { success: false, error: true, message: 'Error interno del servidor', data: [] };
         }
     }
 }

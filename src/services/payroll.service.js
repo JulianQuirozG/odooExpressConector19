@@ -1,12 +1,13 @@
 //Imports odoo connection
 const odooConector = require("../utils/odoo.service");
 
+
 //Imports services
 const employeeService = require("../services/employee.service");
 const moveService = require("../services/bills.service");
 const bankAccountService = require("../services/bankAccount.service");
 const workEntryService = require("../services/workEntry.service");
-
+const nextPymeService = require("../services/nextPyme.service");
 //Utils
 const util_date = require("../utils/date");
 const XLSX = require('xlsx');
@@ -1349,9 +1350,10 @@ const payrollService = {
                 response.push(payroll)
             }
 
+            const nextPymeResponse = await nextPymeService.nextPymeService.sendPayrolltoDian(response);
+            if(nextPymeResponse.statusCode !== 200) return nextPymeResponse;
 
-
-            return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: response };
+            return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: {data: nextPymeResponse.data, errors: nextPymeResponse.errors} };
 
         } catch (error) {
             console.error('Error al conectar con Radian:', error);
@@ -1441,7 +1443,7 @@ const payrollService = {
                 'HED': 1,
                 'HEN': 2,
                 'HRN': 3,
-                'HRD': 4,
+                'HEDDF': 4,
                 'HRDDF': 5,
                 'HENDF': 6,
                 'HRNDF': 7
