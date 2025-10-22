@@ -15,7 +15,7 @@ const reportPayrollsByExcel = async (req, res, next) => {
       const bookExcel = XLSX.read(req.file.buffer, { type: 'buffer' });
       
       if (!bookExcel.SheetNames.includes('Nomina')) return res.status(400).json({ statusCode: 400, error: 'El archivo Excel no contiene la hoja Nomina' });
-      const idSheet = bookExcel.SheetNames.indexOf('Nomina')
+      const idSheet = bookExcel.SheetNames.map(name => name.toLowerCase().trim()).indexOf('nomina');
       const sheetName = bookExcel.SheetNames[idSheet];
       
       if (!sheetName) return res.status(400).json({ statusCode: 400, message: `Hoja Nomina no encontrada`, data: [] });
