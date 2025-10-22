@@ -890,7 +890,7 @@ const payrollService = {
 
     async reportPayrollsByExcel(file) {
         try {
-            if (!file) return { statusCode: 400, message: 'Archivo Excel es requerido', data: [] };
+            //if (!file) return { statusCode: 400, message: 'Archivo Excel es requerido', data: [] };
             const workbook = XLSX.read(file.buffer, { type: 'buffer' });
 
             //obtengo la hoja Nomina
