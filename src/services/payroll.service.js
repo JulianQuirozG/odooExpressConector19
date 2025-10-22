@@ -941,7 +941,7 @@ const payrollService = {
             for (const row of rows) {
                 if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
                 const worker = {
-                    salary: Number(row.sueldo_contrato),
+                    salary: Number(row.sueldo_contrato).toFixed(2) ? Number(row.sueldo_contrato).toFixed(2) : "0.00",
                     address: row.direccion ? row.direccion : '',
                     first_name: row.primer_nombre ? row.primer_nombre : '',
                     middle_name: row.segundo_nombre ? row.segundo_nombre : '',
@@ -960,15 +960,15 @@ const payrollService = {
                 const payment = {
                     payment_method_id: Number(row.metodo_pago) ? Number(row.metodo_pago) : null,
                     bank_name: row.banco,
-                    account_number: row.numero_cuenta,
+                    account_number: (row.numero_cuenta).toString(),
                     account_type: row.tipo_cuenta
                 }
 
                 const accrued = {
                     worked_days: Number(row.dias) ? Number(row.dias) : 0,
-                    salary: Number(row.sueldo_contrato) ? Number(row.sueldo_contrato) : 0,
-                    transportation_allowance: Number(row.auxilio_transporte) ? Number(row.auxilio_transporte) : 0,
-                    accrued_total: Number(row.total_devengado) ? Number(row.total_devengado) : 0,
+                    salary: Number(row.sueldo_contrato) ? Number(row.sueldo_contrato).toFixed(2) : "0.00",
+                    transportation_allowance: Number(row.auxilio_transporte) ? Number(row.auxilio_transporte).toFixed(2) : "0.00",
+                    accrued_total: Number(row.total_devengado) ? Number(row.total_devengado).toFixed(2) : "0.00",
                 }
 
                 //Bonos salariales y no salariales
@@ -1199,11 +1199,11 @@ const payrollService = {
                 const deductions = {
                     eps_type_law_deductions_id: 3,
                     pension_type_law_deductions_id: 5,
-                    eps_deduction: Number(row.aportes_salud),
-                    pension_deduction: Number(row.aportes_pension),
+                    eps_deduction: (row.aportes_salud).toFixed(2),
+                    pension_deduction: (row.aportes_pension).toFixed(2),
                     //cooperativa: 0,
                     //fondosp_deduction_SP: 0,
-                    deductions_total: Number(row.total_deducciones)
+                    deductions_total: (row.total_deducciones).toFixed(2)
                 }
 
                 //Dotaciones
@@ -1227,8 +1227,8 @@ const payrollService = {
                     if (row.fecha_pago2 && row.fecha_pago2 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago2) });
                 }
 
-                period.worked_time = row.Dias_en_la_empresa ? Number(row.Dias_en_la_empresa) : null;
-                period.admision_date = row.fecha_ingreso;
+                period.worked_time = row.Dias_en_la_empresa ? (row.Dias_en_la_empresa).toString() : null;
+                period.admision_date = excelDateToJSDate(row.fecha_ingreso);
 
                 const payroll = {
                     notes: "Nómina reportada desde archivo Excel",
@@ -1239,7 +1239,7 @@ const payrollService = {
                     payment: payment,
                     deductions: deductions,
                     consecutive: row.numero ? Number(row.numero) : null,
-                    worker_code: row.cedula ? row.cedula : null,
+                    worker_code: row.cedula ? (row.cedula).toString() : null,
                     sendmailtome: false,
                     payment_dates: payment_dates,
                     type_document_id: 9,
@@ -1410,6 +1410,7 @@ const payrollService = {
                 let weekDay = initDay.getUTCDay();
 
                 for (let i = 0; horasRestantes > 0 && FechasOcupadas.length > i; i++) {
+                    //en este arrego [{'1': false},{'2': true},...] el indice [1]['2'] del arreglo indica que ese dia esta ocupado y no se pueden asignar horas extras
                     if (FechasOcupadas[i][String(i + 1)]) continue;
 
                     //ahora armo la lista de dias con las horas extras
@@ -1423,14 +1424,14 @@ const payrollService = {
                     dayInit.setUTCHours(rangeHoursExtra[horaExtra.type][0], 0, 0);
                     const hoursToAssign = horasRestantes < Math.ceil(Number(horaExtra.quantity) / laps) ? horasRestantes : Math.ceil(Number(horaExtra.quantity) / laps)
                     dayEnd.setUTCHours(rangeHoursExtra[horaExtra.type][0] + hoursToAssign, 0, 0);
-                    const payable_amount = pay * hoursToAssign;
+                    const payable_amount = (pay * hoursToAssign).toFixed(2);
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN')) {
                         response.push({
-                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)),
-                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)),
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().replace('Z',''),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().replace('Z',''),
                             quantity: hoursToAssign,
+                            percentage: pergentage[horaExtra.type],
                             payment: payable_amount,
-                            percentage: pergentage[horaExtra.type]
                         });
 
                         horasRestantes -=hoursToAssign;
