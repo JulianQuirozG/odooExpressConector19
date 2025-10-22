@@ -31,6 +31,8 @@ const nextPymeConnector = {
     async nextPymeRequest(url, method, args = {}) {
         try {
             const URL = `${NEXTPYME_URL}/${url}`;
+            console.log('NextPyme Request:', method.toUpperCase(), URL);
+            method = method.toLowerCase();
             let request;
             if (method.toLowerCase() === 'get') {
                 request = await axios[`${method}`](URL,
