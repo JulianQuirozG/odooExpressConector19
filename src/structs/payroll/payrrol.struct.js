@@ -55,6 +55,10 @@ const payrollStruct = {
     vacaciones_compensadas: 'vacaciones_compensadas',
     vacaciones_compensadas_dias: 'vacaciones_compensadas_dias',
     dotacion: 'dotacion',
+    prima_servicios: 'prima_servicios',
+    cesantia: 'cesantia',
+    cesantias_depositadas_fondo: 'cesantias_depositadas_fondo',
+    intereses_cesantias: 'intereses_cesantias',
     licencia_paternidad: 'licencia_paternidad',
     licencia_paternidad_fecha_inicial: 'licencia_paternidad_fecha_inicial',
     licencia_paternidad_fecha_final: 'licencia_paternidad_fecha_final',
@@ -75,17 +79,16 @@ const payrollStruct = {
     icbf: 'icbf',
     sena: 'sena',
     ccf: 'ccf',
-    prima_servicios: 'prima_servicios',
-    cesantia: 'cesantia',
-    intereses_cesantias: 'intereses_cesantias',
+    prima_servicios_total: 'prima_servicios_total',
+    cesantia_total: 'cesantia_total',
+    intereses_cesantias_total: 'intereses_cesantias_total',
     vacaciones: 'vacaciones',
     banco: 'banco',
     tipo_cuenta: 'tipo_cuenta',
     numero_cuenta: 'numero_cuenta',
     metodo_pago: 'metodo_pago',
     fecha_pago1: 'fecha_pago1',
-    fecha_pago2: 'fecha_pago2',
-    tipo_de_incapacidad: 'tipo_de_incapacidad'
+    fecha_pago2: 'fecha_pago2'
 }
 
 module.exports = { payrollStruct };

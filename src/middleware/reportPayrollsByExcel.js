@@ -3,6 +3,7 @@ const { payrollStruct } = require('../structs/payroll/payrrol.struct');
 const path = require('path');
 const { validateBody } = require('./validateBody.middleware');
 const { payrollExcelSchema } = require('../schemas/payroll/excelPayrollSchema');
+const { Console } = require('console');
 
 const reportPayrollsByExcel = async (req, res, next) => {
    try {
@@ -25,12 +26,12 @@ const reportPayrollsByExcel = async (req, res, next) => {
       //defino el rango de la A a la CF
       const ref = XLSX.utils.decode_range(ws['!ref']);
       const start = { r: 7, c: 0 };   
-      const end = { r: ref.e.r, c: 85 };     
+      const end = { r: ref.e.r, c: 90 };     
       const rangeStr = XLSX.utils.encode_range(start, end);
 
       //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
       const KEYS = Object.keys(payrollStruct);
-
+      console.log('KEYS:', KEYS);
       const rows = XLSX.utils.sheet_to_json(ws, {
          header: KEYS,
          range: rangeStr,
@@ -56,6 +57,7 @@ const reportPayrollsByExcel = async (req, res, next) => {
       
    
       rows.map((row, index) => {
+         console.log('Validando fila:', row);
          // Validaciones básicas por fila
          if (row.numero == "TOTALES") return; // Omitir fila de totales
          payrollExcelSchema.safeParse(row).success ? null : errors.push({ row: row.numero, value_error: `Errores de validación en la fila ${index+1}`, data: (payrollExcelSchema.safeParse(row).error.issues.map(issue => (issue.path))).join(', ') });
