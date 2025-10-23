@@ -52,6 +52,8 @@ const payrollStruct = {
     vacaciones_salida: 'vacaciones_salida',
     vacaciones_ingreso: 'vacaciones_ingreso',
     vacaciones_dias: 'vacaciones_dias',
+    vacaciones_compensadas: 'vacaciones_compensadas',
+    vacaciones_compensadas_dias: 'vacaciones_compensadas_dias',
     dotacion: 'dotacion',
     licencia_paternidad: 'licencia_paternidad',
     licencia_paternidad_fecha_inicial: 'licencia_paternidad_fecha_inicial',
