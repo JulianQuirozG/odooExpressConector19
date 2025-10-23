@@ -26,7 +26,7 @@ const reportPayrollsByExcel = async (req, res, next) => {
       //defino el rango de la A a la CF
       const ref = XLSX.utils.decode_range(ws['!ref']);
       const start = { r: 7, c: 0 };   
-      const end = { r: ref.e.r, c: 90 };     
+      const end = { r: ref.e.r, c: 92 };     
       const rangeStr = XLSX.utils.encode_range(start, end);
 
       //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas

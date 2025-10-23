@@ -62,6 +62,8 @@ const payrollStruct = {
     licencia_paternidad: 'licencia_paternidad',
     licencia_paternidad_fecha_inicial: 'licencia_paternidad_fecha_inicial',
     licencia_paternidad_fecha_final: 'licencia_paternidad_fecha_final',
+    auxilio_salarial: 'auxilio_salarial',
+    auxilio_no_salarial: 'auxilio_no_salarial',
     total_devengado: 'total_devengado',
     aportes_salud: 'aportes_salud',
     aportes_pension: 'aportes_pension',
