@@ -222,8 +222,8 @@ const payrollService = {
 
 
 
-                //-------------------------------------- Asigno la informacion de la nomina -----------------------------------------
-                payrollJson.worker = worker;
+            //-------------------------------------- Asigno la informacion de la nomina -----------------------------------------
+            payrollJson.worker = worker;
             payrollJson.type_document_id = type_document_id;
             payrollJson.prefix = prefix;
             payrollJson.worker_code = worker_code;
@@ -763,7 +763,35 @@ const payrollService = {
             return { statusCode: 500, success: false, error: true, message: error.message, data: [] };
         }
     },
-
+    /**
+     * Construye el JSON de una nómina a partir del payslip id en Odoo.
+     *
+     * Flujo:
+     *  - Valida el id de nómina.
+     *  - Recupera la nómina con `getpayrollById`.
+     *  - Recupera datos del empleado, contactos, contrato, cuenta bancaria y asientos contables.
+     *  - Calcula periodos, días trabajados, devengados y arma el objeto `payrollJson` listo para reportar.
+     *
+     * Comportamiento de errores:
+     *  - Retorna objetos con statusCode 400 cuando faltan datos obligatorios o el id es inválido.
+     *  - Retorna statusCode 404 cuando no se encuentran recursos de parámetros (municipio, tipo de documento, etc.).
+     *  - Retorna statusCode 500 cuando fallan llamadas a servicios externos.
+     *  - En excepción interna retorna { statusCode: 500, success: false, error: true, message, data: [] }.
+     *
+     * @async
+     * @param {number|string} id
+     *        Id del payslip (acepta número o string convertible a número).
+     *
+     * @returns {Promise<
+     *   { statusCode: 200, message: string, data: Object } |
+     *   { statusCode: 400|404|500, message: string, error?: any, data?: any } |
+     *   { statusCode: 500, success: false, error: true, message: string, data: [] }
+     * >}
+     *
+     * @example
+     * const res = await payrollService.getJsonPayrollById(123);
+     * if (res.statusCode === 200) console.log(res.data); // JSON de la nómina listo para enviar
+     */
     async getpayrollById(id) {
         try {
             //Verfico que el id sea valido
@@ -783,6 +811,41 @@ const payrollService = {
         }
     },
 
+    /**
+     * Recupera las nóminas entre dos fechas y enriquece cada nómina con sus líneas
+     * y los días trabajados asociados.
+     *
+     * Flujo:
+     *  - Valida y normaliza las fechas (`startDate` y `endDate`) a YYYY-MM-DD.
+     *  - Consulta `hr.payslip` mediante Odoo (`search_read`) en el rango indicado.
+     *  - Para cada nómina recuperada obtiene sus líneas (`hr.payslip.line`) y los
+     *    registros de días trabajados (`hr.payslip.worked_days`) y los adjunta.
+     *
+     * Comportamiento de errores:
+     *  - Si faltan fechas o son inválidas retorna statusCode 400.
+     *  - Si alguna llamada a Odoo falla retorna objetos con statusCode 400 o 500
+     *    según el error recibido.
+     *  - En excepción interna retorna statusCode 500 con mensaje genérico.
+     *
+     * @async
+     * @param {string|Date} startDate
+     *        Fecha de inicio del rango (acepta valores convertibles a Date).
+     * @param {string|Date} endDate
+     *        Fecha fin del rango (acepta valores convertibles a Date).
+     *
+     * @returns {Promise<
+     *   { statusCode: 200, message: string, data: Array<Object> } |
+     *   { statusCode: 400|500, message: string, data?: any } |
+     *   { statusCode: 500, success: false, error: true, message: string }
+     * >}
+     *
+     * - Éxito: statusCode 200 y `data` contiene las nóminas con `line_ids` y `worked_days_ids`.
+     * - Errores: retorna objetos con statusCode y mensaje explicando la causa.
+     *
+     * @example
+     * const res = await payrollService.getPayrollsByDates('2025-10-01', '2025-10-31');
+     * if (res.statusCode === 200) console.log(res.data); // array de nóminas con detalles
+     */
     async getPayrollsByDates(startDate, endDate) {
         try {
             //Verifico que las fechas sean validas
@@ -822,6 +885,36 @@ const payrollService = {
         }
     },
 
+    /**
+     * Recupera los asientos contables (moves) asociados a una nómina.
+     *
+     * Flujo:
+     *  - Valida que `payrollId` sea numérico y mayor a 0.
+     *  - Verifica que la nómina exista llamando a `getpayrollById`.
+     *  - Llama a Odoo (`hr.payslip` -> `action_open_move`) para obtener los IDs de los asientos.
+     *  - Recupera cada asiento con `moveService.getOneBill` y devuelve sus datos.
+     *
+     * Comportamiento de errores:
+     *  - Si `payrollId` no es válido retorna { statusCode: 400, message, data: [] }.
+     *  - Si `getpayrollById` falla, propaga su resultado.
+     *  - Si la llamada a Odoo falla retorna objetos con statusCode 500 o 400 según corresponda.
+     *  - Si no se encuentran asientos para la nómina retorna { statusCode: 404, message, data: [] }.
+     *  - En excepción interna retorna { success: false, error: true, message: 'Error interno del servidor' }.
+     *
+     * @async
+     * @param {number|string} payrollId
+     *        Id de la nómina (acepta número o string convertible a número).
+     *
+     * @returns {Promise<
+     *   { statusCode: 200, message: string, data: Array<Object> } |
+     *   { statusCode: 400|404|500, message: string, data?: any } |
+     *   { success: false, error: true, message: string }
+     * >}
+     *
+     * @example
+     * const res = await payrollService.getMovesByPayrollId(123);
+     * if (res.statusCode === 200) console.log(res.data); // array de asientos
+     */
     async getMovesByPayrollId(payrollId) {
         try {
             //Verfico que el id sea valido
@@ -856,7 +949,40 @@ const payrollService = {
         }
     },
 
-
+    /**
+     * Reporta nóminas entre dos fechas y devuelve un arreglo de JSONs agrupados por empleado.
+     *
+     * Flujo:
+     *  - Recupera las nóminas en el rango con `getPayrollsByDates`.
+     *  - Agrupa las nóminas por empleado.
+     *  - Para cada empleado genera el JSON de nómina con `getJsonPayrolls`.
+     *
+     * Comportamiento:
+     *  - Si `getPayrollsByDates` devuelve un error, lo propaga tal cual.
+     *  - Para cada empleado añade el resultado exitoso ({ statusCode: 200, data: ... }) o un objeto
+     *    con { message, data: error } si `getJsonPayrolls` falla.
+     *  - En excepción interna retorna { statusCode: 500, success: false, error: true, message }.
+     *
+     * @async
+     * @param {string} [startDate='2025/10/01']
+     *        Fecha de inicio del rango (acepta cualquier valor convertible a Date). Se normaliza a YYYY-MM-DD.
+     * @param {string} [endDate='2025/10/31']
+     *        Fecha fin del rango (acepta cualquier valor convertible a Date). Se normaliza a YYYY-MM-DD.
+     *
+     * @returns {Promise<
+     *   { statusCode: 200, message: string, data: Array<Object> } |
+     *   { statusCode: number, message: string, data?: any } |
+     *   { statusCode: 500, success: false, error: true, message: string }
+     * >}
+     *
+     * - Éxito: statusCode 200 y `data` es un array con los JSONs por empleado (o objetos de error por empleado).
+     * - Si `getPayrollsByDates` falla, se retorna su objeto de error.
+     * - En caso de excepción no controlada se retorna un objeto con statusCode 500.
+     *
+     * @example
+     * const res = await payrollService.reportPayrollsByDates('2025-10-01', '2025-10-31');
+     * if (res.statusCode === 200) console.log(res.data);
+     */
     async reportPayrollsByDates(startDate = '2025/10/01', endDate = '2025/10/31') {
         try {
             //Obtengo las nominas entre las fechas
@@ -1022,7 +1148,7 @@ const payrollService = {
                 }
 
                 if (row.auxilio_transporte) accrued.transportation_allowance = Number(row.auxilio_transporte).toFixed(2)
-                if( Number(row.dotacion)) accrued.endowment = Number(row.dotacion).toFixed(2);
+                if (Number(row.dotacion)) accrued.endowment = Number(row.dotacion).toFixed(2);
 
                 //Bonos salariales y no salariales
                 const devengados_salariales = Number(row.otros_devengos_no_salariales);
@@ -1085,7 +1211,7 @@ const payrollService = {
 
                 // Vacaciones compensadas
                 if (row.vacaciones_compensadas_dias || row.vacaciones_compensadas) {
-                    if (!row.vacaciones_compensadas_dias ) {
+                    if (!row.vacaciones_compensadas_dias) {
                         response.push({ error: `Error en los dias de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
                         continue;
                     }
@@ -1098,12 +1224,12 @@ const payrollService = {
                     const compensated_vacation_days = Number(String(row.vacaciones_compensadas_dias));
                     const compensated_vacation_payment = Number(String(row.vacaciones_compensadas));
 
-                    if ( row.vacaciones_compensadas_dias <= 0) {
+                    if (row.vacaciones_compensadas_dias <= 0) {
                         response.push({ error: `Error en los dias de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
                         continue;
                     }
 
-                    if ( row.vacaciones_compensadas <= 0) {
+                    if (row.vacaciones_compensadas <= 0) {
                         response.push({ error: `Error en el pago de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor de pago debe ser mayor a 0` });
                         continue;
                     }
@@ -1438,49 +1564,52 @@ const payrollService = {
 
     /**
      * Construye las jornadas de horas extra dentro de un periodo, distribuyendo las horas
-     * por día según el máximo permitido y calculando los rangos de tiempo en UTC.
+     * por día según límites por tipo y calculando rangos de tiempo en UTC.
      *
-     * Reglas:
-     * - Tipos soportados en `type`: 'HEDDFs' | 'HENs' | 'HENDFs'.
-     * - Para horaExtra.type 'HED' (diurna) se usa 18:00–21:00 UTC.
-     * - Para horaExtra.type 'HEN' (nocturna) se usa 21:00–06:00 UTC (puede cruzar medianoche).
-     * - Máximo por día configurado internamente (por defecto: 3 horas).
+     * Reglas y comportamiento:
+     *  - Recibe conceptos con { type, quantity, payment } donde:
+     *      - type: código de la hora extra ('HED','HEN','HRN','HEDDF','HENDF', ...).
+     *      - quantity: horas totales a distribuir (string|number).
+     *      - payment: valor total a prorratear (string|number).
+     *  - Distribuye las horas en "laps" según el máximo por día (por defecto 3h).
+     *  - Calcula start_time / end_time en UTC usando rangos por tipo (e.g. HED 18:00-21:00).
+     *  - Omite días marcados como ocupados en FechasOcupadas.
+     *  - No lanza excepciones: en errores devuelve objeto con { success: false, error: true, message }.
      *
-     * Notas:
-     * - Usa setUTCHours para evitar desfases por zona horaria del servidor.
-     * - `quantity` es el total de horas a distribuir; `payment` es el total a prorratear.
-     * - Retorna objeto con statusCode/message; en error no lanza excepción.
-     *
-     * @param {Array<{type: 'HED'|'HEN'|'HEDD'|'HEDN'|string, quantity: string|number, payment: string|number}>} horasExtrasData
-     *        Conceptos de horas extra a procesar.
-     * @param {'HEDDFs'|'HENs'|'HENDFs'} type
-     *        Agrupación/colección objetivo a calcular.
+     * @param {Array.<{type: string, quantity: string|number, payment: string|number}>} horasExtrasData
+     *        Array de conceptos de horas extra a procesar.
+     * @param {string} type
+     *        Identificador del grupo esperado ('HEDs','HENs','HRNs','HEDDFs','HENDFs','HRDDFs','HRNDFs', etc.).
      * @param {string|Date} dateFrom
-     *        Inicio del periodo (inclusive). Acepta Date o 'YYYY-MM-DD'.
+     *        Fecha de inicio del periodo (inclusive). Acepta Date o cadena 'YYYY-MM-DD'.
      * @param {string|Date} dateTo
-     *        Fin del periodo (inclusive). Acepta Date o 'YYYY-MM-DD'.
+     *        Fecha fin del periodo (inclusive). (No usado extensamente en la implementación actual
+     *        pero incluido por contrato).
+     * @param {Array.<Record<string,boolean>>} FechasOcupadas
+     *        Arreglo indexado por día del mes con objetos [ {'1': boolean}, {'2': boolean}, ... ] donde
+     *        true significa día ocupado (no asignable).
+     *
      * @returns {{
      *   statusCode: number,
      *   message: string,
-     *   data: Array<{
-     *     start_time: Date,
-     *     end_time: Date,
+     *   data: Array.<{
+     *     start_time: string, // ISO-like sin 'Z' (ej. "2025-10-01T18:00:00")
+     *     end_time: string,
      *     quantity: number,
-     *     payment: number,
-     *     percentage: number
+     *     payment: string|number,
+     *     percentage?: number
      *   }>
      * } | { success: false, error: true, message: string }}
      *
      * @example
      * const res = payrollService.extraTimeHours(
-     *   [{ type: 'HEN', quantity: '10', payment: '170,455' }],
-     *   'HENs',
+     *   [{ type: 'HED', quantity: '5', payment: '50000' }],
+     *   'HEDs',
      *   '2025-10-01',
-     *   '2025-10-31'
+     *   '2025-10-31',
+     *   [{ '1': false }, { '2': true }, ...]
      * );
-     * if (res.statusCode === 200) {
-     *   console.log(res.data); // [{ start_time: Date, end_time: Date, quantity, payment, percentage }, ...]
-     * }
+     * if (res.statusCode === 200) console.log(res.data);
      */
     extraTimeHours(horasExtrasData, type, dateFrom, dateTo, FechasOcupadas) {
         try {
@@ -1615,7 +1744,7 @@ const payrollService = {
      *   new Date('2025-10-01'),
      *   [{ date: '2025-10-05', date_to: '2025-10-08' }]
      * );
-     * // mes[4]['5'] === true, mes[5]['6'] === true, mes[6]['7'] === true, mes[7]['8'] === true
+     * // ... mes[3]['4'] === false, mes[4]['5'] === true, mes[5]['6'] === true, mes[6]['7'] === true, mes[7]['8'] === true, ....
      */
     arregloDiasOcupados(mes, fechaInicioPeriodo, fechas = []) {
         try {
