@@ -1171,6 +1171,7 @@ const payrollService = {
         let maternity_leave = [];
         let severance = [];
         let service_bonus = [];
+        let aid = [];
 
         //Subsidio de transporte
         if (row.auxilio_transporte) {
@@ -1240,6 +1241,11 @@ const payrollService = {
         if (!salary || isNaN(salary)) return { error: true, message: 'El campo salario es obligatorio y debe ser un número válido', data: [] };
         if (!accrued_total || isNaN(accrued_total)) return { error: true, message: 'El campo total_devengado es obligatorio y debe ser un número válido', data: [] };
 
+        //Auxilios salariales y no salariales
+        aid = this.generate_accrued_salary_allowance_object(row);
+        if (aid.error) return aid;
+        if (aid.data) aid = [aid.data];
+
         //Construyo el objeto de devengados
         const accrued = {};
 
@@ -1255,11 +1261,47 @@ const payrollService = {
         if (maternity_leave.length > 0) accrued.maternity_leave = maternity_leave;
         if (severance.length > 0) accrued.severance = severance;
         if (service_bonus.length > 0) accrued.service_bonus = service_bonus;
+        if (aid.length > 0) accrued.aid = aid;
 
         //Retorno el objeto devengados
         return { error: false, message: 'Objeto devengados generado correctamente', data: accrued };
     },
 
+
+    /**
+     * Genera un objeto de auxilios salariales y no salariales (salary allowances) para devengados de nómina a partir de los datos de una fila de Excel.
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de auxilios del empleado
+     * @param {number|string} [row.auxilio_salarial] - Valor monetario del auxilio salarial (opcional)
+     * @param {number|string} [row.auxilio_no_salarial] - Valor monetario del auxilio no salarial (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Object|null|Array
+     * }} Objeto con resultado de la operación
+     */
+    generate_accrued_salary_allowance_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de los auxilios', data: [] };
+
+        //Extraigo la informacion de los auxilios
+        const salary_assistance = Number(row.auxilio_salarial);
+        const non_salary_assistance = Number(row.auxilio_no_salarial);
+
+        //Verifico si hay auxilios
+        if (!row.auxilio_salarial && !row.auxilio_no_salarial) return { error: false, message: 'No hay auxilios', data: null };
+
+        //Verifico que los campos sean validos
+        if (row.auxilio_salarial && (isNaN(salary_assistance) || salary_assistance <= 0)) return { error: true, message: 'El campo auxilio_salarial debe ser un número válido y mayor a 0', data: [] };
+        if (row.auxilio_no_salarial && (isNaN(non_salary_assistance) || non_salary_assistance <= 0)) return { error: true, message: 'El campo auxilio_no_salarial debe ser un número válido y mayor a 0', data: [] };
+
+        //Construyo el objeto de auxilios
+        const aid = {};
+        if (row.auxilio_salarial) aid.salary_assistance = salary_assistance.toFixed(2);
+        if (row.auxilio_no_salarial) aid.non_salary_assistance = non_salary_assistance.toFixed(2);
+        return { error: false, message: 'Objeto de auxilios generado correctamente', data: aid };
+    },
 
     /**
      * Genera un objeto de primas de servicios (service bonus) para devengados de nómina a partir de los datos de una fila de Excel.
@@ -1806,7 +1848,8 @@ const payrollService = {
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
             const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 90 };     // r = ultima row activa, CB = (col 90 (0-based) del archivo)
+            const end = { r: ref.e.r, c: 94 };     // r = ultima row activa, CB = (col 90 (0-based) del archivo)
+
             const rangeStr = XLSX.utils.encode_range(start, end);
 
             //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
