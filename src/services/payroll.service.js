@@ -1268,11 +1268,10 @@ const payrollService = {
                     //cooperativa: 0,
                     //fondosp_deduction_SP: 0,
                     deductions_total: (row.total_deducciones).toFixed(2),
-                    fondosp_deduction_SP: row.fsp ? ((row.fsp).toFixed(2)) : undefined,
+                    fondosp_deduction_SP: row.fsp ? (Number(row.fsp*100)/100) : undefined,
                     withholding_at_source: row.retencion_fuente ? ((row.retencion_fuente).toFixed(2)) : undefined,
                     other_deductions: row.otras_deducciones ? [{ other_deduction: (Math.floor(row.otras_deducciones*100)/100) }] : undefined,
-
-
+                    fondossp_type_law_deductions_id: row.fsp ? 9 : undefined,
                 }
 
                 //Dotaciones
@@ -1427,6 +1426,7 @@ const payrollService = {
             const jsonPayrolls = await this.generate_json_excel_payroll(file);
             if (jsonPayrolls.statusCode !== 200) return jsonPayrolls;
 
+            console.log("Json Nóminas:", jsonPayrolls.data);
             const nextPymeResponse = await nextPymeService.nextPymeService.sendPayrolltoDian(jsonPayrolls.data);
             if (nextPymeResponse.statusCode !== 200) return nextPymeResponse;
 
