@@ -218,7 +218,7 @@ const payrollService = {
             accrued.accrued_salary = salary;
 
             //Subsidio de transporte
-            const transportaion_allowance =
+            //const transportaion_allowance =
 
 
 
@@ -955,7 +955,7 @@ const payrollService = {
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
             const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 83 };     // r = ultima row activa, CB = (col 79 (0-based) del archivo)
+            const end = { r: ref.e.r, c: 85 };     // r = ultima row activa, CB = (col 79 (0-based) del archivo)
             const rangeStr = XLSX.utils.encode_range(start, end);
 
             //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
@@ -1018,9 +1018,11 @@ const payrollService = {
                 const accrued = {
                     worked_days: Number(row.dias) ? Number(row.dias) : 0,
                     salary: Number(row.sueldo_basico) ? Number(row.sueldo_basico).toFixed(2) : "0.00",
-                    transportation_allowance: Number(row.auxilio_transporte) ? Number(row.auxilio_transporte).toFixed(2) : undefined,
                     accrued_total: Number(row.total_devengado) ? Number(row.total_devengado).toFixed(2) : "0.00",
                     endowment: Number(row.dotacion) ? Number(row.dotacion).toFixed(2) : undefined,
+                }
+                if (row.auxilio_transporte) {
+                     accrued.transportation_allowance = Number(row.auxilio_transporte) ? Number(row.auxilio_transporte).toFixed(2) : Number("0.00").toFixed(2)
                 }
 
                 //Bonos salariales y no salariales
@@ -1038,7 +1040,7 @@ const payrollService = {
                 }
 
                 //Vacaciones disfrutadas
-                if (row.vacaciones_dias && row.vacaciones_dias) {
+                if (row.vacaciones_dias) {
                     const vacation_days = Number(String(row.vacaciones_dias));
                     const vacation_payment = Number(String(row.vacaciones_disfrutadas));
                     const start_date = new Date(excelDateToJSDate(row.vacaciones_salida));
@@ -1082,6 +1084,39 @@ const payrollService = {
                     }
                 }
 
+                // Vacaciones compensadas
+                if (row.vacaciones_compensadas_dias || row.vacaciones_compensadas) {
+                    if (!row.vacaciones_compensadas_dias ) {
+                        response.push({ error: `Error en los dias de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                        continue;
+                    }
+
+                    if (!row.vacaciones_compensadas) {
+                        response.push({ error: `Error en el pago de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor de pago no definido o invalido` });
+                        continue;
+                    }
+
+                    const compensated_vacation_days = Number(String(row.vacaciones_compensadas_dias));
+                    const compensated_vacation_payment = Number(String(row.vacaciones_compensadas));
+
+                    if ( row.vacaciones_compensadas_dias <= 0) {
+                        response.push({ error: `Error en los dias de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
+                        continue;
+                    }
+
+                    if ( row.vacaciones_compensadas <= 0) {
+                        response.push({ error: `Error en el pago de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor de pago debe ser mayor a 0` });
+                        continue;
+                    }
+
+                    accrued.paid_vacation = [
+                        {
+                            quantity: compensated_vacation_days,
+                            payment: compensated_vacation_payment
+                        }
+                    ]
+                }
+
                 //Incapacidades
                 if (row.ieg) {
                     //Prepraro la informacion de la incapacidad
@@ -1105,6 +1140,7 @@ const payrollService = {
 
                     //Verifico que las fechas de incapacidad sean validas
                     if (!start_date || !end_date || !row.incapacidad_fecha_inicial || !row.incapacidad_fecha_final) {
+                        console.log(!start_date, !end_date, !row.incapacidad_fecha_inicial, !row.incapacidad_fecha_final);
                         response.push({ error: `Error en las fechas de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
                         continue;
                     }
@@ -1134,30 +1170,6 @@ const payrollService = {
                     });
                 }
 
-                //Cesantias
-                if (row.cesantia && row.intereses_cesantias) {
-                    const payment = Number(String(row.cesantia));
-                    const interest_payment = Number(String(row.intereses_cesantias));
-
-                    //Verifico que el pago de cesantias sea valido
-                    if (isNaN(payment) || payment <= 0) {
-                        response.push({ error: `Error en el pago de cesantias para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    //Verifico que el pago de intereses de cesantias sea valido
-                    if (isNaN(interest_payment) || interest_payment <= 0) {
-                        response.push({ error: `Error en el pago de intereses de cesantias para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    //Agrego las cesantias al objeto de devengados
-                    accrued.severance = [{
-                        payment: payment,
-                        interest_payment: interest_payment,
-                        percentage: "12"
-                    }];
-                }
 
                 //Licencias de maternidad
                 if (row.lm) {
@@ -1256,11 +1268,10 @@ const payrollService = {
                     //cooperativa: 0,
                     //fondosp_deduction_SP: 0,
                     deductions_total: (row.total_deducciones).toFixed(2),
-                    fondosp_deduction_SP: row.fsp ? ((row.fsp).toFixed(2)) : undefined,
+                    fondosp_deduction_SP: row.fsp ? (Number(row.fsp*100)/100) : undefined,
                     withholding_at_source: row.retencion_fuente ? ((row.retencion_fuente).toFixed(2)) : undefined,
                     other_deductions: row.otras_deducciones ? [{ other_deduction: (Math.floor(row.otras_deducciones*100)/100) }] : undefined,
-
-
+                    fondossp_type_law_deductions_id: row.fsp ? 9 : undefined,
                 }
 
                 //Dotaciones
@@ -1415,11 +1426,11 @@ const payrollService = {
             const jsonPayrolls = await this.generate_json_excel_payroll(file);
             if (jsonPayrolls.statusCode !== 200) return jsonPayrolls;
 
+            console.log("Json Nóminas:", jsonPayrolls.data);
             const nextPymeResponse = await nextPymeService.nextPymeService.sendPayrolltoDian(jsonPayrolls.data);
             if (nextPymeResponse.statusCode !== 200) return nextPymeResponse;
 
             return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: { data: nextPymeResponse.data, errors: nextPymeResponse.errors } };
-            //return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: jsonPayrolls.data };
         } catch (error) {
             console.error('Error al conectar con Radian:', error);
             return { success: false, error: true, message: 'Error interno del servidor' };
@@ -1548,8 +1559,8 @@ const payrollService = {
                     const payable_amount = (pay * hoursToAssign).toFixed(2);
                     if (weekDay != 0 && (horaExtra.type == 'HED' || horaExtra.type == 'HEN' || horaExtra.type == 'HRN')) {
                         response.push({
-                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().replace('.000Z', ''),
-                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().replace('.000Z', ''),
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().split('.')[0].replace('Z', ''),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().split('.')[0].replace('Z', ''),
                             quantity: hoursToAssign,
                             percentage: pergentage[horaExtra.type],
                             payment: payable_amount,
@@ -1560,8 +1571,8 @@ const payrollService = {
                     } else if (weekDay == 0 && (horaExtra.type == 'HRDDF' || horaExtra.type == 'HEDDF' || horaExtra.type == 'HENDF' || horaExtra.type == 'HRNDF')) {
                         //Domingo
                         response.push({
-                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().replace('.000Z', ''),
-                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().replace('.000Z', ''),
+                            start_time: new Date(dayInit.setDate(dayInit.getUTCDay() + i)).toISOString().split('.')[0].replace('Z', ''),
+                            end_time: new Date(dayEnd.setDate(dayEnd.getUTCDay() + i)).toISOString().split('.')[0].replace('Z', ''),
                             quantity: hoursToAssign,
                             payment: payable_amount,
                             percentage: pergentage[horaExtra.type]
