@@ -58,7 +58,7 @@ app.use('/api/supportDocument', supportDocumentRoutes);
 
 (async () => {
   const db = await DbConfig.init(config.database);
-  if (!db.success) {
+  if (!db.status) {
     console.error('Error connecting to the database:', db.message);
   } else {
     console.log('Connected to MySQL database');

@@ -34,13 +34,19 @@ const util_date = {
      * 
      */
     canBeParsedAsDate(value) {
-        if (value == null || value === '' || value === 0) return false;
+        try {
+            if (value == null || value === '' || value === 0) return false;
 
-        // Si es un número, probablemente venga del formato Excel
-        const parsedValue = typeof value === 'number' ? excelDateToJSDate.excelDateToJSDate(value) : value;
+            // Si es un número, probablemente venga del formato Excel
+            const parsedValue = typeof value === 'number' ? excelDateToJSDate.excelDateToJSDate(value) : value;
 
-        const d = new Date(parsedValue);
-        return d instanceof Date && !isNaN(d.getTime());
+            const d = new Date(parsedValue);
+            const isValidDate = d instanceof Date && !isNaN(d.getTime());
+            return isValidDate;
+        } catch (error) {
+            console.error('Error en canBeParsedAsDate:', error);
+            return false;
+        }
     },
 
     /**
@@ -53,9 +59,15 @@ const util_date = {
      * 
      */
     getDiffDates(start_date, end_date) {
-        const diffTime = Math.abs(end_date - start_date);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        return diffDays;
+        try {
+            if (!this.canBeParsedAsDate(start_date) || !this.canBeParsedAsDate(end_date)) return 0;
+            const diffTime = Math.abs(end_date - start_date);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            return diffDays;
+        } catch (error) {
+            console.error('Error en getDiffDates:', error);
+            return 0;
+        }
     }
 }
 
