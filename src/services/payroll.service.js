@@ -12,6 +12,7 @@ const nextPymeService = require("../services/nextPyme.service");
 const util_date = require("../utils/date");
 const XLSX = require('xlsx');
 const { payrollStruct } = require("../structs/payroll/payrrol.struct");
+const util_excel = require("../utils/excel.util");
 
 // Imports repositories
 const paramsTypeDocumentIdentificationRepository = require("../Repository/params_type_document_identification.repository/params_type_document_identification.repository");
@@ -1832,54 +1833,21 @@ const payrollService = {
      */
     async generate_json_excel_payroll(file) {
         try {
-            if (!file) return { statusCode: 400, message: 'Archivo Excel es requerido', data: [] };
-            const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+            //Extraer informacion de las filas de nomina
+            let rows = util_excel.get_excel_data(file, "Nomina", 7, null, 0, 94, payrollStruct);
+            if (rows.error) return rows;
+            rows = rows.data;
 
-            //obtengo la hoja Nomina
-            const idSheet = workbook.SheetNames.map(name => name.toLowerCase().trim()).indexOf('nomina');
-            const sheetName = workbook.SheetNames[idSheet];
+            //Extraigo la informacion del periodo desde el encabezado
+            let periodData = util_excel.get_excel_data(file, "Nomina", 1, 4, 13, 13, null);
+            if (periodData.error) return periodData;
+            period_data = periodData.data;
 
-            if (!sheetName) return { statusCode: 400, message: `Hoja Nomina no encontrada`, data: [] };
-            const ws = workbook.Sheets[sheetName];
-
-            // Procesar cada hoja del libro
-
-            //defino el rango de la A a la BN
-            const ref = XLSX.utils.decode_range(ws['!ref']);
-            // {s:{r,c}, e:{r,c}}
-            const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 94 };     // r = ultima row activa, CB = (col 90 (0-based) del archivo)
-
-            const rangeStr = XLSX.utils.encode_range(start, end);
-
-            //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
-            const KEYS = Object.keys(payrollStruct);
-
-            // Obtiene matriz de filas (arrays), dentro del rango definido
-            const rows = XLSX.utils.sheet_to_json(ws, {
-                header: KEYS,
-                range: rangeStr,
-                raw: true,
-                blankrows: false, // ya omite filas 100% vacías
-                defval: null,      // rellena celdas vacías con 0
-            });
-
-
-            const startPeriod = { r: 1, c: 13 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const endPeriod = { r: 4, c: 13 };     // r = ultima row activa, AU = (col 46 (0-based) del archivo)
-            const rangeStrPeriod = XLSX.utils.encode_range(startPeriod, endPeriod);
-
-            //obtengo los datos del periodo que se encuentran en el encabezado (1, 13) - (4, 13)
-            const periodData = XLSX.utils.sheet_to_json(ws, {
-                header: 1,
-                range: rangeStrPeriod,
-                defval: 0,      // rellena celdas vacías con 0
-            });
-
+            //Preparo la informacion del periodo
             const period = {
-                issue_date: excelDateToJSDate(periodData[0][0]),
-                settlement_start_date: excelDateToJSDate(periodData[1][0]),
-                settlement_end_date: excelDateToJSDate(periodData[2][0]),
+                issue_date: excelDateToJSDate(period_data[0][0]),
+                settlement_start_date: excelDateToJSDate(period_data[1][0]),
+                settlement_end_date: excelDateToJSDate(period_data[2][0]),
             }
 
             const response = [];
@@ -1949,7 +1917,7 @@ const payrollService = {
                     sendmailtome: false,
                     payment_dates: payment_dates,
                     type_document_id: 9,
-                    payroll_period_id: periodData[3][0] ? Number(periodData[3][0]) : null,
+                    payroll_period_id: period_data[3][0] ? Number(period_data[3][0]) : null,
                 }
 
                 //mapeo los dias ocupados en el periodo del mes
