@@ -103,11 +103,7 @@ const supportDocumentService = {
             if (customer.data.l10n_co_edi_fiscal_regimen) seller.type_regime_id = (customer.data.l10n_co_edi_fiscal_regimen === "49") ? 2 : 1;
 
             //---------------------------------------------- Forma de pago--------------------------------------------------//
-            const payment_form = {
-                duration_measure: 1,
-                payment_due_date: 1,
-                payment_method_id: 1,
-            }
+            const payment_form = {};
 
             //En odoo el unico pago a contado es el id 1 el resto son credito(nextpyme 1 contado 2 credito)
             payment_form.payment_form_id = 2;
@@ -130,9 +126,9 @@ const supportDocumentService = {
             payment_form.payment_due_date = supportDocument.data.invoice_date_due;
             //---------------------------------------------- Fin Forma de pago----------------------------------------------//
 
-            //Notas de la factura
+
             const notes = supportDocument.data.x_studio_notas || "";
-            //fecha de pago
+
 
             //---------------------------------------------- Líneas de la factura ----------------------------------------------//
             const lines = await billService.getLinesByBillId(supportDocument.data.id, 'full');
@@ -140,10 +136,10 @@ const supportDocumentService = {
             const invoice_lines = [];
 
             for (const line of lines.data) {
-
+                //console.log('liness', line);
                 const allowance_charges = [{
-                    amount: "0.00",
-                    base_amount: "0.00",
+                    amount: line.deductible_amount.toFixed(2),
+                    base_amount: (Number(line.price_subtotal)+Number(line.deductible_amount)).toFixed(2),
                     charge_indicator: false,
                     allowance_charge_reason: "DESCUENTO GENERAL"
                 }];
@@ -165,11 +161,11 @@ const supportDocumentService = {
                 });
             }
 
-            //---------------------------------------------- Totales de la factura ----------------------------------------------//
+            //---------------------------------------------- Descuentos Totales de la factura ----------------------------------------------//
 
             const allowance_charges = [{
                 amount: "0.00",
-                base_amount: "0.00",
+                base_amount: supportDocument.data.amount_untaxed.toFixed(2),
                 discount_id: 10,
                 charge_indicator: false,
                 allowance_charge_reason: "DESCUENTO GENERAL"

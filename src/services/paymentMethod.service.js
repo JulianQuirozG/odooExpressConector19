@@ -24,7 +24,7 @@ const paymentMethodService = {
             const paymentMethod = await this.getPaymentMethodById(id);
 
             if(paymentMethod.statusCode !== 200) return paymentMethod;
-            console.log('ID recibido:', paymentMethod);
+
 
             const paymentMethodQuery = await  paramsPaymentMethodsRepository.getPaymentMethodByCode(paymentMethod.data.code);
 

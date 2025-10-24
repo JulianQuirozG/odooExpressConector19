@@ -1143,7 +1143,7 @@ const billService = {
      *
      * @async
      * @param {number|string} id - ID de la factura.
-     * @param {string} [action='id'] - 'id' para retornar solo product_id como id, 'full' para retornar todo.
+     * @param {string} [action='id'] - 'id' para retornar solo product_id como id arreglo de ids, 'full' para retornar toda la data de las lineas.
      * @returns {Promise<Object>} Resultado con statusCode, message y data (array de líneas) o error.
      */
     async getLinesByBillId(id, action = 'id') {
