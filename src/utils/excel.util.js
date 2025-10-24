@@ -22,10 +22,10 @@ const excel_util = {
     get_excel_data(file, sheetName, startRow = 0, endRow = null, startCol = 0, endCol = null, headers) {
         try {
             // Verifica si el archivo está presente
-            if (!file) return { error: true, message: 'Archivo Excel es requerido', data: [] };
+            if (!file) return { success: false, error: false, message: 'Archivo Excel es requerido', data: [] };
 
             //Verificar si el archivo es un buffer
-            if (!Buffer.isBuffer(file.buffer)) return { error: true, message: 'El archivo proporcionado no es un buffer válido', data: [] };
+            if (!Buffer.isBuffer(file.buffer)) return { success: false, error: false, message: 'El archivo proporcionado no es un buffer válido', data: [] };
 
             // Lee el archivo Excel desde el buffer
             const workbook = XLSX.read(file.buffer, { type: 'buffer' });
@@ -34,7 +34,7 @@ const excel_util = {
             const idSheet = workbook.SheetNames.map(name => name.toLowerCase().trim()).indexOf(sheetName.toLowerCase().trim());
 
             // Verifica si la hoja existe
-            if (idSheet === -1) return { error: true, message: `La hoja "${sheetName}" no existe en el archivo Excel`, data: [] };
+            if (idSheet === -1) return { success: false, error: false, message: `La hoja "${sheetName}" no existe en el archivo Excel`, data: [] };
 
             // Obtiene la hoja por su nombre
             const worksheet = workbook.Sheets[workbook.SheetNames[idSheet]];
@@ -58,10 +58,10 @@ const excel_util = {
             });
 
             // Retorna los datos extraídos
-            return { error: false, message: 'Datos extraídos con éxito', data: rows  };
+            return { success: true, error: false, message: 'Datos extraídos con éxito', data: rows };
         } catch (error) {
             console.error('Error al leer el archivo Excel:', error);
-            return { error: true, message: 'Error al leer el archivo Excel: ' + error.message, data: [] };
+            return { success: false, error: true, message: 'Error al leer el archivo Excel: ' + error.message, data: [] };
         }
     }
 }

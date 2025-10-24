@@ -31,7 +31,6 @@ const reportPayrollsByExcel = async (req, res, next) => {
 
       //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
       const KEYS = Object.keys(payrollStruct);
-      console.log('KEYS:', KEYS);
       const rows = XLSX.utils.sheet_to_json(ws, {
          header: KEYS,
          range: rangeStr,
@@ -57,7 +56,6 @@ const reportPayrollsByExcel = async (req, res, next) => {
       
    
       rows.map((row, index) => {
-         console.log('Validando fila:', row);
          // Validaciones básicas por fila
          if (row.numero == "TOTALES") return; // Omitir fila de totales
          payrollExcelSchema.safeParse(row).success ? null : errors.push({ row: row.numero, value_error: `Errores de validación en la fila ${index+1}`, data: (payrollExcelSchema.safeParse(row).error.issues.map(issue => (issue.path))).join(', ') });
