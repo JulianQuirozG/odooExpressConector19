@@ -23,8 +23,6 @@ const typeLiabilityService = {
             const typeLiability = await this.getTypeLiabilityByid(id);
 
             if(typeLiability.statusCode !== 200) return typeLiability;
-            console.log('ID recibido:', typeLiability);
-            console.log('typeLiability', typeLiability);
 
             const typeLiabilityQuery = await getTypeLiabilitiesByCode(typeLiability.data.name);
 
