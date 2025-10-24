@@ -1,7 +1,9 @@
 const odooConector = require('../utils/odoo.service');
 const billService = require('./bills.service');
+const { typeLiabilityService } = require('./liability.service');
 const { municipalityService } = require('./municipality.service');
 const partnerService = require('./partner.service');
+const { paymentMethodService } = require('./paymentMethod.service');
 
 
 const supportDocumentService = {
@@ -40,20 +42,15 @@ const supportDocumentService = {
     async createSupportDocument(documentData) {
         // Lógica para crear un nuevo documento de soporte en la base de datos
         try {
+
             // Aquí iría la lógica para crear el documento
-
-
             const supportDocumentData = documentData
             // Mapea los campos necesarios 
             supportDocumentData.move_type = 'in_invoice';
             supportDocumentData.journal_id = 15; // ID del diario de documentos de soporte
+
             // Llama al servicio de facturas para crear el documento
-
-            console.log('Datos para crear el documento de soporte:', supportDocumentData);
-
             const supportDocument = await billService.createBill(supportDocumentData);
-
-            console.log('Resultado de la creación del documento de soporte:', supportDocument);
 
             if (supportDocument.statusCode !== 201) {
                 return { statusCode: 400, error: true, message: 'Error al crear el documento de soporte', data: [] };
@@ -72,22 +69,22 @@ const supportDocumentService = {
         try {
 
             const supportDocument = await this.getSupportDocumentContentById(documentId);
+            if (supportDocument.statusCode !== 200) return supportDocument;
 
-            if (supportDocument.statusCode !== 200) {
-                return { statusCode: 400, error: true, message: 'Error al crear el documento de soporte', data: [] };
-            }
             console.log('supportDocument.data', supportDocument.data);
 
             const customer = await partnerService.getOnePartner(supportDocument.data.partner_id[0]);
-            if (customer.statusCode !== 200) {
-                return customer;
-            }
+            if (customer.statusCode !== 200) return customer;
 
             console.log('customer.data', customer.data);
 
+            //codigo del municipio
             const city = await municipalityService.getMunicipalityCodeById(customer.data.city_id[0]);
-            console.log('city as', city.data);
+            if (city.statusCode !== 200) return city;
 
+            const typeLiability = await typeLiabilityService.getTypeLiabilityCodeById(customer.data.l10n_co_edi_obligation_type_ids[0]);
+            if (typeLiability.statusCode !== 200) return typeLiability;
+            //---------------------------------------------- Vendedor --------------------------------------------------//
             const seller = {
                 identification_number: customer.data.vat.includes('-') ? customer.data.vat.split('-')[0] : customer.data.vat,
                 name: customer.data.name,
@@ -98,34 +95,46 @@ const supportDocumentService = {
                 postal_zone_code: customer.data.postal_zone_code,
                 type_document_identification_id: customer.data.type_document_identification_id,
                 type_organization_id: customer.data.type_organization_id,
-                //type_liability_id: 1,
-                //type_regime_id: 1
+                type_liability_id: typeLiability.data[0].id,
             }
 
+            if (customer.data.vat.includes('-')) seller.dv = customer.data.vat.split('-')[1];
+            if (city.data) seller.municipality_id = city.data[0].id;
+            if (customer.data.l10n_co_edi_fiscal_regimen) seller.type_regime_id = (customer.data.l10n_co_edi_fiscal_regimen === "49") ? 2 : 1;
+
+            //---------------------------------------------- Forma de pago--------------------------------------------------//
             const payment_form = {
-                payment_form_id: 1,
                 duration_measure: 1,
                 payment_due_date: 1,
                 payment_method_id: 1,
             }
-            //Si es pago inmediato
-            payment_form.payment_form_id = 2;
 
-            //Si no es pago inmediato, es credito
+            //En odoo el unico pago a contado es el id 1 el resto son credito(nextpyme 1 contado 2 credito)
+            payment_form.payment_form_id = 2;
             if (supportDocument.data.invoice_payment_term_id[0] == 1) payment_form.payment_form_id = 1;
 
-            //Metodo de pago id
             const payment_id = supportDocument.data.l10n_co_edi_payment_option_id[0];
             if (!payment_id) return { statusCode: 400, message: "La factura no tiene método de pago" };
-            const payment_method = (await odooConector.executeOdooRequest("l10n_co_edi.payment.option", "search_read", { domain: [['id', '=', payment_id]] }));
 
-            payment_form.payment_method_id = payment_method.data[0].l10n_co_edi_code;
+            const paymentMethodCode = await paymentMethodService.getPaymentMethodCodeById(payment_id);
+            if (paymentMethodCode.statusCode !== 200) return paymentMethodCode;
+            payment_form.payment_method_id = paymentMethodCode.data[0].id;
+
+
+            const invoice_date = new Date(supportDocument.data.invoice_date);
+            const invoice_date_due = new Date(supportDocument.data.invoice_date_due);
+            const diferenciaMs = invoice_date_due - invoice_date;
+            const dias = Math.round(diferenciaMs / (1000 * 60 * 60 * 24));
+            payment_form.duration_measure = dias;
+
+            payment_form.payment_due_date = supportDocument.data.invoice_date_due;
+            //---------------------------------------------- Fin Forma de pago----------------------------------------------//
 
             //Notas de la factura
             const notes = supportDocument.data.x_studio_notas || "";
             //fecha de pago
-            payment_form.payment_due_date = supportDocument.data.invoice_date_due;
 
+            //---------------------------------------------- Líneas de la factura ----------------------------------------------//
             const lines = await billService.getLinesByBillId(supportDocument.data.id, 'full');
 
             const invoice_lines = [];
@@ -150,13 +159,15 @@ const supportDocumentService = {
                     allowance_charges: allowance_charges,
                     invoiced_quantity: line.quantity,
                     line_extension_amount: line.price_subtotal,
-                    free_of_charge_indicator:   false,
+                    free_of_charge_indicator: false,
                     type_item_identification_id: 4,
                     type_generation_transmition_id: 1
                 });
             }
 
-            const allowance_charges =[{
+            //---------------------------------------------- Totales de la factura ----------------------------------------------//
+
+            const allowance_charges = [{
                 amount: "0.00",
                 base_amount: "0.00",
                 discount_id: 10,
@@ -164,14 +175,18 @@ const supportDocumentService = {
                 allowance_charge_reason: "DESCUENTO GENERAL"
             }]
 
+            //---------------------------------------------- Montos legales ----------------------------------------------//
+
             const legal_monetary_totals = {
-                payable_amount:(supportDocument.data.amount_total).toFixed(2),
-                tax_exclusive_amount:(supportDocument.data.amount_untaxed).toFixed(2),
-                tax_inclusive_amount:(supportDocument.data.amount_total).toFixed(2),
-                line_extension_amount:(supportDocument.data.amount_untaxed).toFixed(2),
-                charge_total_amount:"0.00",
-                allowance_total_amount:"0.00"
+                payable_amount: (supportDocument.data.amount_total).toFixed(2),
+                tax_exclusive_amount: (supportDocument.data.amount_untaxed).toFixed(2),
+                tax_inclusive_amount: (supportDocument.data.amount_total).toFixed(2),
+                line_extension_amount: (supportDocument.data.amount_untaxed).toFixed(2),
+                charge_total_amount: "0.00",
+                allowance_total_amount: "0.00"
             }
+
+            //---------------------------------------------- JSON Final ----------------------------------------------//
 
             const jsonSupportDocument = {
                 date: supportDocument.data.date,
@@ -191,14 +206,8 @@ const supportDocumentService = {
                 legal_monetary_totals: legal_monetary_totals,
             };
 
-            if (customer.data.vat.includes('-')) seller.dv = customer.data.vat.split('-')[1];
-            if (city.data) seller.municipality_id = city.data[0].id;
 
-
-
-
-
-            return { statusCode: 201, error: false, message: 'Documento creado con éxito', data: jsonSupportDocument };
+            return { statusCode: 201, message: 'Documento creado con éxito', data: jsonSupportDocument };
         } catch (error) {
             console.error('Error al crear el documento de soporte:', error);
             return { statusCode: 500, error: true, message: 'Error interno del servidor', data: [] };
