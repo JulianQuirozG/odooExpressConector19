@@ -25,6 +25,7 @@ const paramsPaymentMethodsRepository = require("../Repository/params_payment_met
 const paramsLiabilitiesRepository = require("../Repository/param_type_liabilities/param_type_liabilities.repository");
 const { getUnitMeasureByCode } = require("../Repository/param_unit_measures/params_unit_measures");
 const { getTaxByCode } = require("../Repository/param_taxes/params_unit_measures");
+const accountService = require('./account.service');
 
 
 
@@ -36,7 +37,7 @@ const billService = {
      * @param {string[]} [billFields] - Campos a solicitar por factura.
      * @returns {Promise<Object>} Resultado con statusCode, message y data (array de facturas) o error.
      */
-    async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"]) {
+    async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"], domain = []) {
         try {
             //Obtenemos todas las facturas
             const response = await odooConector.executeOdooRequest(
@@ -44,6 +45,7 @@ const billService = {
                 "search_read",
                 {
                     fields: billFields,
+                    domain: domain,
                 }
             );
 
@@ -166,22 +168,40 @@ const billService = {
             //si tiene productos los verifico que existan y construyo las lineas
             if (dataBill.invoice_line_ids && dataBill.invoice_line_ids.length > 0) {
 
-                const productIds = dataBill.invoice_line_ids.map((line) =>
-                    Number(line.product_id)
-                );
+                const productIds = []
+
+                const accountsIds = []
+
+                for (const line of dataBill.invoice_line_ids) {
+                    if (line.account_id && !isNaN(Number(line.account_id))) accountsIds.push(line.account_id);
+                    if (line.product_id && !isNaN(Number(line.product_id))) productIds.push(line.product_id);
+                }
 
                 //le paso la lista de ids de productos sin repetidos para verificar que existan
                 const productsResponse = await productService.validListId([
                     ...new Set(productIds),
                 ]);
+                
+                const productsAccountResponse = await accountService.validateAccountList(accountsIds);
 
                 if (productsResponse.statusCode === 200) {
                     //filtro las lineas de la factura para quedarme solo con las que tienen productos existentes
-                    const cosas = dataBill.invoice_line_ids.filter((line) =>
-                        productsResponse.data.foundIds.includes(Number(line.product_id))
-                    );
-                    bill.invoice_line_ids = cosas.map((line) => [0, 0, line]);
+                    const lines = dataBill.invoice_line_ids.filter((line) => {
+                        const raw = line.product_id;
+                        const accountRaw = line.account_id;
+
+                        const hasAid = accountRaw !== undefined && accountRaw !== null;
+                        const hasPid = raw !== undefined && raw !== null;
+                        if (!hasPid && !hasAid) return true; // sin producto y sin cuenta: se mantiene
+
+                        if(hasAid && hasPid) return productsResponse.data.foundIds.includes(raw) && productsAccountResponse.data.foundIds.includes(Number(accountRaw));
+                        if(hasAid) return Number.isFinite(accountRaw) && productsAccountResponse.data.foundIds.includes(Number(accountRaw));
+                        if(hasPid) return Number.isFinite(raw) && productsResponse.data.foundIds.includes(raw);
+                    });
+                    bill.invoice_line_ids = lines.map((line) => [0, 0, line]);
                 }
+
+                console.log("Lineas de la factura a crear:", bill.invoice_line_ids);
             }
             //creo la factura
             const response = await odooConector.executeOdooRequest(
