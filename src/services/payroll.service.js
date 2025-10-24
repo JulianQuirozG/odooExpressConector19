@@ -17,9 +17,10 @@ const { payrollStruct } = require("../structs/payroll/payrrol.struct");
 const paramsTypeDocumentIdentificationRepository = require("../Repository/params_type_document_identification.repository/params_type_document_identification.repository");
 const paramsMunicipalitiesRepository = require("../Repository/params_municipalities/params_municipalities.repository");
 const paramsPaymentMethodsRepository = require("../Repository/params_payment_methods/params_payment_methods.repository");
-const { ca } = require("zod/locales");
+const { ca, is, de } = require("zod/locales");
 const { excelDateToJSDate } = require("../utils/attachements.util");
 const { type } = require("../schemas/product.schema");
+const { util } = require("zod");
 
 const payrollService = {
     async getJsonPayrollById(id) {
@@ -1014,6 +1015,772 @@ const payrollService = {
         }
     },
 
+
+    /**
+     * Genera un objeto trabajador (worker) para nómina a partir de los datos de una fila de Excel.
+     * 
+     * Extrae y valida información del empleado desde una fila del archivo Excel, construyendo
+     * un objeto que cumple con la estructura requerida para el reporte de nómina electrónica.
+     * 
+     * @param {Object} row - Fila de datos del Excel con información del empleado
+     * @param {number} row.sueldo_contrato - Salario contractual del empleado (obligatorio)
+     * @param {string} row.direccion - Dirección del empleado (obligatorio)
+     * @param {string} row.primer_nombre - Primer nombre del empleado (obligatorio)
+     * @param {string} [row.segundo_nombre] - Segundo nombre del empleado (opcional)
+     * @param {string} row.primer_apellido - Primer apellido del empleado (obligatorio)
+     * @param {string} [row.segundo_apellido] - Segundo apellido del empleado (opcional)
+     * @param {number} row.tipo_empleado - ID del tipo de empleado (obligatorio)
+     * @param {number} row.municipio - ID del municipio (obligatorio)
+     * @param {number} row.tipo_contrato - ID del tipo de contrato (obligatorio)
+     * @param {string} [row.pensionado] - "Si" si tiene pensión de riesgo, otro valor si no
+     * @param {string} [row.tipo_salario] - "Integral" si es salario integral, otro valor si no
+     * @param {number} row.subtipo_empleado - ID del subtipo de empleado (obligatorio)
+     * @param {string|number} row.cedula - Número de identificación del empleado (obligatorio)
+     * @param {number} row.tipo_documento - ID del tipo de documento de identificación (obligatorio)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Object|Array
+     * }} Objeto con resultado de la operación
+     * 
+     */
+    generate_payroll_worker_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion del trabajador', data: [] };
+
+        //Extraigo la informacion del trabajador
+        const salary = Number(row.sueldo_contrato);
+        const address = row.direccion;
+        const first_name = row.primer_nombre;
+        const middle_name = row.segundo_nombre ? row.segundo_nombre : null;
+        const surname = row.primer_apellido;
+        const second_surname = row.segundo_apellido ? row.segundo_apellido : null;
+        const type_worker_id = Number(row.tipo_empleado);
+        const municipality_id = Number(row.municipio);
+        const type_contract_id = Number(row.tipo_contrato);
+        const high_risk_pension = row.pensionado == 'Si' ? true : false;
+        const integral_salarary = row.tipo_salario == 'Integral' ? true : false;
+        const sub_type_worker_id = Number(row.subtipo_empleado);
+        const identification_number = row.cedula;
+        const payroll_type_document_identification_id = Number(row.tipo_documento);
+
+        //Verifico que los campos obligatorios esten completos
+        if (!salary || isNaN(salary)) return { error: true, message: 'El campo sueldo_contrato es obligatorio y debe ser un número válido', data: [] };
+        if (!address) return { error: true, message: 'El campo direccion es obligatorio', data: [] };
+        if (!first_name) return { error: true, message: 'El campo primer_nombre es obligatorio', data: [] };
+        if (!surname) return { error: true, message: 'El campo primer_apellido es obligatorio', data: [] };
+        if (!type_worker_id || isNaN(type_worker_id)) return { error: true, message: 'El campo tipo_empleado es obligatorio y debe ser un número válido', data: [] };
+        if (!municipality_id || isNaN(municipality_id)) return { error: true, message: 'El campo municipio es obligatorio y debe ser un número válido', data: [] };
+        if (!type_contract_id || isNaN(type_contract_id)) return { error: true, message: 'El campo tipo_contrato es obligatorio y debe ser un número válido', data: [] };
+        if (!sub_type_worker_id || isNaN(sub_type_worker_id)) return { error: true, message: 'El campo subtipo_empleado es obligatorio y debe ser un número válido', data: [] };
+        if (!identification_number) return { error: true, message: 'El campo cedula es obligatorio', data: [] };
+        if (!payroll_type_document_identification_id || isNaN(payroll_type_document_identification_id)) return { error: true, message: 'El campo tipo_documento es obligatorio y debe ser un número válido', data: [] };
+
+        //Construyo el objeto trabajador
+        let worker = {
+            salary: salary.toFixed(2),
+            address: address,
+            first_name: first_name,
+            middle_name: middle_name,
+            surname: surname,
+            second_surname: second_surname,
+            type_worker_id: type_worker_id,
+            municipality_id: municipality_id,
+            type_contract_id: type_contract_id,
+            high_risk_pension: high_risk_pension,
+            integral_salarary: integral_salarary,
+            sub_type_worker_id: sub_type_worker_id,
+            identification_number: identification_number,
+            payroll_type_document_identification_id: payroll_type_document_identification_id,
+        }
+
+        //Retorno el objeto trabajador
+        return { error: false, message: 'Objeto trabajador generado correctamente', data: worker };
+    },
+
+
+    /**
+     * Genera un objeto de pago (payment) para nómina a partir de los datos de una fila de Excel.
+     * 
+     * Extrae y valida la información de pago del empleado desde una fila del archivo Excel,
+     * construyendo un objeto que cumple con la estructura requerida para el procesamiento
+     * de pagos en nóminas electrónicas.
+     * 
+     * Funcionalidad:
+     * - Extrae información bancaria: nombre del banco, número de cuenta, tipo de cuenta
+     * - Valida el método de pago configurado para el empleado
+     * - Asegura que todos los campos obligatorios estén presentes y sean válidos
+     * - Convierte el número de cuenta a string para evitar problemas de formato
+     * * 
+     * @param {Object} row - Fila de datos del Excel con información de pago del empleado
+     * @param {string} row.banco - Nombre del banco donde el empleado tiene la cuenta (obligatorio)
+     * @param {string|number} row.numero_cuenta - Número de cuenta bancaria del empleado (obligatorio)
+     * @param {string} row.tipo_cuenta - Tipo de cuenta bancaria (ej: "Ahorros", "Corriente") (obligatorio)
+     * @param {number} row.metodo_pago - ID del método de pago configurado en el sistema (obligatorio)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Object|Array
+     * }} Objeto con resultado de la operación
+     * 
+     */
+    generate_payroll_payment_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion del pago', data: [] };
+
+        //Extraigo la informacion del pago
+        const bank_name = row.banco;
+        const account_number = row.numero_cuenta;
+        const account_type = row.tipo_cuenta;
+        const payment_method_id = Number(row.metodo_pago);
+
+        //Verifico que los campos obligatorios esten completos
+        if (!bank_name) return { error: true, message: 'El campo banco es obligatorio', data: [] };
+        if (!account_number) return { error: true, message: 'El campo numero_cuenta es obligatorio', data: [] };
+        if (!account_type) return { error: true, message: 'El campo tipo_cuenta es obligatorio', data: [] };
+        if (!payment_method_id || isNaN(payment_method_id)) return { error: true, message: 'El campo metodo_pago es obligatorio y debe ser un número válido', data: [] };
+
+        //Construyo el objeto de pago
+        const payment = {
+            payment_method_id: payment_method_id,
+            bank_name: bank_name,
+            account_number: (account_number).toString(),
+            account_type: account_type
+        }
+
+        //Retorno el objeto pago
+        return { error: false, message: 'Objeto pago generado correctamente', data: payment };
+    },
+
+    generate_payroll_accrued_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de los devengados', data: [] };
+
+        //Extraigo la informacion de los devengados
+        const worked_days = Number(row.dias);
+        const salary = Number(row.sueldo_basico);
+        const accrued_total = Number(row.total_devengado);
+        let transportation_allowance = null;
+        let endowment = null;
+        let bonuses = [];
+        let common_vacation = [];
+        let paid_vacation = [];
+        let work_disabilities = [];
+        let maternity_leave = [];
+        let severance = [];
+        let service_bonus = [];
+        let aid = [];
+
+        //Subsidio de transporte
+        if (row.auxilio_transporte) {
+            transportation_allowance = Number(row.auxilio_transporte);
+            if (isNaN(transportation_allowance)) return { error: true, message: 'El campo auxilio_transporte debe ser un número válido', data: [] };
+
+            //Agrego el auxilio de transporte a el salario
+            transportation_allowance = transportation_allowance;
+        }
+
+        //Dotacion
+        if (row.dotacion) {
+            endowment = Number(row.dotacion);
+            if (isNaN(endowment) || endowment <= 0) return { error: true, message: 'El campo dotacion debe ser un número válido', data: [] };
+
+            //Agrego la dotacion a el salario
+            endowment = endowment;
+        }
+
+        //Bonos salariales y no salariales
+        bonuses = this.generate_accrued_bonuses_object(row);
+        if (bonuses.error) return bonuses;
+        if (bonuses.data) bonuses = [bonuses.data];
+
+        //Vacaciones disfrutadas
+        common_vacation = this.generate_accrued_common_vacation_object(row);
+        if (common_vacation.error) return common_vacation;
+        if (common_vacation.data) common_vacation = [common_vacation.data];
+
+        //Vacaciones compensadas
+        paid_vacation = this.generate_accrued_paid_vacation_object(row);
+        if (paid_vacation.error) return paid_vacation;
+        if (paid_vacation.data) paid_vacation = [paid_vacation.data];
+
+        //Discapacidades laborales
+        work_disabilities = this.generate_accrued_work_disabilities_object(row);
+        if (work_disabilities.error) return work_disabilities;
+        if (work_disabilities.data) work_disabilities = [work_disabilities.data];
+
+        //Licencia de maternidad
+        maternity_leave = this.generate_accrued_maternity_leave_object(row);
+        if (maternity_leave.error) return maternity_leave;
+        if (maternity_leave.data) maternity_leave = [maternity_leave.data];
+
+        //Licencia de paternidad
+        //Reasigno los valores de licencia de paternidad a los de maternidad para reutilizar la funcion
+        row.lm = row.lp;
+        row.licencia_maternidad = row.licencia_paternidad;
+        row.licencia_maternidad_fecha_inicial = row.licencia_paternidad_fecha_inicial;
+        row.licencia_maternidad_fecha_final = row.licencia_paternidad_fecha_final;
+        const paternity_leave = this.generate_accrued_maternity_leave_object(row);
+        if (paternity_leave.error) return paternity_leave;
+        if (paternity_leave.data) maternity_leave.push(paternity_leave.data);
+
+        //Cesantias
+        severance = this.generate_accrued_severance_object(row);
+        if (severance.error) return severance;
+        if (severance.data) severance = [severance.data];
+
+        //Primas
+        service_bonus = this.generate_accrued_service_bonus_object(row);
+        if (service_bonus.error) return service_bonus;
+        if (service_bonus.data) service_bonus = [service_bonus.data];
+
+        //Verifico que los campos obligatorios esten completos
+        if (!worked_days || isNaN(worked_days)) return { error: true, message: 'El campo dias_trabajados es obligatorio y debe ser un número válido', data: [] };
+        if (!salary || isNaN(salary)) return { error: true, message: 'El campo salario es obligatorio y debe ser un número válido', data: [] };
+        if (!accrued_total || isNaN(accrued_total)) return { error: true, message: 'El campo total_devengado es obligatorio y debe ser un número válido', data: [] };
+
+        //Auxilios salariales y no salariales
+        aid = this.generate_accrued_salary_allowance_object(row);
+        if (aid.error) return aid;
+        if (aid.data) aid = [aid.data];
+
+        //Construyo el objeto de devengados
+        const accrued = {};
+
+        accrued.worked_days = worked_days;
+        accrued.salary = salary.toFixed(2);
+        accrued.accrued_total = accrued_total.toFixed(2);
+        if (transportation_allowance !== null) accrued.transportation_allowance = transportation_allowance.toFixed(2);
+        if (endowment !== null) accrued.endowment = endowment.toFixed(2);
+        if (bonuses.length > 0) accrued.bonuses = bonuses;
+        if (common_vacation.length > 0) accrued.common_vacation = common_vacation;
+        if (paid_vacation.length > 0) accrued.paid_vacation = paid_vacation;
+        if (work_disabilities.length > 0) accrued.work_disabilities = work_disabilities;
+        if (maternity_leave.length > 0) accrued.maternity_leave = maternity_leave;
+        if (severance.length > 0) accrued.severance = severance;
+        if (service_bonus.length > 0) accrued.service_bonus = service_bonus;
+        if (aid.length > 0) accrued.aid = aid;
+
+        //Retorno el objeto devengados
+        return { error: false, message: 'Objeto devengados generado correctamente', data: accrued };
+    },
+
+
+    /**
+     * Genera un objeto de auxilios salariales y no salariales (salary allowances) para devengados de nómina a partir de los datos de una fila de Excel.
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de auxilios del empleado
+     * @param {number|string} [row.auxilio_salarial] - Valor monetario del auxilio salarial (opcional)
+     * @param {number|string} [row.auxilio_no_salarial] - Valor monetario del auxilio no salarial (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Object|null|Array
+     * }} Objeto con resultado de la operación
+     */
+    generate_accrued_salary_allowance_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de los auxilios', data: [] };
+
+        //Extraigo la informacion de los auxilios
+        const salary_assistance = Number(row.auxilio_salarial);
+        const non_salary_assistance = Number(row.auxilio_no_salarial);
+
+        //Verifico si hay auxilios
+        if (!row.auxilio_salarial && !row.auxilio_no_salarial) return { error: false, message: 'No hay auxilios', data: null };
+
+        //Verifico que los campos sean validos
+        if (row.auxilio_salarial && (isNaN(salary_assistance) || salary_assistance <= 0)) return { error: true, message: 'El campo auxilio_salarial debe ser un número válido y mayor a 0', data: [] };
+        if (row.auxilio_no_salarial && (isNaN(non_salary_assistance) || non_salary_assistance <= 0)) return { error: true, message: 'El campo auxilio_no_salarial debe ser un número válido y mayor a 0', data: [] };
+
+        //Construyo el objeto de auxilios
+        const aid = {};
+        if (row.auxilio_salarial) aid.salary_assistance = salary_assistance.toFixed(2);
+        if (row.auxilio_no_salarial) aid.non_salary_assistance = non_salary_assistance.toFixed(2);
+        return { error: false, message: 'Objeto de auxilios generado correctamente', data: aid };
+    },
+
+    /**
+     * Genera un objeto de primas de servicios (service bonus) para devengados de nómina a partir de los datos de una fila de Excel.
+     * 
+     * Procesa y valida la información de prima de servicios del empleado desde una fila del archivo Excel,
+     * construyendo un objeto que cumple con la estructura requerida para el reporte de devengados
+     * en nóminas electrónicas según normativa DIAN colombiana y regulaciones laborales de primas de servicios.
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de prima de servicios del empleado
+     * @param {number|string} [row.prima_servicios] - Valor monetario pagado por prima de servicios (opcional)
+     * @param {number|string} row.sueldo_contrato - Salario contractual mensual del empleado (obligatorio para cálculo)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Object|null|Array
+     * }} 
+     */
+    generate_accrued_service_bonus_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de las primas', data: [] };
+
+        //Verifico si hay primas
+        if (!row.prima_servicios) return { error: false, message: 'No hay primas', data: null };
+
+        //Extraigo la informacion de las primas
+        const payment = Number(row.prima_servicios);
+        const salary_worker = Number(row.sueldo_contrato);
+
+        //Verifico que los campos sean validos
+        if (isNaN(payment) || payment <= 0) return { error: true, message: 'El campo prima_servicios debe ser un número válido y mayor a 0', data: [] };
+        if (isNaN(salary_worker) || salary_worker <= 0) return { error: true, message: 'El campo sueldo_contrato debe ser un número válido y mayor a 0', data: [] };
+
+        //Calculo los dias trabajados
+        //const service_bonus_days = Math.round((payment * 360) / salary_worker);
+
+        //Construyo el objeto de primas
+        const service_bonus = {
+            payment: payment.toFixed(2),    
+            quantity: 180,
+            paymentNS: "0.00"
+        };
+
+        return { error: false, message: 'Objeto de primas generado correctamente', data: service_bonus };
+    },
+
+    /**
+     * Genera un objeto de cesantías (severance) para devengados de nómina a partir de los datos de una fila de Excel.
+     * 
+     * Procesa y valida la información de cesantías del empleado desde una fila del archivo Excel,
+     * construyendo un objeto que cumple con la estructura requerida para el reporte de devengados
+     * en nóminas electrónicas según normativa DIAN colombiana y regulaciones laborales de cesantías.
+     * 
+     * Funcionalidad Principal:
+     * - Extrae información del pago de cesantías y sus intereses correspondientes
+     * - Valida que los valores monetarios sean numéricos y positivos
+     * - Formatea valores monetarios con 2 decimales para cumplir estándares contables
+     * - Maneja casos donde no hay cesantías (retorna null)
+     * - Aplica porcentaje estándar del 12% anual según normativa colombiana
+     * - Construye estructura requerida por la API de nómina electrónica
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de cesantías del empleado
+     * @param {number|string} [row.cesantia] - Valor monetario del pago de cesantías (opcional)
+     * @param {number|string} [row.intereses_cesantias] - Valor de los intereses sobre cesantías (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Object|null|Array
+     * }} 
+     */
+    generate_accrued_severance_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de las cesantias', data: [] };
+
+        //Verifico si hay cesantias
+        if (!row.cesantia) return { error: false, message: 'No hay cesantias', data: null };
+
+        //Extraigo la informacion de las cesantias
+        const severance_payment = Number(row.cesantia);
+        const interest_severance_payment = Number(row.intereses_cesantias);
+
+        //Verifico que los campos sean validos
+        if (isNaN(severance_payment) || severance_payment <= 0) return { error: true, message: 'El campo cesantia debe ser un número válido y mayor a 0', data: [] };
+        if (isNaN(interest_severance_payment) || interest_severance_payment < 0) return { error: true, message: 'El campo intereses_cesantias debe ser un número válido y mayor o igual a 0', data: [] };
+
+        //Construyo el objeto de cesantias
+        const severance = {
+            payment: severance_payment.toFixed(2),
+            interest_payment: interest_severance_payment.toFixed(2),
+            percentage: "12"
+        };
+
+        return { error: false, message: 'Objeto cesantias generado correctamente', data: severance };
+    },
+
+    /**
+     * Genera un objeto de licencia de maternidad (maternity leave) para devengados de nómina a partir de los datos de una fila de Excel.
+     * 
+     * Procesa y valida la información de licencia de maternidad del empleado desde una fila del archivo Excel,
+     * construyendo un objeto que cumple con la estructura requerida para el reporte de devengados
+     * en nóminas electrónicas según normativa DIAN colombiana y regulaciones laborales de maternidad.
+     * 
+     * Funcionalidad Principal:
+     * - Extrae información de días de licencia, pago y fechas de la licencia de maternidad
+     * - Valida coherencia entre fechas de inicio/fin y días reportados
+     * - Convierte fechas Excel a formato JavaScript estándar (ISO 8601)
+     * - Formatea valores monetarios con 2 decimales para cumplir estándares contables
+     * - Maneja casos donde no hay licencia de maternidad (retorna null)
+     * - Construye estructura de array requerida por la API de nómina electrónica
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de licencia de maternidad del empleado
+     * @param {number|string} [row.lm] - Número de días de licencia de maternidad (LM = Licencia Maternidad) (opcional)
+     * @param {number|string} [row.licencia_maternidad] - Valor monetario pagado por la licencia de maternidad (opcional)
+     * @param {number|Date|string} [row.licencia_maternidad_fecha_inicial] - Fecha de inicio de la licencia en formato Excel (opcional)
+     * @param {number|Date|string} [row.licencia_maternidad_fecha_final] - Fecha de fin de la licencia en formato Excel (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Array<Object>|null|Array
+     * }} Objeto con resultado de la operación
+     * 
+     */
+    generate_accrued_maternity_leave_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de la licencia de maternidad', data: [] };
+
+        //Verifico si hay licencia de maternidad
+        if (!row.lm) return { error: false, message: 'No hay licencia de maternidad', data: null };
+
+        //Extraigo la informacion de la licencia de maternidad
+        const maternity_days = Number(row.lm);
+        const maternity_payment = Number(row.licencia_maternidad);
+        const start_date = new Date(excelDateToJSDate(row.licencia_maternidad_fecha_inicial));
+        const end_date = new Date(excelDateToJSDate(row.licencia_maternidad_fecha_final));
+
+        //Verifico que los campos sean validos
+        if (isNaN(maternity_days) || maternity_days <= 0) return { error: true, message: 'El campo dias_licencia_maternidad debe ser un número válido y mayor a 0', data: [] };
+        if (isNaN(maternity_payment) || maternity_payment <= 0) return { error: true, message: 'El campo licencia_maternidad debe ser un número válido y mayor a 0', data: [] };
+        if (!row.licencia_maternidad_fecha_inicial || !util_date.canBeParsedAsDate(row.licencia_maternidad_fecha_inicial)) return { error: true, message: 'El campo licencia_maternidad_fecha_inicial debe ser una fecha válida', data: [] };
+        if (!row.licencia_maternidad_fecha_final || !util_date.canBeParsedAsDate(row.licencia_maternidad_fecha_final)) return { error: true, message: 'El campo licencia_maternidad_fecha_final debe ser una fecha válida', data: [] };
+
+        //Verifico que la diferencia entre las fechas sea igual a los dias de licencia de maternidad
+        const time_difference = util_date.getDiffDates(start_date, end_date);
+        if (time_difference != maternity_days) return { error: true, message: `La diferencia entre licencia_maternidad_fecha_inicial y licencia_maternidad_fecha_final debe ser igual a ${maternity_days} días`, data: [] };
+
+        //Construyo el objeto de licencia de maternidad
+        const maternity_leave = {
+            quantity: maternity_days,
+            payment: maternity_payment.toFixed(2),
+            start_date: start_date.toISOString().split('T')[0],
+            end_date: end_date.toISOString().split('T')[0]
+        };
+        return { error: false, message: 'Objeto licencia de maternidad generado correctamente', data: maternity_leave };
+    },
+
+    /**
+     * Genera un objeto de incapacidades laborales (work disabilities) para devengados de nómina a partir de los datos de una fila de Excel.
+     * 
+     * Procesa y valida la información de incapacidades laborales del empleado desde una fila del archivo Excel,
+     * construyendo un objeto que cumple con la estructura requerida para el reporte de devengados
+     * en nóminas electrónicas según normativa DIAN colombiana y regulaciones del Sistema de Seguridad Social.
+     * 
+     * Funcionalidad Principal:
+     * - Extrae información de días de incapacidad, pago, tipo y fechas de la incapacidad
+     * - Valida coherencia entre fechas de inicio/fin y días reportados
+     * - Convierte fechas Excel a formato JavaScript estándar (ISO 8601)
+     * - Formatea valores monetarios con 2 decimales para cumplir estándares contables
+     * - Maneja casos donde no hay incapacidades (retorna null)
+     * - Construye estructura de array requerida por la API de nómina electrónica
+     * 
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de incapacidades del empleado
+     * @param {number|string} [row.ieg] - Número de días de incapacidad (IEG = Incapacidad Enfermedad General) (opcional)
+     * @param {number|string} [row.incapacidad_general] - Valor monetario pagado por la incapacidad (opcional)
+     * @param {number|string} [row.incapacidad_tipo] - Código del tipo de incapacidad según DIAN (opcional)
+     * @param {number|Date|string} [row.incapacidad_fecha_inicial] - Fecha de inicio de la incapacidad en formato Excel (opcional)
+     * @param {number|Date|string} [row.incapacidad_fecha_final] - Fecha de fin de la incapacidad en formato Excel (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Array<Object>|null|Array
+     * }} 
+     */
+    generate_accrued_work_disabilities_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de las incapacidades laborales', data: [] };
+
+        //Verifico si hay incapacidades laborales
+        if (!row.ieg) return { error: false, message: 'No hay incapacidades laborales', data: null };
+
+        //Extraigo la informacion de las incapacidades laborales
+        const disability_days = Number(row.ieg);
+        const disability_payment = Number(row.incapacidad_general);
+        const type_disability = Number(row.incapacidad_tipo);
+        const start_date = new Date(excelDateToJSDate(row.incapacidad_fecha_inicial));
+        const end_date = new Date(excelDateToJSDate(row.incapacidad_fecha_final));
+
+        //Verifico que los campos sean validos
+        if (isNaN(disability_days) || disability_days <= 0) return { error: true, message: 'El campo ieg debe ser un número válido y mayor a 0', data: [] };
+        if (isNaN(disability_payment) || disability_payment <= 0) return { error: true, message: 'El campo incapacidad_general debe ser un número válido y mayor a 0', data: [] };
+        if (isNaN(type_disability) || type_disability <= 0) return { error: true, message: 'El campo incapacidad_tipo debe ser un número válido y mayor a 0', data: [] };
+        if (!row.incapacidad_fecha_inicial || !util_date.canBeParsedAsDate(row.incapacidad_fecha_inicial)) return { error: true, message: 'El campo incapacidad_fecha_inicial debe ser una fecha válida', data: [] };
+        if (!row.incapacidad_fecha_final || !util_date.canBeParsedAsDate(row.incapacidad_fecha_final)) return { error: true, message: 'El campo incapacidad_fecha_final debe ser una fecha válida', data: [] };
+
+        //Verifico que la diferencia entre las fechas sea igual a los dias de incapacidad
+        const time_difference = util_date.getDiffDates(start_date, end_date);
+
+        if (time_difference != disability_days) return { error: true, message: `La diferencia entre incapacidad_fecha_inicial y incapacidad_fecha_final debe ser igual a ${disability_days} días`, data: [] };
+
+        //Construyo el objeto de incapacidades laborales
+        const work_disability = {
+            quantity: disability_days,
+            payment: disability_payment.toFixed(2),
+            type: type_disability,
+            start_date: start_date.toISOString().split('T')[0],
+            end_date: end_date.toISOString().split('T')[0]
+        };
+
+        return { error: false, message: 'Objeto incapacidades laborales generado correctamente', data: work_disability };
+    },
+
+    /**
+     * Genera un objeto de vacaciones compensadas (paid vacation) para devengados de nómina a partir de los datos de una fila de Excel.
+     * 
+     * Procesa y valida la información de vacaciones compensadas del empleado desde una fila del archivo Excel,
+     * construyendo un objeto que cumple con la estructura requerida para el reporte de devengados
+     * en nóminas electrónicas según normativa DIAN colombiana.
+     * 
+     * Funcionalidad Principal:
+     * - Extrae información de días de vacaciones compensadas y su valor monetario
+     * - Valida que los valores sean numéricos y mayores a cero
+     * - Maneja casos donde no hay vacaciones compensadas (retorna null)
+     * - Formatea valores monetarios con 2 decimales para cumplir estándares contables
+     * - Construye estructura de array requerida por la API de nómina electrónica
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de vacaciones compensadas del empleado
+     * @param {number|string} [row.vacaciones_compensadas_dias] - Número de días de vacaciones compensadas (opcional)
+     * @param {number|string} [row.vacaciones_compensadas] - Valor monetario pagado por las vacaciones compensadas (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Array<Object>|null|Array
+     * }} 
+     */
+    generate_accrued_paid_vacation_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de las vacaciones compensadas', data: [] };
+
+        //Verifico si hay vacaciones compensadas
+        if (!row.vacaciones_compensadas_dias) return { error: false, message: 'No hay vacaciones compensadas', data: null };
+
+        //Extraigo la informacion de las vacaciones compensadas
+        const vacation_days = Number(row.vacaciones_compensadas_dias);
+        const vacation_payment = Number(row.vacaciones_compensadas);
+
+        //Verifico que los campos sean validos
+        if (isNaN(vacation_days) || vacation_days <= 0) return { error: true, message: 'El campo vacaciones_compensadas_dias debe ser un número válido y mayor a 0', data: [] };
+        if (isNaN(vacation_payment) || vacation_payment <= 0) return { error: true, message: 'El campo vacaciones_compensadas_valor debe ser un número válido y mayor a 0', data: [] };
+
+        //Construyo el objeto de vacaciones compensadas
+        const paid_vacation = {
+            quantity: vacation_days,
+            payment: vacation_payment.toFixed(2)
+        };
+
+        return { error: false, message: 'Objeto vacaciones compensadas generado correctamente', data: paid_vacation };
+    },
+
+
+    /**
+     * Genera un objeto de bonos (bonuses) para devengados de nómina a partir de los datos de una fila de Excel.
+     * 
+     * Procesa y valida los bonos salariales y no salariales del empleado desde una fila del archivo Excel,
+     * construyendo un objeto que cumple con la estructura requerida para el reporte de devengados
+     * en nóminas electrónicas según normativa DIAN.
+     * 
+     * Funcionalidad:
+     * - Extrae información de bonos salariales y no salariales
+     * - Valida que los valores sean numéricos cuando están presentes
+     * - Maneja casos donde no hay bonos (retorna null)
+     * - Formatea los valores monetarios con 2 decimales
+     * - Construye estructura de array requerida por la API de nómina
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de bonos del empleado
+     * @param {number|string} [row.otros_devengos_salariales] - Valor del bono salarial (opcional)
+     * @param {number|string} [row.otros_devengos_no_salariales] - Valor del bono no salarial (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Array<Object>|null|Array
+     * }} Objeto con resultado de la operación
+     * 
+     */
+    generate_accrued_bonuses_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de los bonos', data: [] };
+
+        //Verifico si hay bonos salariales o no salariales
+        if (!row.otros_devengos_no_salariales && !row.otros_devengos_salariales) return { error: false, message: 'No hay bonos salariales o no salariales', data: null };
+
+        //Extraigo la informacion de los bonos
+        const salary_bonus = Number(row.otros_devengos_salariales);
+        const non_salary_bonus = Number(row.otros_devengos_no_salariales);
+
+        //Verifico que los campos sean validos
+        if (row.otros_devengos_salariales && isNaN(salary_bonus)) return { error: true, message: 'El campo otros_devengos_salariales debe ser un número válido', data: [] };
+        if (row.otros_devengos_no_salariales && isNaN(non_salary_bonus)) return { error: true, message: 'El campo otros_devengos_no_salariales debe ser un número válido', data: [] };
+
+        //Construyo el objeto de bonos
+        const bonuses = {};
+        if (row.otros_devengos_salariales) bonuses.salary_bonus = salary_bonus.toFixed(2);
+        if (row.otros_devengos_no_salariales) bonuses.non_salary_bonus = non_salary_bonus.toFixed(2);
+
+        return { error: false, message: 'Objeto bonos generado correctamente', data: bonuses };
+    },
+
+    /**
+     * Genera un objeto de vacaciones comunes disfrutadas para devengados de nómina a partir de los datos de una fila de Excel.
+     * 
+     * Procesa y valida la información de vacaciones comunes del empleado desde una fila del archivo Excel,
+     * construyendo un objeto que cumple con la estructura requerida para el reporte de devengados
+     * en nóminas electrónicas según normativa DIAN colombiana.
+     * 
+     * Funcionalidad Principal:
+     * - Extrae información de días de vacaciones, pago y fechas de disfrute
+     * - Valida que las fechas sean coherentes (fecha de regreso >= fecha de salida)
+     * - Convierte fechas Excel a formato JavaScript estándar
+     * - Formatea valores monetarios con 2 decimales
+     * - Maneja casos donde no hay vacaciones (retorna null)
+     * - Construye estructura de array anidado requerida por la API de nómina electrónica
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de vacaciones del empleado
+     * @param {number|string} [row.vacaciones_dias] - Número de días de vacaciones disfrutadas (opcional)
+     * @param {number|string} [row.vacaciones_disfrutadas] - Valor pagado por las vacaciones disfrutadas (opcional)
+     * @param {number|Date|string} [row.vacaciones_salida] - Fecha de inicio de vacaciones en formato Excel (opcional)
+     * @param {number|Date|string} [row.vacaciones_ingreso] - Fecha de regreso de vacaciones en formato Excel (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Array<Array<Object>>|null|Array
+     * }} 
+     * 
+     */
+    generate_accrued_common_vacation_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de las vacaciones', data: [] };
+
+        //Verifico si hay vacaciones comunes
+        if (!row.vacaciones_dias) return { error: false, message: 'No hay vacaciones comunes', data: null };
+
+        //Extraigo la informacion de las vacaciones comunes
+        const vacation_days = Number(String(row.vacaciones_dias));
+        const vacation_payment = Number(String(row.vacaciones_disfrutadas));
+        const start_date = new Date(excelDateToJSDate(row.vacaciones_salida));
+        const end_date = new Date(excelDateToJSDate(row.vacaciones_ingreso));
+
+        //Verifico que los campos sean validos
+        if (isNaN(vacation_days) || vacation_days <= 0) return { error: true, message: 'El campo vacaciones_dias debe ser un número válido', data: [] };
+        if (isNaN(vacation_payment) || vacation_payment <= 0) return { error: true, message: 'El campo vacaciones_disfrutadas debe ser un número válido', data: [] };
+        if (!row.vacaciones_salida || !util_date.canBeParsedAsDate(row.vacaciones_salida)) return { error: true, message: 'El campo vacaciones_salida debe ser una fecha válida', data: [] };
+        if (!row.vacaciones_ingreso || !util_date.canBeParsedAsDate(row.vacaciones_ingreso)) return { error: true, message: 'El campo vacaciones_ingreso debe ser una fecha válida', data: [] };
+        if (end_date < start_date) return { error: true, message: 'El campo vacaciones_ingreso debe ser una fecha mayor o igual a vacaciones_salida', data: [] };
+
+        //Construyo el objeto de vacaciones comunes
+        const common_vacation = {
+            quantity: vacation_days,
+            payment: vacation_payment.toFixed(2),
+            start_date: start_date.toISOString().split('T')[0],
+            end_date: end_date.toISOString().split('T')[0]
+        };
+
+        return { error: false, message: 'Objeto vacaciones comunes generado correctamente', data: common_vacation };
+    },
+
+    /**
+     * Genera un objeto de fechas de pago (payment dates) para nómina a partir de los datos de una fila de Excel.
+     * 
+     * Procesa y valida las fechas de pago del empleado desde una fila del archivo Excel,
+     * construyendo un objeto que cumple con la estructura requerida para el reporte de fechas
+     * de pago en nóminas electrónicas según normativa DIAN colombiana y regulaciones laborales.
+     * 
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de fechas de pago del empleado
+     * @param {number|Date|string} [row.fecha_pago1] - Primera fecha de pago en formato Excel (opcional)
+     * @param {number|Date|string} [row.fecha_pago2] - Segunda fecha de pago en formato Excel (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Array<{payment_date: string}>|Array
+     * }} Objeto con resultado de la operación
+     * 
+     * @returns {Array<{payment_date: string}>} data - Array de fechas de pago cuando es exitoso
+     * @returns {string} data[].payment_date - Fecha de pago en formato ISO 8601 (YYYY-MM-DD)
+     * 
+     */
+    generate_payrolls_payments_dates_object(row) {
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de las fechas de pago', data: [] };
+
+        //Extraigo la informacion de las fechas de pago
+        const payment_dates = [];
+
+        const fecha_pago1 = excelDateToJSDate(row.fecha_pago1);
+        const fecha_pago2 = excelDateToJSDate(row.fecha_pago2);
+
+        //Verifico que al menos una fecha de pago este definida
+        if (!fecha_pago1 && !fecha_pago2) return { error: true, message: 'Al menos una fecha de pago debe estar definida', data: [] };
+        if (!util_date.canBeParsedAsDate(row.fecha_pago1) && !util_date.canBeParsedAsDate(row.fecha_pago2)) return { error: true, message: 'Ambas fechas de pago son invalidas', data: [] };
+
+        //Construyo el objeto de fechas de pago
+        if (fecha_pago1) payment_dates.push({ payment_date: fecha_pago1 });
+        if (fecha_pago2) payment_dates.push({ payment_date: fecha_pago2 });
+
+        //Retorno el objeto de fechas de pago
+        return { error: false, message: 'Objeto fechas de pago generado correctamente', data: payment_dates };
+    },
+
+    /**
+     * Genera un objeto de deducciones (deductions) para nómina a partir de los datos de una fila de Excel.
+     * 
+     * Procesa y valida la información de deducciones obligatorias y adicionales del empleado desde 
+     * una fila del archivo Excel, construyendo un objeto que cumple con la estructura requerida 
+     * para el reporte de deducciones en nóminas electrónicas según normativa DIAN colombiana 
+     * y el Sistema de Seguridad Social Integral.
+     * 
+     * @param {Object} row - Fila de datos del Excel con información de deducciones del empleado
+     * @param {boolean} [row.salud_empresa] - Indica si EPS está contratada por empresa (true) o es individual (false)
+     * @param {number|string} row.aportes_salud - Valor del aporte a salud/EPS del empleado (4% salario base)
+     * @param {number|string} row.aportes_pension - Valor del aporte a pensión del empleado (4% salario base)
+     * @param {number|string} row.total_deducciones - Total de todas las deducciones del empleado (obligatorio)
+     * @param {number|string} [row.fsp] - Valor del aporte al Fondo de Solidaridad Pensional (opcional, >4 SMMLV)
+     * @param {number|string} [row.retencion_fuente] - Valor de retención en la fuente sobre salarios (opcional)
+     * @param {number|string} [row.otras_deducciones] - Otras deducciones (sindicatos, cooperativas, préstamos, etc.) (opcional)
+     * 
+     * @returns {{
+     *   error: boolean,
+     *   message: string,
+     *   data: Object|Array
+     * }} 
+     */
+    generate_payroll_deductions_object(row){
+        //Verifico que la fila no este vacia
+        if (row == null || row == 0) return { error: true, message: 'No se ha enviado la informacion de las deducciones', data: [] };
+
+        //Extraigo la informacion de las deducciones
+        const eps_type_law_deductions_id = row.salud_empresa ? 1 : 3;
+        const pension_type_law_deductions_id = 5;
+        const eps_deduction = (row.aportes_salud).toFixed(2);
+        const pension_deduction = ((row.aportes_pension).toFixed(2));
+        const deductions_total = (row.total_deducciones).toFixed(2);
+
+        //Verifico que los campos obligatorios esten completos
+        if (!deductions_total || isNaN(deductions_total)) return { error: true, message: 'El campo total_deducciones es obligatorio y debe ser un número válido', data: [] };
+
+        //Construyo el objeto de deducciones
+        const deductions = {};
+        deductions.eps_type_law_deductions_id = eps_type_law_deductions_id;
+        deductions.pension_type_law_deductions_id = pension_type_law_deductions_id;
+        deductions.eps_deduction = eps_deduction;
+        deductions.pension_deduction = pension_deduction;
+        deductions.deductions_total = deductions_total;
+        if (row.fsp){
+            deductions.fondosp_deduction_SP = ((row.fsp).toFixed(2));
+            deductions.fondosp_type_law_deductions_id = 9;
+        }
+
+        if (row.retencion_fuente) deductions.withholding_at_source = ((row.retencion_fuente).toFixed(2))
+        if (row.otras_deducciones) deductions.other_deductions = [{ other_deduction: (Math.floor(row.otras_deducciones * 100) / 100) }]
+
+        return { error: false, message: 'Objeto deducciones generado correctamente', data: deductions };
+    },
+
     /**
      * Lee un archivo Excel (.xlsx) de nómina y genera un arreglo de objetos `payroll`
      * listos para reportar (no persiste nada).
@@ -1065,7 +1832,7 @@ const payrollService = {
      */
     async generate_json_excel_payroll(file) {
         try {
-            //if (!file) return { statusCode: 400, message: 'Archivo Excel es requerido', data: [] };
+            if (!file) return { statusCode: 400, message: 'Archivo Excel es requerido', data: [] };
             const workbook = XLSX.read(file.buffer, { type: 'buffer' });
 
             //obtengo la hoja Nomina
@@ -1081,7 +1848,8 @@ const payrollService = {
             const ref = XLSX.utils.decode_range(ws['!ref']);
             // {s:{r,c}, e:{r,c}}
             const start = { r: 7, c: 0 };   //r:(row inicial del archivo),c (A = col 0 del archivo)
-            const end = { r: ref.e.r, c: 90 };     // r = ultima row activa, CB = (col 90 (0-based) del archivo)
+            const end = { r: ref.e.r, c: 94 };     // r = ultima row activa, CB = (col 90 (0-based) del archivo)
+
             const rangeStr = XLSX.utils.encode_range(start, end);
 
             //obtengo las claves del objeto de la estructura de la nomina para usarlas como nombre de las columnas
@@ -1117,310 +1885,49 @@ const payrollService = {
             const response = [];
             for (const row of rows) {
                 if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
-                const worker = {
-                    salary: Number(row.sueldo_contrato).toFixed(2) ? Number(row.sueldo_contrato).toFixed(2) : "0.00",
-                    address: row.direccion ? row.direccion : '',
-                    first_name: row.primer_nombre ? row.primer_nombre : '',
-                    middle_name: row.segundo_nombre ? row.segundo_nombre : '',
-                    surname: row.primer_apellido ? row.primer_apellido : '',
-                    second_surname: row.segundo_apellido ? row.segundo_apellido : null,
-                    type_worker_id: row.tipo_empleado ? Number(row.tipo_empleado) : null,
-                    municipality_id: row.municipio ? Number(row.municipio) : null,
-                    type_contract_id: row.tipo_contrato ? Number(row.tipo_contrato) : null,
-                    high_risk_pension: row.pensionado == 'Si' ? true : false,
-                    integral_salarary: row.tipo_salario == 'Integral' ? true : false,
-                    sub_type_worker_id: row.subtipo_empleado ? Number(row.subtipo_empleado) : null,
-                    identification_number: row.cedula ? row.cedula : '',
-                    payroll_type_document_identification_id: row.tipo_documento ? Number(row.tipo_documento) : null,
-                }
 
-                const payment = {
-                    payment_method_id: Number(row.metodo_pago) ? Number(row.metodo_pago) : null,
-                    bank_name: row.banco,
-                    account_number: (row.numero_cuenta).toString(),
-                    account_type: row.tipo_cuenta
-                }
-
-                const accrued = {
-                    worked_days: Number(row.dias) ? Number(row.dias) : 0,
-                    salary: Number(row.sueldo_basico) ? Number(row.sueldo_basico).toFixed(2) : "0.00",
-                    accrued_total: Number(row.total_devengado) ? Number(row.total_devengado).toFixed(2) : "0.00",
-                }
-
-                if (row.auxilio_transporte) accrued.transportation_allowance = Number(row.auxilio_transporte).toFixed(2)
-                if (Number(row.dotacion)) accrued.endowment = Number(row.dotacion).toFixed(2);
-
-                //Bonos salariales y no salariales
-                const devengados_salariales = Number(row.otros_devengos_no_salariales);
-                const devengados_no_salariales = Number(row.otros_devengos_salariales);
-                if (row.otros_devengos_no_salariales && !isNaN(devengados_salariales) || row.otros_devengos_salariales && !isNaN(devengados_no_salariales)) {
-                    accrued.bonuses = [];
-
-                    row.otros_devengos_no_salariales ? accrued.bonuses.push({
-                        non_salary_bonus: devengados_salariales
-                    }) : null;
-                    row.otros_devengos_salariales ? accrued.bonuses.push({
-                        salary_bonus: devengados_no_salariales
-                    }) : null;
-                }
-
-                //Vacaciones disfrutadas
-                if (row.vacaciones_dias) {
-                    const vacation_days = Number(String(row.vacaciones_dias));
-                    const vacation_payment = Number(String(row.vacaciones_disfrutadas));
-                    const start_date = new Date(excelDateToJSDate(row.vacaciones_salida));
-                    const end_date = new Date(excelDateToJSDate(row.vacaciones_ingreso));
-
-                    //Si hay dias de vacaciones disfrutadas
-                    if (vacation_days != 0 && !isNaN(vacation_days)) {
-                        accrued.common_vacation = [];
-                        //Verificamos si existen los campos en el excel
-                        //Dias de vacaciones disfrutadas mayores a 0
-                        if (vacation_days <= 0) {
-                            response.push({ error: `Error en los dias de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
-                            continue;
-                        }
-
-                        // Pago de vacaciones disfrutadas mayor a 0
-                        if (!vacation_payment || isNaN(vacation_payment) || vacation_payment <= 0) {
-                            response.push({ error: `Error en el pago de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, valor de pago no definido o invalido` });
-                            continue;
-                        }
-
-                        // Fechas de vacaciones disfrutadas validas
-                        if (!start_date || !end_date || !row.vacaciones_ingreso || !row.vacaciones_salida) {
-                            response.push({ error: `Error en las fechas de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
-                            continue;
-                        }
-
-                        // Fecha de inicio menor a fecha de fin
-                        if (start_date > end_date) {
-                            response.push({ error: `Error en las fechas de vacaciones disfrutadas para el empleado ${worker.first_name} ${worker.surname}, la fecha de inicio es mayor a la fecha de fin` });
-                            continue;
-                        }
-
-                        // Agrego las vacaciones disfrutadas al objeto de devengados
-                        accrued.common_vacation.push({
-                            quantity: vacation_days,
-                            payment: vacation_payment,
-                            start_date: start_date.toISOString().split('T')[0],
-                            end_date: end_date.toISOString().split('T')[0]
-                        });
-                    }
-                }
-
-                // Vacaciones compensadas
-                if (row.vacaciones_compensadas_dias || row.vacaciones_compensadas) {
-                    if (!row.vacaciones_compensadas_dias) {
-                        response.push({ error: `Error en los dias de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    if (!row.vacaciones_compensadas) {
-                        response.push({ error: `Error en el pago de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor de pago no definido o invalido` });
-                        continue;
-                    }
-
-                    const compensated_vacation_days = Number(String(row.vacaciones_compensadas_dias));
-                    const compensated_vacation_payment = Number(String(row.vacaciones_compensadas));
-
-                    if (row.vacaciones_compensadas_dias <= 0) {
-                        response.push({ error: `Error en los dias de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
-                        continue;
-                    }
-
-                    if (row.vacaciones_compensadas <= 0) {
-                        response.push({ error: `Error en el pago de vacaciones compensadas para el empleado ${worker.first_name} ${worker.surname}, valor de pago debe ser mayor a 0` });
-                        continue;
-                    }
-
-                    accrued.paid_vacation = [
-                        {
-                            quantity: compensated_vacation_days,
-                            payment: compensated_vacation_payment
-                        }
-                    ]
-                }
-
-                //Incapacidades
-                if (row.ieg) {
-                    //Prepraro la informacion de la incapacidad
-                    const disability_days = Number(String(row.ieg));
-                    const disability_payment = Number(String(row.incapacidad_general));
-                    const type_disability = Number(String(row.incapacidad_tipo));
-                    const start_date = new Date(excelDateToJSDate(row.incapacidad_fecha_inicial));
-                    const end_date = new Date(excelDateToJSDate(row.incapacidad_fecha_final));
-
-                    //Verifico que los dias de incapacidad sean validos
-                    if (isNaN(disability_days) || disability_days <= 0) {
-                        response.push({ error: `Error en los dias de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
-                        continue;
-                    }
-
-                    //Verifico que el pago de incapacidad sea valido
-                    if (isNaN(disability_payment) || disability_payment <= 0) {
-                        response.push({ error: `Error en el pago de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    //Verifico que las fechas de incapacidad sean validas
-                    if (!start_date || !end_date || !row.incapacidad_fecha_inicial || !row.incapacidad_fecha_final) {
-                        console.log(!start_date, !end_date, !row.incapacidad_fecha_inicial, !row.incapacidad_fecha_final);
-                        response.push({ error: `Error en las fechas de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
-                        continue;
-                    }
-
-                    //Verifico que el tipo de incapacidad sea valido (1 a 3)
-                    if (isNaN(type_disability) || type_disability > 4 && type_disability < 0) {
-                        response.push({ error: `Error en el tipo de incapacidad para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    //Verificar que la diferencia entre las fechas sea igual a los dias de incapacidad
-                    const diffTime = Math.abs(end_date - start_date);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                    if (diffDays !== disability_days) {
-                        response.push({ error: `Error en los dias de incapacidad general para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de incapacidad` });
-                        continue;
-                    }
-
-                    //Agrego las incapacidades al objeto de devengados
-                    accrued.work_disabilities = [];
-                    accrued.work_disabilities.push({
-                        quantity: disability_days,
-                        payment: disability_payment,
-                        type: type_disability,
-                        start_date: start_date.toISOString().split('T')[0],
-                        end_date: end_date.toISOString().split('T')[0]
-                    });
-                }
-
-
-                //Licencias de maternidad
-                if (row.lm) {
-                    //Prepraro la informacion de la licencia de maternidad
-                    const maternity_days = Number(row.lm);
-                    const maternity_payment = Number(row.licencia_maternidad);
-                    const start_date = new Date(excelDateToJSDate(row.licencia_maternidad_fecha_inicial));
-                    const end_date = new Date(excelDateToJSDate(row.licencia_maternidad_fecha_final));
-
-                    //Verifico que los dias de licencia de maternidad sean validos
-                    if (isNaN(maternity_days) || maternity_days <= 0) {
-                        response.push({ error: `Error en los dias de licencia de maternidad para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
-                        continue;
-                    }
-
-                    //Verifico que el pago de licencia de maternidad sea valido
-                    if (isNaN(maternity_payment) || maternity_payment <= 0) {
-                        response.push({ error: `Error en el pago de licencia de maternidad para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    //Verifico que las fechas de licencia de maternidad sean validas
-                    if (!start_date || !end_date || !row.licencia_maternidad_fecha_inicial || !row.licencia_maternidad_fecha_final) {
-                        response.push({ error: `Error en las fechas de licencia de maternidad para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
-                        continue;
-                    }
-
-                    //Verificar que la diferencia entre las fechas sea igual a los dias de licencia de maternidad
-                    const diffTime = Math.abs(end_date - start_date);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                    if (diffDays !== maternity_days) {
-                        response.push({ error: `Error en los dias de licencia de maternidad para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de licencia de maternidad` });
-                        continue;
-                    }
-
-                    //Agrego las licencias de maternidad al objeto de devengados
-                    accrued.maternity_leave = [];
-                    accrued.maternity_leave.push({
-                        quantity: maternity_days,
-                        payment: maternity_payment,
-                        start_date: start_date.toISOString().split('T')[0],
-                        end_date: end_date.toISOString().split('T')[0]
-                    });
-                }
-
-                //Licencias de paternidad
-                if (row.lp) {
-                    //Prepraro la informacion de la licencia de paternidad
-                    const paternity_days = Number(row.lp);
-                    const paternity_payment = Number(row.licencia_paternidad);
-                    const start_date = new Date(excelDateToJSDate(row.licencia_paternidad_fecha_inicial));
-                    const end_date = new Date(excelDateToJSDate(row.licencia_paternidad_fecha_final));
-
-                    //Verifico que los dias de licencia de paternidad sean validos
-                    if (isNaN(paternity_days) || paternity_days <= 0) {
-                        response.push({ error: `Error en los dias de licencia de paternidad para el empleado ${worker.first_name} ${worker.surname}, valor debe ser mayor a 0` });
-                        continue;
-                    }
-
-                    //Verifico que el pago de licencia de paternidad sea valido
-                    if (isNaN(paternity_payment) || paternity_payment <= 0) {
-                        response.push({ error: `Error en el pago de licencia de paternidad para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    //Verifico que las fechas de licencia de paternidad sean validas
-                    if (!start_date || !end_date || !row.licencia_paternidad_fecha_inicial || !row.licencia_paternidad_fecha_final) {
-                        response.push({ error: `Error en las fechas de licencia de paternidad para el empleado ${worker.first_name} ${worker.surname}, fechas no definidas o invalidas` });
-                        continue;
-                    }
-
-                    //Verificar que la diferencia entre las fechas sea igual a los dias de licencia de paternidad
-                    const diffTime = Math.abs(end_date - start_date);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                    if (diffDays !== paternity_days) {
-                        response.push({ error: `Error en los dias de licencia de paternidad para el empleado ${worker.first_name} ${worker.surname}, la diferencia entre las fechas no coincide con los dias de licencia de paternidad` });
-                        continue;
-                    }
-
-                    //Agrego las licencias de paternidad al objeto de devengados
-                    if (!accrued.maternity_leave) accrued.maternity_leave = []
-
-                    accrued.maternity_leave.push({
-                        quantity: paternity_days,
-                        payment: paternity_payment,
-                        start_date: start_date.toISOString().split('T')[0],
-                        end_date: end_date.toISOString().split('T')[0]
-                    });
-                }
-
-                const deductions = {
-                    eps_type_law_deductions_id: row.salud_empresa ? 1 : 3,
-                    pension_type_law_deductions_id: 5,
-                    eps_deduction: (row.aportes_salud).toFixed(2),
-                    pension_deduction: ((row.aportes_pension).toFixed(2)),
-                    //cooperativa: 0,
-                    //fondosp_deduction_SP: 0,
-                    deductions_total: (row.total_deducciones).toFixed(2),
-                }
-                if (row.fsp) deductions.fondosp_deduction_SP = ((row.fsp).toFixed(2))
-                if (row.retencion_fuente) deductions.withholding_at_source = ((row.retencion_fuente).toFixed(2))
-                if (row.otras_deducciones) deductions.other_deductions = [{ other_deduction: (Math.floor(row.otras_deducciones * 100) / 100) }]
-
-                //Dotaciones
-                if (row.dotacion) {
-
-                    //Verifico que el pago de dotacion sea valido
-                    const dotation_payment = Number(row.dotacion);
-                    if (isNaN(dotation_payment) || dotation_payment <= 0) {
-                        response.push({ error: `Error en el pago de dotacion para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
-                        continue;
-                    }
-
-                    //Agrego la dotacion al objeto de devengados
-                    accrued.endowment = String(row.dotacion);
-                }
-
-                const payment_dates = []
-                if (!row.fecha_pago1 && !row.fecha_pago2) {
-                    response.push({ error: `Error en las fechas de pago para el empleado ${worker.first_name} ${worker.surname}, al menos una fecha de pago debe estar definida` });
+                //genero el objeto trabajador (Worker)
+                let worker = this.generate_payroll_worker_object(row);
+                if (worker.error) {
+                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${worker.message}`, message: worker.message });
                     continue;
                 }
+                worker = worker.data;
 
-                if (row.fecha_pago1 && row.fecha_pago1 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago1) });
-                if (row.fecha_pago2 && row.fecha_pago2 !== '') payment_dates.push({ payment_date: excelDateToJSDate(row.fecha_pago2) });
+                //Genero el objeto del pago (Payment)
+                let payment = this.generate_payroll_payment_object(row);
+                if (payment.error) {
+                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${payment.message}`, message: payment.message });
+                    continue;
+                }
+                payment = payment.data;
 
+                //Genero el objeto de devengados (Accrued)
+                let accrued = this.generate_payroll_accrued_object(row);
+                if (accrued.error) {
+                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${accrued.message}`, message: accrued.message });
+                    continue;
+                }
+                accrued = accrued.data;
+
+
+                //Genero el objeto de deducciones (Deductions)
+                let deductions = this.generate_payroll_deductions_object(row);
+                if (deductions.error) {
+                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${deductions.message}`, message: deductions.message });
+                    continue;
+                }
+                deductions = deductions.data;
+
+                // Generar las fechas de pago
+                let payment_dates = this.generate_payrolls_payments_dates_object(row);
+                if (payment_dates.error) {
+                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${payment_dates.message}`, message: payment_dates.message });
+                    continue;
+                }
+                payment_dates = payment_dates.data;
+
+                //Dias trabajados y fecha de ingreso
                 if (row.Dias_en_la_empresa && isNaN(Number(row.Dias_en_la_empresa))) {
                     response.push({ error: `Error en los dias trabajados para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
                     continue;
@@ -1549,12 +2056,11 @@ const payrollService = {
 
             const jsonPayrolls = await this.generate_json_excel_payroll(file);
             if (jsonPayrolls.statusCode !== 200) return jsonPayrolls;
-            return jsonPayrolls;
-            console.log("Json Nóminas:", jsonPayrolls.data);
+            return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: jsonPayrolls.data }
             const nextPymeResponse = await nextPymeService.nextPymeService.sendPayrolltoDian(jsonPayrolls.data);
             if (nextPymeResponse.statusCode !== 200) return nextPymeResponse;
 
-            return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: { data: nextPymeResponse.data, errors: nextPymeResponse.errors } };
+            return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: { data: nextPymeResponse.data, errors: nextPymeResponse.errors }, jsons: jsonPayrolls.data };
         } catch (error) {
             console.error('Error al conectar con Radian:', error);
             return { success: false, error: true, message: 'Error interno del servidor' };
