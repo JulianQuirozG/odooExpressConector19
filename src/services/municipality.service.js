@@ -24,8 +24,6 @@ const municipalityService = {
 
             if(municipality.statusCode !== 200) return municipality;
 
-            console.log('municipality', municipality);
-
             const city = await getMunicipalityByCode(municipality.data.l10n_co_edi_code);
 
             if(!city.success) return {statusCode: 404, message: 'Código del municipio no encontrado', data:city};
