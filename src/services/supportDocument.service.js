@@ -7,6 +7,7 @@ const partnerService = require('./partner.service');
 const { paymentMethodService } = require('./paymentMethod.service');
 const { documentPartnerService } = require('./documentPartner.service');
 const { unitMeasureService } = require('./unitMeasure.service');
+const { journalService } = require('./journal.service');
 
 
 const supportDocumentService = {
@@ -133,15 +134,16 @@ const supportDocumentService = {
             const invoice_date_due = new Date(supportDocument.data.invoice_date_due);
             const diferenciaMs = invoice_date_due - invoice_date;
             const dias = Math.round(diferenciaMs / (1000 * 60 * 60 * 24));
-            payment_form.duration_measure = dias;
+            payment_form.duration_measure = dias || 0;
 
             payment_form.payment_due_date = supportDocument.data.invoice_date_due;
 
             let success = true;
             let message = '';
+            console.log("payment_form", payment_form);
 
             Object.entries(payment_form).forEach(([keyof, value]) => {
-                if (!value) {
+                if (!value && value !== 0) {
                     success = false;
                     message += `El campo ${keyof} de la forma de pago es obligatorio. `;
                 }
@@ -186,7 +188,7 @@ const supportDocumentService = {
                     start_date: line.product_id[1] || line.account_id[1] || "",
                     description: line.name,
                     price_amount: line.price_total.toFixed(2),
-                    base_quantity: line.quantity,
+                    base_quantity: line.quantity || 1,
                     unit_measure_id: unitMeasureCode.id,
                     allowance_charges: allowance_charges,
                     invoiced_quantity: line.quantity,
@@ -281,12 +283,17 @@ const supportDocumentService = {
 
             //---------------------------------------------- JSON Final ----------------------------------------------//
 
+            const journalData = await journalService.getOneJournal(supportDocument.data.journal_id[0]);
+            if (journalData.statusCode !== 200) return journalData;
+
+            console.log("journalData", journalData.data);
+
             const jsonSupportDocument = {
-                date: supportDocument.data.date,
-                time: supportDocument.data.invoice_datetime,
+                date: supportDocument.data.l10n_co_dian_post_time.split(" ")[0],
+                time: supportDocument.data.l10n_co_dian_post_time.split(" ")[1],
                 notes: supportDocument.data.narration,
-                number: supportDocument.data.name,
-                prefix: supportDocument.data.l10n_latam_document_number_prefix,
+                number: supportDocument.data.name.split("/")[1],
+                prefix: journalData.data.code,
                 seller: seller,
                 sendmail: false,
                 foot_note: "Nota: Documento generado desde Odoo API",
@@ -296,6 +303,7 @@ const supportDocumentService = {
                 type_document_id: 11,
                 resolution_number: supportDocument.data.l10n_latam_document_number,
                 allowance_charges: allowance_charges,
+                resolution_number: journalData.data.l10n_co_edi_dian_authorization_number,
                 legal_monetary_totals: legal_monetary_totals,
             };
 

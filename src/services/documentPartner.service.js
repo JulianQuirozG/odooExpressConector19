@@ -23,7 +23,7 @@ const documentPartnerService = {
             const documentPartner = await this.getDocumentPartnerByid(id);
 
             if (documentPartner.statusCode !== 200) return documentPartner;
-            console.log("documentPartner", documentPartner);
+            
             const documentPartnerQuery = await getTypeDocumentByCode(documentPartner.data.id);
 
             if (!documentPartnerQuery.success) return { statusCode: 404, message: 'Código del documento no encontrado', data: documentPartnerQuery };
