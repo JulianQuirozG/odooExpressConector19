@@ -8,6 +8,7 @@ const { paymentMethodService } = require('./paymentMethod.service');
 const { documentPartnerService } = require('./documentPartner.service');
 const { unitMeasureService } = require('./unitMeasure.service');
 const { journalService } = require('./journal.service');
+const { getDiffDates } = require('../utils/date');
 
 
 const supportDocumentService = {
@@ -91,7 +92,7 @@ const supportDocumentService = {
                 type_liability_id: typeLiability.data[0].id,
             }
 
-            if (customer.data.vat.includes('-')) seller.dv = customer.data.vat.split('-')[1];
+            if (customer.data.vat.includes('-') && documentPartner.data[0].id === 6) seller.dv = customer.data.vat.split('-')[1];
             if (city.data) seller.municipality_id = city.data[0].id;
             if (customer.data.l10n_co_edi_fiscal_regimen) seller.type_regime_id = (customer.data.l10n_co_edi_fiscal_regimen === "49") ? 2 : 1;
 
@@ -166,7 +167,7 @@ const supportDocumentService = {
             const invoice_lines = [];
 
             for (const line of lines.data) {
-                let unitMeasureCode = { id: "No tiene preguntar a esteban"  }; // Valor por defecto unidad
+                let unitMeasureCode = { id: "No tiene preguntar a esteban" }; // Valor por defecto unidad
                 //console.log(line.product_uom_id)
                 if (line.product_uom_id) {
                     const unitMeasureCodeResponse = await unitMeasureService.getUnitMeasureCodeById(line.product_uom_id[0]);
@@ -175,29 +176,42 @@ const supportDocumentService = {
                     //console.log("unitMeasureCode", unitMeasureCodeResponse);
                 }
 
-
-                const allowance_charges = [{
-                    amount: line.deductible_amount.toFixed(2),
-                    base_amount: (Number(line.price_subtotal) + Number(line.deductible_amount)).toFixed(2),
-                    charge_indicator: false,
-                    allowance_charge_reason: "DESCUENTO GENERAL"
-                }];
-                invoice_lines.push({
+                const invoice_line = {
                     code: line.product_id ? line.product_id[1] : line.account_id[1],
                     notes: line.name || "",
-                    start_date: line.product_id[1] || line.account_id[1] || "",
                     description: line.name,
                     price_amount: line.price_total.toFixed(2),
                     base_quantity: line.quantity || 1,
                     unit_measure_id: unitMeasureCode.id,
-                    allowance_charges: allowance_charges,
                     invoiced_quantity: line.quantity,
                     line_extension_amount: line.price_subtotal,
                     //Estos campos me dijo Esteban que eran fijos
                     free_of_charge_indicator: false,
                     type_item_identification_id: 4,
                     type_generation_transmition_id: 1
-                });
+                }
+
+                const pricePerUnits = line.quantity * line.price_unit;
+                const discount = pricePerUnits - line.price_subtotal;
+                if (discount > 0) {
+                    const allowance_charges = [{
+                        amount: (discount).toFixed(2),
+                        base_amount: (pricePerUnits).toFixed(2),
+                        charge_indicator: false,
+                        allowance_charge_reason: "DESCUENTO PARA LA LINEA"
+                    }];
+                    invoice_line.allowance_charges = allowance_charges;
+                }
+
+                const countDays = getDiffDates(new Date(supportDocument.data.l10n_co_dian_post_time.split(" ")[0]), new Date(line.deferred_start_date));
+
+                invoice_line.start_date = supportDocument.data.l10n_co_dian_post_time.split(" ")[0];
+
+                if (line.deferred_start_date && (countDays <= 6)) {
+                    invoice_line.start_date = line.deferred_start_date;
+                }
+
+                invoice_lines.push(invoice_line);
             }
 
 
@@ -246,8 +260,8 @@ const supportDocumentService = {
         // Lógica para crear un nuevo documento de soporte en la base de datos
         try {
 
-            const supportDocument = await this.getSupportDocumentContentById(documentId);
-            if (supportDocument.statusCode !== 200) return supportDocument;
+            const supportDocument = await this.getSupportDocumentContentById(documentId, [["state", "=", "posted"]]);
+            if (supportDocument.statusCode !== 200) return { statusCode: 404, message: 'Documento no encontrado o no está confirmado', data: [] };
 
             const customer = await partnerService.getOnePartner(supportDocument.data.partner_id[0]);
             if (customer.statusCode !== 200) return customer;
@@ -292,7 +306,7 @@ const supportDocumentService = {
                 date: supportDocument.data.l10n_co_dian_post_time.split(" ")[0],
                 time: supportDocument.data.l10n_co_dian_post_time.split(" ")[1],
                 notes: supportDocument.data.narration,
-                number: supportDocument.data.name.split("/")[1],
+                number: Number(supportDocument.data.name.split("/")[1]),
                 prefix: journalData.data.code,
                 seller: seller,
                 sendmail: false,
