@@ -224,7 +224,23 @@ const nextPymeService = {
             console.error('Error al enviar nómina a DIAN:', error);
             return { success: false, error: true, message: 'Error interno del servidor', data: [] };
         }
-    }
+    },
+
+    async sendSupportDocumentToDian(documentData) {
+        try {
+            const response = await nextPymeConnection.nextPymeRequest('support-document', 'post', documentData);
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al enviar el documento de soporte a DIAN', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al enviar el documento de soporte a DIAN', data: response.data };
+            }
+            return { statusCode: 200, message: 'Documento de soporte enviado a DIAN', data: response.data };
+        } catch (error) {
+            console.log('Error en nextPymeService.sendSupportDocumentToDian:', error);
+            return { statusCode: 500, message: 'Error al enviar el documento de soporte a DIAN', error: error.message };
+        }
+    },
 }
 
 module.exports = { nextPymeService };

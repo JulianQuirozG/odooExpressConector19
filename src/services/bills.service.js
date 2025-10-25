@@ -473,6 +473,7 @@ const billService = {
      * @returns {Promise<Object>} Resultado con statusCode y message o error.
      */
     async confirmBill(id, action = 'compra') {
+        console.log("Confirmando factura con ID:", id, "y acción:", action);
         try {
             //verifico que la factura exista y no este confirmada
             const billExists = await this.getOneBill(id, [['state', '!=', 'posted']]);
@@ -1275,27 +1276,31 @@ const billService = {
      *   { urlinvoicepdf: 'ubl2.1/download/900731971/FACT-001.pdf', urlinvoicexml: 'ubl2.1/download/900731971/FACT-001.xml', invoicexml: '<Invoice>...</Invoice>' },
      * );
      */
-    async uploadFilesFromDian(id, dianResponse) {
+    async uploadFilesFromDian(id, dianResponse, modelo = "account.move") {
         try {
             // obtener el pdf y zip archivos desde nextPyme
             const pdf = dianResponse.urlinvoicepdf;
             const pdfFile = await nextPymeService.getPdfInvoiceFromDian(pdf);
 
+            
             //Si la respuesta  de la dian trae el .zip en base64 se le asigna, si no se busca
-            dianResponse.attacheddocument = (await nextPymeService.getXmlZipFromDian(dianResponse.urlinvoicexml.split('-')[1])).data;
-            if (pdfFile.statusCode !== 200) return pdfFile;
+            
+            // dianResponse.attacheddocument = (await nextPymeService.getXmlZipFromDian(dianResponse.urlinvoicexml.split('-')[1])).data;
+            // if (pdfFile.statusCode !== 200) return pdfFile;
+
+            // const updatedBillSZIP = await attachmentService.createAttachementZIP(modelo, Number(id), { originalname: dianResponse.urlinvoicepdf.split('.')[0] + ".zip", buffer: dianResponse.attacheddocument.filebase64 });
+            // if (updatedBillSZIP.statusCode !== 201) return updatedBillSZIP;
 
             //subimos los archivos a la factura de odoo
-            const updatedBill = await attachmentService.createAttachement("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf, buffer: pdfFile.data });
+            const updatedBill = await attachmentService.createAttachement(modelo, Number(id), { originalname: dianResponse.urlinvoicepdf, buffer: pdfFile.data });
             if (updatedBill.statusCode !== 201) return updatedBill;
 
-            const updatedBillS = await attachmentService.createAttachementXML("account.move", Number(id), { originalname: dianResponse.urlinvoicexml, buffer: dianResponse.invoicexml });
+            const updatedBillS = await attachmentService.createAttachementXML(modelo, Number(id), { originalname: dianResponse.urlinvoicexml, buffer: dianResponse.invoicexml });
             if (updatedBillS.statusCode !== 201) return updatedBillS;
 
-            const updatedBillSZIP = await attachmentService.createAttachementZIP("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf.split('.')[0] + ".zip", buffer: dianResponse.attacheddocument.filebase64 });
-            if (updatedBillSZIP.statusCode !== 201) return updatedBillSZIP;
+            
 
-            return { statusCode: 200, message: 'Archivos obtenidos', data: { updatedBill, updatedBillS, updatedBillSZIP } };
+            return { statusCode: 200, message: 'Archivos obtenidos', data: { updatedBill, updatedBillS } };
 
         }
         catch (error) {

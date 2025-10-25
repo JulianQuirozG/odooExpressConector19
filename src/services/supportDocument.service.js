@@ -9,7 +9,7 @@ const { documentPartnerService } = require('./documentPartner.service');
 const { unitMeasureService } = require('./unitMeasure.service');
 const { journalService } = require('./journal.service');
 const { getDiffDates } = require('../utils/date');
-
+const { nextPymeService } = require('./nextPyme.service');
 
 const supportDocumentService = {
     async getSupportDocumentContent(documentId) {
@@ -57,6 +57,12 @@ const supportDocumentService = {
             // Llama al servicio de facturas para crear el documento
             const supportDocument = await billService.createBill(supportDocumentData);
 
+            //Confirmar el documento de soporte
+            const confirmDocument = await this.confirmSupportDocument(supportDocument.data[0]);
+            if (confirmDocument.statusCode !== 200) return confirmDocument;
+
+            console.log("supportDocument", supportDocument);
+
             if (supportDocument.statusCode !== 201) {
                 return { statusCode: 400, error: true, message: 'Error al crear el documento de soporte', data: [] };
             }
@@ -78,6 +84,10 @@ const supportDocumentService = {
 
             const documentPartner = await documentPartnerService.getDocumentPartnerCodeById(customer.data.l10n_latam_identification_type_id[0]);
             if (documentPartner.statusCode !== 200) return documentPartner;
+
+            if (documentPartner.data[0].id != '6' && !customer.data.vat.includes('-')) {
+                return { success: false, message: 'El número de identificación del cliente no contiene dígito de verificación pero el tipo de documento requiere uno.', data: [] };
+            }
 
             const seller = {
                 identification_number: customer.data.vat.includes('-') ? customer.data.vat.split('-')[0] : customer.data.vat,
@@ -180,7 +190,7 @@ const supportDocumentService = {
                     code: line.product_id ? line.product_id[1] : line.account_id[1],
                     notes: line.name || "",
                     description: line.name,
-                    price_amount: line.price_total.toFixed(2),
+                    price_amount: line.price_unit.toFixed(2),
                     base_quantity: line.quantity || 1,
                     unit_measure_id: unitMeasureCode.id,
                     invoiced_quantity: line.quantity,
@@ -242,7 +252,7 @@ const supportDocumentService = {
         try {
             const legal_monetary_totals = {
                 payable_amount: (supportDocument.data.amount_total).toFixed(2),
-                tax_exclusive_amount: (supportDocument.data.amount_untaxed).toFixed(2),
+                tax_exclusive_amount: "0.00",
                 tax_inclusive_amount: (supportDocument.data.amount_total).toFixed(2),
                 line_extension_amount: (supportDocument.data.amount_untaxed).toFixed(2),
                 charge_total_amount: "0.00",
@@ -316,14 +326,42 @@ const supportDocumentService = {
                 invoice_lines: invoice_lines,
                 type_document_id: 11,
                 resolution_number: supportDocument.data.l10n_latam_document_number,
-                allowance_charges: allowance_charges,
                 resolution_number: journalData.data.l10n_co_edi_dian_authorization_number,
                 legal_monetary_totals: legal_monetary_totals,
             };
 
+            if (Number(allowance_charges.amount) > 0) {
+                jsonSupportDocument.allowance_charges = allowance_charges;
+            }
+
             return { statusCode: 201, message: 'Documento creado con éxito', data: jsonSupportDocument };
         } catch (error) {
             console.error('Error al crear el documento de soporte:', error);
+            return { statusCode: 500, error: true, message: 'Error interno del servidor', data: [] };
+        }
+
+    },
+
+    async confirmSupportDocument(documentId) {
+        try {
+            //Confirmar el documento de soporte
+            const confirmDocument = await billService.confirmBill(documentId);
+            if (confirmDocument.statusCode !== 200) return confirmDocument;
+
+            const supportDocument = await this.createSupportDocumentJson(documentId);
+            if (supportDocument.statusCode !== 201) return supportDocument;
+
+            //Enviar el documento a DIAN
+            const dianDocument = await nextPymeService.sendSupportDocumentToDian(supportDocument.data);
+            if (dianDocument.statusCode !== 200) return dianDocument;
+
+            //Cargar archivos al documento de soporte
+            const uploadFiles = await billService.uploadFilesFromDian(documentId, dianDocument.data);
+            if (uploadFiles.statusCode !== 200) return uploadFiles;
+
+            return { statusCode: 200, message: 'Documento de soporte confirmado y enviado a DIAN con éxito', data: [] };
+        } catch (error) {
+            console.error('Error al confirmar el documento de soporte:', error);
             return { statusCode: 500, error: true, message: 'Error interno del servidor', data: [] };
         }
 
