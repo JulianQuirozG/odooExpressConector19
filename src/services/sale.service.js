@@ -163,7 +163,7 @@ const saleService = {
                 }
                 
                 //Actualizo la factura con las lineas obtenidas y el tipo de operacion
-                await billService.updateBill(invoice, { invoice_line_ids: invoiceLines, l10n_co_edi_operation_type: "12" }, 'update');
+                await billService.updateBill(invoice, { invoice_line_ids: invoiceLines, l10n_co_edi_operation_type: "12", l10n_co_edi_payment_option_id: 66 }, 'update');
             }
 
             return {
