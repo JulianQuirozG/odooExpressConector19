@@ -90,7 +90,13 @@ const payrollStruct = {
     numero_cuenta: 'numero_cuenta',
     metodo_pago: 'metodo_pago',
     fecha_pago1: 'fecha_pago1',
-    fecha_pago2: 'fecha_pago2'
+    fecha_pago2: 'fecha_pago2',
+    tipo_documento_nomina: 'tipo_documento_nomina',
+    consecutivo_nomina_electronica: 'consecutivo_nomina_electronica',
+    CUNE: 'CUNE',
+    fecha_generacion_nomina: 'fecha_generacion',
+    consecutivo_nota_nomina: 'consecutivo_nota_nomina',
+    tipo_ajuste_nomina: 'tipo_ajuste_nomina',
 }
 
 module.exports = { payrollStruct };
