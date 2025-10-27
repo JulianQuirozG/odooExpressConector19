@@ -801,14 +801,14 @@ const payrollService = {
 
             //Recupero la informacion de la nómina
             const payroll = await odooConector.executeOdooRequest("hr.payslip", "search_read", { domain: [["id", "=", id]], limit: 1 });
-            if (payroll.error) return { statusCode: 500, message: 'Error al crear partner', error: payroll.message };
+            if (payroll.error) return { statusCode: 500, message: 'Error al recuperar la informacion de la nomina', error: payroll.message };
             if (!payroll.success) return { statusCode: 400, message: 'Error al obtener la nómina', data: payroll.data };
             if (payroll.data.length === 0) return { statusCode: 404, message: 'Nómina no encontrada' };
 
             //Regreso la informacion de la nomina
             return { statusCode: 200, message: 'Detalle de la nómina', data: payroll.data[0] };
         } catch (error) {
-            console.error('Error al conectar con Radian:', error);
+            console.error('Error al obtener la nomina:', error);
             return { success: false, error: true, message: 'Error interno del servidor' };
         }
     },
@@ -1165,6 +1165,19 @@ const payrollService = {
         }
     },
 
+    /**
+     * Genera el objeto de devengados (accrued) a partir de una fila del Excel.
+     *
+     * Esta función valida y extrae los distintos componentes que forman los devengados
+     * de la nómina (salario, auxilio de transporte, dotación, bonos, vacaciones,
+     * incapacidades, licencias, cesantías, primas, etc.) a partir de la fila `row`
+     * proveniente del Excel. No persiste nada: devuelve una estructura lista para
+     * incluir en el JSON de nómina.
+     *
+     * @param {Object} row - Fila del Excel con los campos necesarios para generar devengados.
+     *
+     * @returns {{ success: boolean, error: boolean, message: string, data: Object|Array }}
+     */
     generate_payroll_accrued_object(row) {
         try {
             //Verifico que la fila no este vacia
@@ -1848,6 +1861,226 @@ const payrollService = {
         }
     },
 
+
+    
+    /**
+     * Genera un objeto de nómina (`payroll`) a partir de los datos de una fila
+     * del Excel y el periodo correspondiente.
+     *
+     * Esta función actúa como orquestador: invoca los generadores auxiliares
+     * para construir `worker`, `payment`, `accrued`, `deductions` y `payment_dates`;
+     * valida sus respuestas y compone el objeto final `payroll` listo para
+     * ser reportado o enviado a la API externa.
+     *
+     * @param {Object} row - Fila del Excel (estructura según `payrollStruct`).
+     * @param {Object} period - Objeto con datos del periodo (settlement_start_date, settlement_end_date, ...).
+     * @param {Array} period_data - Datos crudos del encabezado del Excel (se usa para obtener payroll_period_id).
+     * @returns {{ success: boolean, error: boolean, message: string, data: Object|Array }}
+     */
+    generate_json_payroll(row, period, period_data) {
+        try {
+            //genero el objeto trabajador (Worker)
+            let worker = this.generate_payroll_worker_object(row);
+            if (worker.error || !worker.success) return worker;
+
+            worker = worker.data;
+
+            //Genero el objeto del pago (Payment)
+            let payment = this.generate_payroll_payment_object(row);
+            if (payment.error || !payment.success) return payment;
+            payment = payment.data;
+
+            //Genero el objeto de devengados (Accrued)
+            let accrued = this.generate_payroll_accrued_object(row);
+            if (accrued.error || !accrued.success) return accrued;
+            accrued = accrued.data;
+
+            //Genero el objeto de deducciones (Deductions)
+            let deductions = this.generate_payroll_deductions_object(row);
+            if (deductions.error || !deductions.success) return deductions;
+            deductions = deductions.data;
+
+            // Generar las fechas de pago
+            let payment_dates = this.generate_payrolls_payments_dates_object(row);
+            if (payment_dates.error || payment_dates.data.length == 0) return payment_dates;
+            payment_dates = payment_dates.data;
+
+            //Dias trabajados y fecha de ingreso
+            if (row.Dias_en_la_empresa && isNaN(Number(row.Dias_en_la_empresa))) return { success: false, error: false, message: 'El campo Dias_en_la_empresa debe ser un número válido', data: [] };
+
+            period.worked_time = row.Dias_en_la_empresa ? (row.Dias_en_la_empresa).toString() : null;
+            period.admision_date = excelDateToJSDate(row.fecha_ingreso);
+
+            const payroll = {
+                notes: "Nómina reportada desde archivo Excel",
+                period: period,
+                prefix: "NI",
+                worker: worker,
+                accrued: accrued,
+                payment: payment,
+                deductions: deductions,
+                consecutive: row.numero ? Number(row.numero) : null,
+                worker_code: row.cedula ? (row.cedula).toString() : null,
+                sendmailtome: false,
+                payment_dates: payment_dates,
+                type_document_id: 9,
+                payroll_period_id: period_data[3][0] ? Number(period_data[3][0]) : null,
+            }
+
+            //mapeo los dias ocupados en el periodo del mes
+            let mes = [];
+            this.arregloDiasOcupados(mes, new Date(excelDateToJSDate(period.settlement_start_date)));
+
+            //Saco el Json para las Horas Extra Diurna
+            const HEDs = this.extraTimeHours([{ type: 'HED', quantity: row.hed, payment: row.horas_extras_diurnas_125 }], 'HEDs', period.settlement_start_date, period.settlement_end_date, mes);
+            if (HEDs.data?.length > 0) {
+                payroll.accrued.HEDs = HEDs.data;
+            }
+
+            //Saco el json para las Horas Extra Nocturna
+            const HENs = this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENs', period.settlement_start_date, period.settlement_end_date, mes);
+            if (HENs.data?.length > 0) {
+                payroll.accrued.HENs = HENs.data;
+            }
+
+            //Saco el json para los recargos nocturnos dominicales
+            const HRNs = this.extraTimeHours([{ type: 'HRN', quantity: row.rn, payment: row.recargo_nocturno_35 }], 'HRNs', period.settlement_start_date, period.settlement_end_date, mes);
+            if (HRNs.data?.length > 0) {
+                payroll.accrued.HRNs = HRNs.data;
+            }
+
+            //Saco el json para las horas extra dominicales diurnos
+            const HEDDFs = this.extraTimeHours([{ type: 'HEDDF', quantity: row.hedd, payment: row.horas_extras_diurna_dominical_205 }], 'HEDDFs', period.settlement_start_date, period.settlement_end_date, mes);
+            if (HEDDFs.data?.length > 0) {
+                payroll.accrued.HEDDFs = HEDDFs.data;
+            }
+
+            //Saco el json para los recargos dominicales diurnos
+            const HRDDFs = this.extraTimeHours([{ type: 'HRDDF', quantity: row.rd, payment: row.recargo_dominical_festivo_180 }], 'HRDDFs', period.settlement_start_date, period.settlement_end_date, mes);
+            if (HRDDFs.data?.length > 0) {
+                payroll.accrued.HRDDFs = HRDDFs.data;
+            }
+
+            //Saco el json para los horas extra dominicales nocturnos
+            const HENDFs = this.extraTimeHours([{ type: 'HENDF', quantity: row.hedn, payment: row.horas_extras_nocturna_dominical_255 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date, mes);
+            if (HENDFs.data?.length > 0) {
+                payroll.accrued.HENDFs = HENDFs.data;
+            }
+
+            //Saco el json para los recargos dominicales nocturnos
+            const HRNDFs = this.extraTimeHours([{ type: 'HRNDF', quantity: row.rdn, payment: row.recargo_dominical_festivo_nocturno_215 }], 'HRNDFs', period.settlement_start_date, period.settlement_end_date, mes);
+            if (HRNDFs.data?.length > 0) {
+                payroll.accrued.HRNDFs = HRNDFs.data;
+            }
+
+            return { success: true, error: false, message: 'Objeto de nomina generado correctamente', data: payroll };
+        } catch (error) {
+            console.error('Error generando el objeto de nomina:', error);
+            return { success: false, error: true, message: 'Error interno al generar el objeto de nomina', data: [] };
+        }
+    },
+
+    
+    /**
+     * Genera el objeto de nota de nómina (documento tipo 10) a partir de una fila del Excel.
+     *
+     * Esta función construye la estructura de una nota de nómina (reemplazo o eliminación)
+     * según los datos provistos en `row`. Valida la existencia de los campos mínimos,
+     * construye el `predecessor` (documento anterior al que se asocia la nota) y, si la
+     * nota es de tipo "reemplazo" (note_type == 1), incorpora además el objeto de
+     * nómina normal generado por `generate_json_payroll`.
+     *
+     * @param {Object} row - Fila del Excel con información de la nota de nómina.
+     *   Campos relevantes:
+     *   - {number|string} row.tipo_ajuste_nomina - 1 = reemplazo, 2 = eliminación (obligatorio)
+     *   - {number|string} row.consecutivo_nota_nomina - Consecutivo de la nota (obligatorio)
+     *   - Campos utilizados por `generate_payroll_note_predecessor_object`: `CUNE`, `consecutivo_nomina_electronica`, `fecha_generacion_nomina`
+     * @param {Object} period - Objeto periodo (se pasa para mantener la misma firma que otros generadores).
+     * @param {Array} period_data - Datos crudos del encabezado del Excel (usado para payroll_period_id).
+     *
+     * @returns {{ success: boolean, error: boolean, message: string, data: Object|Array }}
+     */
+    generate_json_payroll_note(row, period, period_data) {
+        try {
+            //Verifico que la fila no este vacia
+            if (row == null || row == 0) return { success: false, error: false, message: 'No se ha enviado la informacion de la nota de nomina', data: [] };
+
+            //Extraigo los datos segun el tipo de nota de nomina
+            const note_type = Number(row.tipo_ajuste_nomina);
+            const consecutive = Number(row.consecutivo_nota_nomina)
+            const type_document_id = 10; //Documento tipo nota de nomina
+            const prefix = "NA";
+            const notes = note_type == 1 ? "Nota de nomina por reemplazo" : "Nota de nomina por eliminacion";
+            const predecessor = this.generate_payroll_note_predecessor_object(row);
+
+            //Verifico el tipo de nota de nomina. 1. nota de reemplazo, 2.Nota de eliminacion
+            if (isNaN(note_type) || (note_type != 1 && note_type != 2)) return { success: false, error: false, message: 'El campo tipo_nota_nomina debe ser un número válido y ser 1 o 2', data: [] };
+            if (isNaN(consecutive) || consecutive <= 0) return { success: false, error: false, message: 'El campo numero debe ser un número válido y mayor a 0', data: [] };
+            if (predecessor.error || !predecessor.success) return predecessor;
+
+            let payroll = {
+                notes: notes,
+                prefix: prefix,
+                type_note: note_type,
+                consecutive: consecutive,
+                predecessor: predecessor.data,
+                type_document_id: type_document_id,
+                payroll_period_id: period_data[3][0] ? Number(period_data[3][0]) : null,
+            };
+
+            if (note_type == 1) {
+                //Si es nota de reemplazo, genero el objeto de nomina normal y lo agrego al objeto de nota de nomina
+                let payroll_obj = this.generate_json_payroll(row, period, period_data);
+                if (payroll_obj.error || !payroll_obj.success) return payroll_obj;
+                payroll = { ...payroll_obj.data, ...payroll };
+            }
+
+            return { success: true, error: false, message: 'Objeto de nota de nomina generado correctamente', data: payroll };
+        } catch (error) {
+            console.error('Error generando el objeto de nota de nomina:', error);
+            return { success: false, error: true, message: 'Error interno al generar el objeto de nota de nomina', data: [] };
+        }
+    },
+
+    /**
+     * Genera el objeto "predecessor" (documento anterior) para una nota de nómina.
+     *
+     * Este helper extrae y valida los campos mínimos necesarios para referenciar la
+     * nómina original a la que aplica una nota de nómina (reemplazo o eliminación).
+     * No realiza llamadas externas; sólo normaliza y valida los valores provistos
+     * en la fila `row` del Excel.
+     *
+     * @param {Object} row - Fila del Excel que contiene los campos del predecessor
+     * @returns {{ success: boolean, error: boolean, message: string, data: Object|Array }}
+     */
+    generate_payroll_note_predecessor_object(row){
+        try {
+            //Verifico que la fila no este vacia
+            if (row == null || row == 0) return { success: false, error: false, message: 'No se ha enviado la informacion del predecessor de la nota de nomina', data: [] };
+
+            //Extraigo la informacion del predecessor
+            const predecessor_cune = Number(row.CUNE);
+            const predecessor_number = Number(row.consecutivo_nomina_electronica);
+            const predecessor_issue_date = excelDateToJSDate(row.fecha_generacion_nomina);
+
+            //Verifico que los campos sean validos
+            if (isNaN(predecessor_cune) || predecessor_cune <= 0) return { success: false, error: false, message: 'El campo CUNE es obligatorio', data: [] };
+            if (isNaN(predecessor_number) || predecessor_number <= 0) return { success: false, error: false, message: 'El campo consecutivo_nomina_electronica debe ser un número válido y mayor a 0', data: [] };
+            if (!row.fecha_generacion_nomina || !util_date.canBeParsedAsDate(row.fecha_generacion_nomina)) return { success: false, error: false, message: 'El campo fecha_generacion_nomina_electronica debe ser una fecha válida', data: [] };
+       
+            //Construyo el objeto predecessor
+            const predecessor = {
+                predecessor_cune: predecessor_cune,
+                predecessor_number: predecessor_number,
+                predecessor_issue_date: predecessor_issue_date
+            };
+
+            return { success: true, error: false, message: 'Objeto predecessor de la nota de nomina generado correctamente', data: predecessor };
+        } catch (error) {
+            console.error('Error generando el objeto predecessor de la nota de nomina:', error);
+            return { success: false, error: true, message: 'Error interno al generar el objeto predecessor de la nota de nomina', data: [] };
+        }
+    },
     /**
      * Lee un archivo Excel (.xlsx) de nómina y genera un arreglo de objetos `payroll`
      * listos para reportar (no persiste nada).
@@ -1900,7 +2133,7 @@ const payrollService = {
     async generate_json_excel_payroll(file) {
         try {
             //Extraer informacion de las filas de nomina
-            let rows = util_excel.get_excel_data(file, "Nomina", 7, null, 0, 94, payrollStruct);
+            let rows = util_excel.get_excel_data(file, "Nomina", 7, null, 0, payrollStruct.length, payrollStruct);
             if (rows.error || !rows.success) return { statusCode: 400, message: rows.message, data: [] };
             rows = rows.data;
 
@@ -1921,119 +2154,34 @@ const payrollService = {
             for (const row of rows) {
                 if (!row.numero || row.numero == 0 || row.numero == "TOTALES") continue; //si no tiene numero de identificacion, no proceso la fila
 
-                //genero el objeto trabajador (Worker)
-                let worker = this.generate_payroll_worker_object(row);
-                if (worker.error || !worker.success) {
-                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${worker.message}`, message: worker.message });
-                    continue;
-                }
-                worker = worker.data;
+                //Generar los json de la nomina dependiendo el tipo de documento 9. documento de nomina, 10. documento de nota de nomina
+                const tipo_documento_nomina = Number(row.tipo_documento_nomina);
 
-                //Genero el objeto del pago (Payment)
-                let payment = this.generate_payroll_payment_object(row);
-                if (payment.error || !payment.success) {
-                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${payment.message}`, message: payment.message });
-                    continue;
-                }
-                payment = payment.data;
-
-                //Genero el objeto de devengados (Accrued)
-                let accrued = this.generate_payroll_accrued_object(row);
-                if (accrued.error || !accrued.success) {
-                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${accrued.message}`, message: accrued.message });
-                    continue;
-                }
-                accrued = accrued.data;
-
-
-                //Genero el objeto de deducciones (Deductions)
-                let deductions = this.generate_payroll_deductions_object(row);
-                if (deductions.error || !deductions.success) {
-                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${deductions.message}`, message: deductions.message });
-                    continue;
-                }
-                deductions = deductions.data;
-
-                // Generar las fechas de pago
-                let payment_dates = this.generate_payrolls_payments_dates_object(row);
-                if (payment_dates.error || payment_dates.data.length == 0) {
-                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${payment_dates.message}`, message: payment_dates.message });
-                    continue;
-                }
-                payment_dates = payment_dates.data;
-
-                //Dias trabajados y fecha de ingreso
-                if (row.Dias_en_la_empresa && isNaN(Number(row.Dias_en_la_empresa))) {
-                    response.push({ error: `Error en los dias trabajados para el empleado ${worker.first_name} ${worker.surname}, valor no definido o invalido` });
+                //verificio el tipo de nomina
+                if (!row.tipo_documento_nomina || isNaN(tipo_documento_nomina) || (tipo_documento_nomina != 9 && tipo_documento_nomina != 10)) {
+                    response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: El campo tipo_documento_nomina es obligatorio y debe ser 9 (documento de nomina) o 10 (documento de nota de nomina)`, message: 'El campo tipo_documento_nomina es obligatorio y debe ser 9 (documento de nomina) o 10 (documento de nota de nomina)' });
                     continue;
                 }
 
-                period.worked_time = row.Dias_en_la_empresa ? (row.Dias_en_la_empresa).toString() : null;
-                period.admision_date = excelDateToJSDate(row.fecha_ingreso);
-
-                const payroll = {
-                    notes: "Nómina reportada desde archivo Excel",
-                    period: period,
-                    prefix: "NI",
-                    worker: worker,
-                    accrued: accrued,
-                    payment: payment,
-                    deductions: deductions,
-                    consecutive: row.numero ? Number(row.numero) : null,
-                    worker_code: row.cedula ? (row.cedula).toString() : null,
-                    sendmailtome: false,
-                    payment_dates: payment_dates,
-                    type_document_id: 9,
-                    payroll_period_id: period_data[3][0] ? Number(period_data[3][0]) : null,
+                let payroll_json = {};
+                //Si es documento de nomina
+                if (row.tipo_documento_nomina == 9) {
+                    payroll_json = await this.generate_json_payroll(row, period, period_data);
+                    if (payroll_json.error || !payroll_json.success) {
+                        response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${payroll_json.message}`, message: payroll_json.message });
+                        continue;
+                    }
+                }
+                //Si es documento de nota de nomina
+                else if (row.tipo_documento_nomina == 10) {
+                    payroll_json = await this.generate_json_payroll_note(row, period, period_data);
+                    if (payroll_json.error || !payroll_json.success) {
+                        response.push({ error: `Error en la fila del empleado ${row.primer_nombre} ${row.primer_apellido}: ${payroll_json.message}`, message: payroll_json.message });
+                        continue;
+                    }
                 }
 
-                //mapeo los dias ocupados en el periodo del mes
-                let mes = [];
-                this.arregloDiasOcupados(mes, new Date(excelDateToJSDate(period.settlement_start_date)));
-
-                //Saco el Json para las Horas Extra Diurna
-                const HEDs = this.extraTimeHours([{ type: 'HED', quantity: row.hed, payment: row.horas_extras_diurnas_125 }], 'HEDs', period.settlement_start_date, period.settlement_end_date, mes);
-                if (HEDs.data?.length > 0) {
-                    payroll.accrued.HEDs = HEDs.data;
-                }
-
-                //Saco el json para las Horas Extra Nocturna
-                const HENs = this.extraTimeHours([{ type: 'HEN', quantity: row.hen, payment: row.horas_extras_nocturnas_175 }], 'HENs', period.settlement_start_date, period.settlement_end_date, mes);
-                if (HENs.data?.length > 0) {
-                    payroll.accrued.HENs = HENs.data;
-                }
-
-                //Saco el json para los recargos nocturnos dominicales
-                const HRNs = this.extraTimeHours([{ type: 'HRN', quantity: row.rn, payment: row.recargo_nocturno_35 }], 'HRNs', period.settlement_start_date, period.settlement_end_date, mes);
-                if (HRNs.data?.length > 0) {
-                    payroll.accrued.HRNs = HRNs.data;
-                }
-
-                //Saco el json para las horas extra dominicales diurnos
-                const HEDDFs = this.extraTimeHours([{ type: 'HEDDF', quantity: row.hedd, payment: row.horas_extras_diurna_dominical_205 }], 'HEDDFs', period.settlement_start_date, period.settlement_end_date, mes);
-                if (HEDDFs.data?.length > 0) {
-                    payroll.accrued.HEDDFs = HEDDFs.data;
-                }
-
-                //Saco el json para los recargos dominicales diurnos
-                const HRDDFs = this.extraTimeHours([{ type: 'HRDDF', quantity: row.rd, payment: row.recargo_dominical_festivo_180 }], 'HRDDFs', period.settlement_start_date, period.settlement_end_date, mes);
-                if (HRDDFs.data?.length > 0) {
-                    payroll.accrued.HRDDFs = HRDDFs.data;
-                }
-
-                //Saco el json para los horas extra dominicales nocturnos
-                const HENDFs = this.extraTimeHours([{ type: 'HENDF', quantity: row.hedn, payment: row.horas_extras_nocturna_dominical_255 }], 'HENDFs', period.settlement_start_date, period.settlement_end_date, mes);
-                if (HENDFs.data?.length > 0) {
-                    payroll.accrued.HENDFs = HENDFs.data;
-                }
-
-                //Saco el json para los recargos dominicales nocturnos
-                const HRNDFs = this.extraTimeHours([{ type: 'HRNDF', quantity: row.rdn, payment: row.recargo_dominical_festivo_nocturno_215 }], 'HRNDFs', period.settlement_start_date, period.settlement_end_date, mes);
-                if (HRNDFs.data?.length > 0) {
-                    payroll.accrued.HRNDFs = HRNDFs.data;
-                }
-
-                response.push(payroll)
+                response.push(payroll_json.data)
             }
 
             return { statusCode: 200, message: `Nóminas generadas desde archivo Excel`, data: response };
@@ -2091,6 +2239,7 @@ const payrollService = {
             const jsonPayrolls = await this.generate_json_excel_payroll(file);
             if (jsonPayrolls.statusCode !== 200) return jsonPayrolls;
             return { statusCode: 200, message: `Nóminas reportadas desde archivo Excel`, data: jsonPayrolls.data }
+
             const nextPymeResponse = await nextPymeService.nextPymeService.sendPayrolltoDian(jsonPayrolls.data);
             if (nextPymeResponse.statusCode !== 200) return nextPymeResponse;
 
