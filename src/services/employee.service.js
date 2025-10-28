@@ -5,6 +5,20 @@ const odooConector = require("../utils/odoo.service");
 const partnerService = require("../services/partner.service");
 
 const employeeService = {
+    /**
+     * Obtiene un empleado por su ID desde Odoo (hr.employee).
+     *
+     * @async
+     * @param {number|string} id - ID del empleado (numérico o convertible a número positivo).
+     * @returns {Promise<{statusCode:number, message:string, data:any, error?:any}>}
+     *  - 200: data contiene el registro del empleado.
+     *  - 400: ID inválido o error de solicitud.
+     *  - 404: empleado no encontrado.
+     *  - 500: error interno al consultar Odoo.
+     * @example
+     * const res = await employeeService.getEmployeeById(12);
+     * if (res.statusCode === 200) console.log(res.data.name);
+     */
     async getEmployeeById(id) {
         try {
             //Verifico que el id sea valido
@@ -23,6 +37,19 @@ const employeeService = {
             return { statusCode: 500, success: false, error: true, message: 'Error interno del servidor', data: [] };
         }
     },
+    /**
+     * Obtiene los contactos relacionados a un empleado (action_related_contacts).
+     *
+     * @async
+     * @param {number|string} id - ID del empleado.
+     * @returns {Promise<{statusCode:number, message:string, data:any[], error?:any}>}
+     *  - 200: data con la lista de contactos (res.partner) del empleado.
+     *  - 400/404: validaciones fallidas o empleado no encontrado.
+     *  - 500: error interno al consultar Odoo.
+     * @example
+     * const res = await employeeService.getContactsByEmployeeId(12);
+     * if (res.statusCode === 200) console.log(res.data.length);
+     */
     async getContactsByEmployeeId(id) {
         try {
             //Verifico que el id sea valido
