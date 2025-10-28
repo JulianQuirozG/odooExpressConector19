@@ -38,6 +38,17 @@ const supportDocumentController = {
             console.error('Error al crear el documento JSON de soporte:', error);
             return res.status(500).json({ message: 'Internal server error', error: error.message });
         }
+    },
+    async confirmSupportDocument(req, res) {
+        const { documentId } = req.params;
+        try {
+            const result = await supportDocumentService.confirmSupportDocument(documentId);
+            return res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error al confirmar el documento de soporte:', error);
+            return res.status(500).json({ message: 'Internal server error', error: error.message });
+        }
     }
 };
 
