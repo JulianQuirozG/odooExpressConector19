@@ -89,6 +89,34 @@ const saleService = {
         }
     },
 
+    /**
+     * Crea factura(s) de cliente a partir de una o varias órdenes de venta usando el wizard
+     * sale.advance.payment.inv (método 'delivered' y facturación consolidada).
+     *
+     * Flujo:
+     *  1) Valida que los IDs existan y estén "to invoice".
+     *  2) Crea el wizard sale.advance.payment.inv y ejecuta create_invoices.
+     *  3) Para cada factura creada, obtiene las líneas de las SO relacionadas y actualiza la factura
+     *     con dichas líneas y metadatos (l10n_co_edi_operation_type, l10n_co_edi_payment_option_id).
+     *
+     * @async
+     * @param {Array<number|string>} salesOrderIds - IDs de sale.order a facturar.
+     * @returns {Promise<{
+     *   statusCode: number,
+     *   message: string,
+     *   data: any,
+     *   error?: any
+     * }>}
+     *  - 201: data es un arreglo con los IDs de las facturas creadas.
+     *  - 400/404: validaciones fallidas (IDs inválidos o SO no encontradas).
+     *  - 500: error al crear el wizard, generar facturas o leer líneas.
+     *
+     * @example
+     * const res = await saleService.createBillFromSalesOrder([101, 102]);
+     * if (res.statusCode === 201) {
+     *   console.log('Facturas:', res.data); // [invoiceId1, invoiceId2, ...]
+     * }
+     */
     async createBillFromSalesOrder(salesOrderIds) {
         try {
             // Validar los IDs de las órdenes de venta

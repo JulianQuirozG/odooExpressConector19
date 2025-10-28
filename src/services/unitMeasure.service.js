@@ -2,6 +2,22 @@ const { getUnitMeasureByCode } = require("../Repository/param_unit_measures/para
 const odooConector = require("../utils/odoo.service");
 
 const unitMeasureService = {
+
+    /**
+     * Obtiene una unidad de medida (uom.uom) por su ID desde Odoo.
+     *
+     * @async
+     * @param {number|string} id - ID de la unidad de medida en Odoo (se convertirá a Number).
+     * @returns {Promise<{statusCode:number, message:string, data:any, error?:string}>}
+     *  - 200: data contiene el registro de uom.uom.
+     *  - 404: no se encontró la unidad de medida.
+     *  - 400/500: error en la solicitud o del servidor.
+     * @example
+     * const res = await unitMeasureService.getUnitMeasureByid(70);
+     * if (res.statusCode === 200) {
+     *   console.log(res.data.name);
+     * }
+     */
     async getUnitMeasureByid(id) {
         try {
             const unitMeasure = await odooConector.executeOdooRequest("uom.uom", "search_read", { domain: [['id', '=', Number(id)]], limit: 1 });
@@ -18,6 +34,26 @@ const unitMeasureService = {
         }
     },
 
+    /**
+     * Obtiene el código UBL estandarizado (DIAN/NextPyme) para una unidad de medida dada por ID.
+     *
+     * Flujo:
+     * - Lee uom.uom por ID.
+     * - Valida que tenga l10n_co_edi_ubl.
+     * - Busca el código en el repositorio local (params_unit_measures) vía getUnitMeasureByCode.
+     *
+     * @async
+     * @param {number|string} id - ID de la unidad de medida en Odoo.
+     * @returns {Promise<{statusCode:number, message:string, data:any, error?:string}>}
+     *  - 200: data contiene el código estandarizado (registro del repositorio local).
+     *  - 404: la unidad no tiene l10n_co_edi_ubl o no se encontró el código.
+     *  - 400/500: error en la solicitud o del servidor.
+     * @example
+     * const res = await unitMeasureService.getUnitMeasureCodeById(70);
+     * if (res.statusCode === 200) {
+     *   console.log(res.data); // código UBL mapeado
+     * }
+     */
     async getUnitMeasureCodeById(id) {
         try {
             const unitMeasure = await this.getUnitMeasureByid(id);
