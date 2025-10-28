@@ -10,5 +10,5 @@ router.get('/getJsonPayrollById/:id', payrollController.getJsonPayrollById);
 router.get('/getpayrollById/:id', payrollController.getPayrollById);
 router.get('/getPayrollsByDates', payrollController.getPayrollsByDates);
 router.post('/reportPayrollsByDates', payrollController.reportPayrollsByDates);
-router.post('/reportPayrollsByExcel', upload.single('file'), reportPayrollsByExcel, payrollController.reportPayrollsByExcel);
+router.post('/reportPayrollsByExcel', upload.single('file'), payrollController.reportPayrollsByExcel);
 module.exports = router;

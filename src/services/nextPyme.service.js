@@ -181,6 +181,7 @@ const nextPymeService = {
             const data = [];
             const errors = [];
             for (const payroll of payrolls) {
+
                 //Verifico que los datos de nomina no contengan errores
                 if(payroll.error){
                     errors.push({
@@ -189,7 +190,7 @@ const nextPymeService = {
                     });
                     continue;
                 }
-                console.log(`Enviando nómina de empleado ${payroll.worker.first_name} a DIAN vía NextPyme...`);
+
                 //Envio la nomina a nextpyme
                 const response = await nextPymeConnection.nextPymeRequest("payroll", "post", payroll);
                 if (response.error) return { statusCode: 500, message: `Error al enviar la nómina de empleado ${payroll.worker.first_name} a DIAN`, error: response.message };
@@ -200,10 +201,12 @@ const nextPymeService = {
                         data: [errors]
                     });
                 }
+
                 //Si nextpyme regresa exito, verifico la respuesta de DIAN
                 if (response.data.success) {
                     const result = response.data.ResponseDian.Envelope.Body.SendNominaSyncResponse.SendNominaSyncResult;
                     const valid = result.IsValid == 'true';
+                    
                     //Si no es valida, guardo el error
                     if (!valid) {
                         errors.push({
