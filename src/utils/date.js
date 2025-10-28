@@ -61,6 +61,9 @@ const util_date = {
     getDiffDates(start_date, end_date) {
         try {
             if (!this.canBeParsedAsDate(start_date) || !this.canBeParsedAsDate(end_date)) return 0;
+            start_date = new Date(start_date);
+            end_date = new Date(end_date);
+            
             const diffTime = Math.abs(end_date - start_date);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
             return diffDays;
