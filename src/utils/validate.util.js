@@ -1,6 +1,24 @@
 const { canBeParsedAsDate } = require("./date");
 
 const util_validate = {
+
+    /**
+     * Valida las propiedades de un objeto de primer nivel.
+     *
+     * Comprobaciones realizadas:
+     *  - Ningún campo puede ser null o undefined.
+     *  - Los valores numéricos deben ser números válidos y mayores a 0.
+     *  - Las instancias Date deben ser parseables (usa canBeParsedAsDate).
+     *
+     * Limitaciones:
+     *  - La validación no es recursiva: solo valida propiedades de primer nivel.
+     *  - No valida esquemas complejos ni tipos compuestos (arrays/objetos anidados).
+     *
+     * @param {Object} obj - Objeto a validar. Sus propiedades se consideran obligatorias.
+     * @param {string} [object_name=''] - Nombre descriptivo del objeto (se usa en mensajes de error).
+     *
+     * @returns {{ success: boolean, error: boolean, message: string, data: Object|Array }}
+     */
     validateObject(obj, object_name = '') {
         try {
             //Verifico que los campos obligatorios del objeto estén presentes y no sean nulos o vacíos
