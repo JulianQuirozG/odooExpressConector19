@@ -181,7 +181,7 @@ const billService = {
                 const productsResponse = await productService.validListId([
                     ...new Set(productIds),
                 ]);
-                
+
                 const productsAccountResponse = await accountService.validateAccountList(accountsIds);
 
                 if (productsResponse.statusCode === 200) {
@@ -194,9 +194,9 @@ const billService = {
                         const hasPid = raw !== undefined && raw !== null;
                         if (!hasPid && !hasAid) return true; // sin producto y sin cuenta: se mantiene
 
-                        if(hasAid && hasPid) return productsResponse.data.foundIds.includes(raw) && productsAccountResponse.data.foundIds.includes(Number(accountRaw));
-                        if(hasAid) return Number.isFinite(accountRaw) && productsAccountResponse.data.foundIds.includes(Number(accountRaw));
-                        if(hasPid) return Number.isFinite(raw) && productsResponse.data.foundIds.includes(raw);
+                        if (hasAid && hasPid) return productsResponse.data.foundIds.includes(raw) && productsAccountResponse.data.foundIds.includes(Number(accountRaw));
+                        if (hasAid) return Number.isFinite(accountRaw) && productsAccountResponse.data.foundIds.includes(Number(accountRaw));
+                        if (hasPid) return Number.isFinite(raw) && productsResponse.data.foundIds.includes(raw);
                     });
                     bill.invoice_line_ids = lines.map((line) => [0, 0, line]);
                 }
@@ -831,7 +831,8 @@ const billService = {
             if (lines.statusCode !== 200) {
                 return lines;
             }
-
+            console.log("ID de la nota crédito creada:", billExists.data.invoice_line_ids);
+            console.log("Lineas obtenidas de la factura original:", lines.data);
             //Actualizo los productos y los datos de la factura en la nota credito
             const updatedCreditNote = await this.updateBill(creditNoteId, {
                 //Datos de la factura
@@ -839,9 +840,9 @@ const billService = {
                 invoice_payment_term_id: billExists.data.invoice_payment_term_id?.[0],
                 invoice_date: billExists.data.invoice_date,
                 x_studio_uuid_dian: null,
-                l10n_co_edi_cufe_cude_ref: null,
+                l10n_co_edi_cufe_cude_ref: null
                 //Productos
-                invoice_line_ids: lines.data
+                //invoice_line_ids: lines.data
             }, 'update');
             if (updatedCreditNote.statusCode !== 200) {
                 return updatedCreditNote;
@@ -1164,6 +1165,8 @@ const billService = {
                 return { statusCode: 400, message: 'Error al obtener líneas de orden de compra', data: lines.data };
             }
 
+            console.log("Líneas obtenidas:", lines);
+
             //Formateo las lineas para que el product_id sea solo el id y no un array con id y nombre
             if (action === 'id') {
                 lines.data = lines.data.map(line => line.product_id = line.product_id[0]);
@@ -1215,7 +1218,7 @@ const billService = {
             if (jsonDian.data.type_document_id === 1) {
                 dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
                 console.log(dianResponse.data);
-                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
+                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
             }
 
             //Si es nota credito
@@ -1223,7 +1226,7 @@ const billService = {
                 console.log("Enviando nota de crédito a la DIAN...");
                 dianResponse = await nextPymeConnection.nextPymeService.sendCreditNoteToDian(jsonDian.data);
                 console.log("Datos de la respuesta:", dianResponse.data);
-                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
+                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
 
             }
 
@@ -1282,9 +1285,9 @@ const billService = {
             const pdf = dianResponse.urlinvoicepdf;
             const pdfFile = await nextPymeService.getPdfInvoiceFromDian(pdf);
 
-            
+
             //Si la respuesta  de la dian trae el .zip en base64 se le asigna, si no se busca
-            
+
             // dianResponse.attacheddocument = (await nextPymeService.getXmlZipFromDian(dianResponse.urlinvoicexml.split('-')[1])).data;
             // if (pdfFile.statusCode !== 200) return pdfFile;
 
@@ -1298,7 +1301,7 @@ const billService = {
             const updatedBillS = await attachmentService.createAttachementXML(modelo, Number(id), { originalname: dianResponse.urlinvoicexml, buffer: dianResponse.invoicexml });
             if (updatedBillS.statusCode !== 201) return updatedBillS;
 
-            
+
 
             return { statusCode: 200, message: 'Archivos obtenidos', data: { updatedBill, updatedBillS } };
 
