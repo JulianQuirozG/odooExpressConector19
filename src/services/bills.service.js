@@ -50,34 +50,15 @@ const billService = {
             );
 
             ///Si hay algun error lo gestionamos
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al obtener facturas",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al obtener facturas",
-                    data: response.data,
-                };
-            }
+            if (response.error) return { statusCode: 500, message: "Error al obtener facturas", error: response.message, };
+            if (!response.success) return { statusCode: 400, message: "Error al obtener facturas", data: response.data, };
 
             //Regresamos la información de la consulta
-            return {
-                statusCode: 200,
-                message: "Lista de facturas",
-                data: response.data,
-            };
+            return { statusCode: 200, message: "Lista de facturas", data: response.data };
+
         } catch (error) {
             console.log("Error en billService.getBills:", error);
-            return {
-                statusCode: 500,
-                message: "Error al obtener facturas",
-                error: error.message,
-            };
+            return { statusCode: 500, message: "Error al obtener facturas", error: error.message };
         }
     },
     /**
@@ -102,39 +83,17 @@ const billService = {
             );
 
             //Si hay algun error lo gestionamos
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al obtener factura",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al obtener factura",
-                    data: response.data,
-                };
-            }
+            if (response.error) return { statusCode: 500, message: "Error al obtener factura", error: response.message };
+            if (!response.success) return { statusCode: 400, message: "Error al obtener factura", data: response.data };
 
             //Si no encontramos la factura regresamos 404
-            if (response.data.length === 0) {
-                return { statusCode: 404, message: "Factura no encontrada" };
-            }
+            if (response.data.length === 0) return { statusCode: 404, message: "Factura no encontrada", data: [] };
 
             //Regresamos la información de la consulta
-            return {
-                statusCode: 200,
-                message: "Detalle de la factura",
-                data: response.data[0],
-            };
+            return { statusCode: 200, message: "Detalle de la factura", data: response.data[0] };
         } catch (error) {
             console.log("Error en billService.getOneBill:", error);
-            return {
-                statusCode: 500,
-                message: "Error al obtener factura",
-                error: error.message,
-            };
+            return { statusCode: 500, message: "Error al obtener factura", error: error.message };
         }
     },
     /**
@@ -258,36 +217,23 @@ const billService = {
      */
     async updateBill(id, dataBill, action = 'replace') {
         try {
-
-            //Verificamos que la factura exista
             const billExists = await this.getOneBill(id);
             if (billExists.statusCode !== 200) {
-                return {
-                    statusCode: billExists.statusCode,
-                    message: billExists.message,
-                    data: billExists.data,
-                };
+                return billExists;
             }
 
-            //verifico al partner si viene en el body
             const bill = pickFields(dataBill, BILL_FIELDS);
             let linesToAdd = [];
+            let errorLines = [];
             if (dataBill.invoice_line_ids && dataBill.invoice_line_ids.length >= 0) {
+
                 const lineIds = billExists.data.invoice_line_ids;
 
-                //si viene replace borro todas las lineas anteriores y agrego las nuevas
-                //verifico si hay lineas para agregar
                 if (dataBill.invoice_line_ids.length > 0) {
-                    //le saco el id de los productos al body y verifico que existan
-                    const productResponse = await productService.validListId(
-                        dataBill.invoice_line_ids.map((line) => {
-                            return Number(line.product_id);
-                        })
-                    );
-                    //obtengo las lineas que tienen productos existentes
-                    linesToAdd = dataBill.invoice_line_ids.filter((line) =>
-                        productResponse.data.foundIds.includes(Number(line.product_id))
-                    );
+
+                    errorLines = await this.validDataLines(dataBill.invoice_line_ids);
+                    linesToAdd = dataBill.invoice_line_ids;
+
                 }
                 if (action === 'replace') {
                     //construyo las lineas que deben ir en el body para construir
@@ -317,36 +263,19 @@ const billService = {
             );
 
             //Si hay algun error lo gestionamos
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al actualizar factura",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al actualizar factura",
-                    data: response.data,
-                };
-            }
 
-            //Regreso la factura actualizada
+            if (response.error) return { statusCode: 500, message: "Error al actualizar factura", error: response.message };
+            if (!response.success) return { statusCode: 400, message: "Error al actualizar factura", data: response.data };
+
             const updateBill = await this.getOneBill(id);
             if (updateBill.statusCode !== 200) return updateBill;
-            return {
-                statusCode: 200,
-                message: "Factura actualizada con éxito",
-                data: updateBill.data,
-            };
+
+            return { statusCode: 200, message: "Factura actualizada con éxito", data: updateBill.data, errors: errorLines.data.errors };
+
         } catch (error) {
+
             console.log("Error en billService.updateBill:", error);
-            return {
-                statusCode: 500,
-                message: "Error al actualizar factura",
-                error: error.message,
-            };
+            return { statusCode: 500, message: "Error al actualizar factura", error: error.message };
         }
     },
     /**
@@ -1713,7 +1642,37 @@ const billService = {
                 error: error.message,
             };
         }
-    }
+    },
+    async validDataLines(lines) {
+        try {
+            const errors = [];
+
+            const validProductsIds = await productService.validListId((lines.map(line => (line.product_id)).filter(line => line != null && Number(line))));
+            const validAccountsIds = await accountService.validateAccountList((lines.map(line => (line.account_id)).filter(account => account != null && Number(account))));
+            let i = 0;
+
+            for (const line of lines) {
+
+                if (line.product_id && !validProductsIds.data.foundIds.includes(Number(line.product_id))) {
+                    errors.push({ line_id: i, product_id: line.product_id });
+                    delete line.product_id;
+                }
+
+                if (line.account_id && !validAccountsIds.data.foundIds.includes(Number(line.account_id))) {
+                    errors.push({ line_id: i, account_id: line.account_id });
+                    delete line.account_id;
+                }
+                i++;
+            }
+            
+            return { statusCode: 200, message: 'Validación de líneas completada', data: { errors } };
+
+        } catch (error) {
+            console.error("Error validating data lines:", error);
+            return { statusCode: 500, message: 'Error al validar datos de las líneas', error: error.message };
+        }
+
+    },
 };
 
 module.exports = billService;

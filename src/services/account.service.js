@@ -65,7 +65,7 @@ const accountService = {
             if (!accountIds.success) return { statusCode: 400, message: accountIds.data || 'Error en la consulta de validación de cuentas', data: [] };
 
             const foundIds = accountIds.data.map(acc => acc.id);
-            const notFoundIds = accountData.filter(acc => !foundIds.includes(Number(acc.id))).map(acc => acc.id);
+            const notFoundIds = accountData.filter(acc => !foundIds.includes(Number(acc)));
 
             return { statusCode: 200, message: 'Cuentas validadas correctamente', data: { foundIds, notFoundIds } };
 
