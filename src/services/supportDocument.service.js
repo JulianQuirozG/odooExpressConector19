@@ -1,4 +1,4 @@
-const { success } = require('zod');
+const { success, json } = require('zod');
 const odooConector = require('../utils/odoo.service');
 const billService = require('./bills.service');
 const { typeLiabilityService } = require('./liability.service');
@@ -15,7 +15,7 @@ const supportDocumentService = {
     async getSupportDocumentContent(documentId) {
         // Lógica para obtener el contenido del documento de soporte desde la base de datos
         try {
-            const document = await billService.getBills([], [["journal_id", "=", 15], ["move_type", "=", "in_invoice"]]);
+            const document = await billService.getBills([], [["journal_id", "in", [15, 16]], ["move_type", "in", ["in_invoice", "in_refund"]]]);
             if (document.statusCode !== 200) {
                 return { statusCode: 404, error: true, message: 'Documento no encontrado', data: [] };
             }
@@ -31,7 +31,7 @@ const supportDocumentService = {
     async getSupportDocumentContentById(documentId, domain = []) {
         // Lógica para obtener el contenido del documento de soporte desde la base de datos
         try {
-            const document = await billService.getOneBill(documentId, [["journal_id", "=", 15], ["move_type", "=", "in_invoice"], ...domain]);
+            const document = await billService.getOneBill(documentId, [["journal_id", "in", [15, 16]], ["move_type", "in", ["in_invoice", "in_refund"]], ...domain]);
             if (document.statusCode !== 200) {
                 return { statusCode: 404, error: true, message: 'Documento no encontrado', data: [] };
             }
@@ -49,23 +49,16 @@ const supportDocumentService = {
         try {
 
             // Aquí iría la lógica para crear el documento
-            const supportDocumentData = documentData
-            // Mapea los campos necesarios 
+            const supportDocumentData = documentData;
             supportDocumentData.move_type = 'in_invoice';
             supportDocumentData.journal_id = 15; // ID del diario de documentos de soporte
 
             // Llama al servicio de facturas para crear el documento
             const supportDocument = await billService.createBill(supportDocumentData);
-
-            //Confirmar el documento de soporte
-            const confirmDocument = await this.confirmSupportDocument(supportDocument.data[0]);
-            if (confirmDocument.statusCode !== 200) return confirmDocument;
-
-            console.log("supportDocument", supportDocument);
-
             if (supportDocument.statusCode !== 201) {
                 return { statusCode: 400, error: true, message: 'Error al crear el documento de soporte', data: [] };
             }
+
 
             return { statusCode: 201, error: false, message: 'Documento creado con éxito', data: supportDocument.data };
         } catch (error) {
@@ -265,14 +258,31 @@ const supportDocumentService = {
         }
     },
 
+    async generate_json_support_document_billing_reference(data) {
+
+        try {
+            const { uuid, number, issue_date } = data;
+            const billing_reference = {
+                uuid,
+                number,
+                issue_date
+            };
+            return { success: true, message: 'Referencia de facturación generada con éxito', data: billing_reference };
+        } catch (error) {
+            console.error('Error al generar la referencia de facturación del documento de soporte:', error);
+            return { success: false, error: true, message: 'Error interno del servidor', data: [] };
+        }
+    },
+
     async createSupportDocumentJson(documentId) {
 
         // Lógica para crear un nuevo documento de soporte en la base de datos
         try {
-
+            console.log(documentId)
             const supportDocument = await this.getSupportDocumentContentById(documentId, [["state", "=", "posted"]]);
+            console.log("supportDocument", supportDocument);
             if (supportDocument.statusCode !== 200) return { statusCode: 404, message: 'Documento no encontrado o no está confirmado', data: [] };
-
+            console.log("Creando documento de soporte JSON para ID:", supportDocument.data);
             const customer = await partnerService.getOnePartner(supportDocument.data.partner_id[0]);
             if (customer.statusCode !== 200) return customer;
 
@@ -305,7 +315,10 @@ const supportDocumentService = {
             if (!legalMonetaryTotalsJson.success) return { statusCode: 400, message: legalMonetaryTotalsJson.message, data: [] };
             const legal_monetary_totals = legalMonetaryTotalsJson.data;
 
+
             //---------------------------------------------- JSON Final ----------------------------------------------//
+
+
 
             const journalData = await journalService.getOneJournal(supportDocument.data.journal_id[0]);
             if (journalData.statusCode !== 200) return journalData;
@@ -334,6 +347,26 @@ const supportDocumentService = {
                 jsonSupportDocument.allowance_charges = allowance_charges;
             }
 
+            //-------------------------------------------------BILLING-REFERENCE ----------------------------------------------//
+            if (supportDocument.data.reversed_entry_id?.length > 0) {
+                const originalBillData = await billService.getOneBill(supportDocument.data.reversed_entry_id[0]);
+                if (originalBillData.statusCode !== 200) return originalBillData;
+
+                const billingReferenceJson = await this.generate_json_support_document_billing_reference({
+                    uuid: originalBillData.data.x_studio_uuid_dian,
+                    number: originalBillData.data.name.split("/")[1],
+                    issue_date: originalBillData.data.invoice_date
+                });
+                delete jsonSupportDocument.invoice_lines;
+                delete jsonSupportDocument.resolution_number;
+                jsonSupportDocument.billing_reference = billingReferenceJson.data;
+                jsonSupportDocument.type_document_id = 13;
+                jsonSupportDocument.credit_note_lines = invoice_lines;
+                jsonSupportDocument.discrepancyresponsecode = supportDocument.data.l10n_co_edi_description_code_credit;
+                jsonSupportDocument.discrepancyresponsedescription = (supportDocument.data.ref.split(', ')[1]);
+
+            }
+
             return { statusCode: 201, message: 'Documento creado con éxito', data: jsonSupportDocument };
         } catch (error) {
             console.error('Error al crear el documento de soporte:', error);
@@ -351,12 +384,29 @@ const supportDocumentService = {
             const supportDocument = await this.createSupportDocumentJson(documentId);
             if (supportDocument.statusCode !== 201) return supportDocument;
 
-            //Enviar el documento a DIAN
-            const dianDocument = await nextPymeService.sendSupportDocumentToDian(supportDocument.data);
-            if (dianDocument.statusCode !== 200) return dianDocument;
+            let cuds, uuid_dian, documentResponse;
+            //Enviar el documento a DIAN 
+
+            if (supportDocument.data.prefix === "NDSN") {
+                const dianResponse = await nextPymeService.sendSupportDocumentNoteToDian(supportDocument.data);
+                if (dianResponse.statusCode !== 200) return dianResponse;
+                console.log("dianResponse", dianResponse);
+                cuds = dianResponse.data.cuds;
+                uuid_dian = dianResponse.data.uuid_dian;
+                documentResponse = dianResponse;
+            } else {
+                const dianDocument = await nextPymeService.sendSupportDocumentToDian(supportDocument.data);
+                if (dianDocument.statusCode !== 200) return dianDocument;
+                console.log("dianDocument", dianDocument);
+                cuds = dianDocument.data.cuds;
+                uuid_dian = dianDocument.data.uuid_dian;
+                documentResponse = dianDocument;
+            }
+
+            const updateBill = await billService.updateBill(documentId, { l10n_co_edi_cufe_cude_ref: cuds || '', x_studio_uuid_dian: uuid_dian || '' }, 'update');
 
             //Cargar archivos al documento de soporte
-            const uploadFiles = await billService.uploadFilesFromDian(documentId, dianDocument.data);
+            const uploadFiles = await billService.uploadFilesFromDian(documentId, documentResponse.data);
             if (uploadFiles.statusCode !== 200) return uploadFiles;
 
             return { statusCode: 200, message: 'Documento de soporte confirmado y enviado a DIAN con éxito', data: [] };
@@ -366,6 +416,7 @@ const supportDocumentService = {
         }
 
     }
+
 
 }
 
