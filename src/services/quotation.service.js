@@ -117,11 +117,33 @@ const quotationService = {
     async createQuotation(dataQuotation) {
         try {
             const data = pickFields(dataQuotation, QUOTATION_FIELDS);
-            //verifico que el partner exista
-            const partnerResponse = await partnerService.getOnePartner(
-                data.partner_id
-            );
-            if (partnerResponse.statusCode !== 200) {
+            console.log(dataQuotation, "Datos recibidos para crear la cotización");
+
+            // Verificar que el partner exista, buscando por ID o por External ID
+            let partnerResponse;
+
+            if (data.partner_id) {
+                // Si viene partner_id, buscar por ID
+                partnerResponse = await partnerService.getOnePartner(data.partner_id);
+            } else if (dataQuotation.external_partner_id) {
+                // Si no viene partner_id pero sí externalPartnerId, buscar por External ID
+                const externalId = dataQuotation.external_partner_id;
+                partnerResponse = await partnerService.getPartnerByExternalId(externalId);
+
+                if (partnerResponse.statusCode === 200) {
+                    // Si lo encontramos por External ID, asignar el partner_id al data
+                    data.partner_id = partnerResponse.data.id;
+                }
+            } else {
+                // Si no viene ninguno de los dos, retornar error
+                return {
+                    statusCode: 400,
+                    message: "Debe proporcionar partner_id o externalPartnerId para crear la cotización",
+                    error: "MISSING_PARTNER_IDENTIFIER"
+                };
+            }
+
+            if (partnerResponse.statusCode === 404) {
                 return {
                     statusCode: partnerResponse.statusCode,
                     message: "No se puede crear la cotización porque el partner no existe",
@@ -129,24 +151,32 @@ const quotationService = {
                 };
             }
 
-            //Verifico que los productos existan
-            if (data.order_line && data.order_line.length > 0) {
-                const productResponse = await productService.validListId(
-                    data.order_line.map((line) => Number(line.product_id))
-                );
-
-                data.order_line = data.order_line.filter((line) =>
-                    productResponse.data.foundIds.includes(Number(line.product_id))
-                );
-
-                if (productResponse.statusCode !== 200) {
-                    return {
-                        statusCode: productResponse.statusCode,
-                        message: "No se puede crear la cotización porque algunos productos no existen",
-                        error: productResponse.message,
-                    };
-                }
+            if (partnerResponse.statusCode !== 200) {
+                return {
+                    statusCode: partnerResponse.statusCode,
+                    message: "Error al verificar el partner",
+                    error: partnerResponse.message || partnerResponse.error,
+                };
             }
+
+            //Verifico que los productos existan
+            // if (data.order_line && data.order_line.length > 0) {
+            //     const productResponse = await productService.validListId(
+            //         data.order_line.map((line) => Number(line.product_id))
+            //     );
+
+            //     data.order_line = data.order_line.filter((line) =>
+            //         productResponse.data.foundIds.includes(Number(line.product_id))
+            //     );
+
+            //     if (productResponse.statusCode !== 200) {
+            //         return {
+            //             statusCode: productResponse.statusCode,
+            //             message: "No se puede crear la cotización porque algunos productos no existen",
+            //             error: productResponse.message,
+            //         };
+            //     }
+            // }
 
             //preparo los datos de los productos
             data.order_line = data.order_line
@@ -155,6 +185,8 @@ const quotationService = {
                 })
                 : [];
 
+            console.log("Datos para crear la cotización:");
+            console.log(data);
             //Crear la cotización
             const quotation = await odooConector.executeOdooRequest(
                 "sale.order",
@@ -230,6 +262,7 @@ const quotationService = {
                     data: quotationConfirmed.data,
                 };
             }
+
             return {
                 statusCode: 200,
                 message: "Cotización confirmada",
@@ -276,9 +309,10 @@ const quotationService = {
             }
             purchaseOrdersIds = purchaseOrdersIds.data;
 
+            console.log(purchaseOrdersIds, "Estos son los IDs de las ordenes de compra relacionadas");
             //Si solo tiene una orden de compra relacionada
             if (purchaseOrdersIds.res_id) purchaseOrdersIds = [purchaseOrdersIds.res_id];
-            else purchaseOrdersIds.data = purchaseOrdersIds.data.domain[0][2];
+            else purchaseOrdersIds = purchaseOrdersIds.domain[0][2];
 
             //Obtengo los datos de las ordenes de compra
             const purchaseOrders = await odooConector.executeOdooRequest('purchase.order', 'search_read', {

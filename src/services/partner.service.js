@@ -58,14 +58,67 @@ const partnerService = {
         }
     },
     /**
-     * Crear un nuevo partner (res.partner) en Odoo.
+     * Obtener un partner por su External ID.
+     *
+     * @async
+     * @param {string} externalId - External ID del partner (formato: module.name o name).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (detalle del partner) o error.
+     */
+    async getPartnerByExternalId(externalId) {
+        try {
+            // Buscar el ir.model.data que coincida con el external_id
+            const externalIdData = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [
+                    ['name', '=', externalId],
+                    ['model', '=', 'res.partner']
+                ],
+                fields: ['res_id'],
+                limit: 1
+            });
+
+            if (!externalIdData.success) {
+                if (externalIdData.error) {
+                    return { statusCode: 500, message: 'Error al buscar external ID', error: externalIdData.message };
+                }
+                return { statusCode: 400, message: 'Error al buscar external ID', data: externalIdData.data };
+            }
+
+            if (externalIdData.data.length === 0) {
+                return { statusCode: 404, message: 'Partner no encontrado con ese External ID' };
+            }
+
+            // Obtener el partner usando el res_id encontrado
+            const partnerId = externalIdData.data[0].res_id;
+            const partner = await this.getOnePartner(partnerId);
+            if(partner.statusCode !== 200) return partner;
+            return { statusCode: 200, message: 'Detalle del partner', data: partner.data };
+            
+        } catch (error) {
+            console.log('Error en partnerService.getPartnerByExternalId:', error);
+            return { statusCode: 500, message: 'Error al obtener partner por External ID', error: error.message };
+        }
+    },
+    /**
+     * Crear un nuevo partner (res.partner) en Odoo con External ID.
      *
      * @async
      * @param {Object} dataPartner - Datos del partner. Se filtran por CLIENT_FIELDS.
-     * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado o respuesta) o error.
+     * @param {string} dataPartner.externalCompanyId - ID de la compañía externa (requerido para external_id).
+     * @param {string} dataPartner.externalPartnerId - ID del partner externo (requerido para external_id).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado, external_id) o error.
      */
     async createPartner(dataPartner) {
         try {
+            console.log("dataPartner", dataPartner);
+            // Validar que existan los campos necesarios para el external ID
+            if (!dataPartner.externalCompanyId || !dataPartner.externalPartnerId) {
+                return { 
+                    statusCode: 400, 
+                    message: 'Los campos externalCompanyId y externalPartnerId son requeridos', 
+                    data: [] 
+                };
+            }
+
             const partner = pickFields(dataPartner, CLIENT_FIELDS)
             const response = await odooConector.executeOdooRequest('res.partner', 'create', {
                 vals_list: [partner]
@@ -76,7 +129,30 @@ const partnerService = {
                 }
                 return { statusCode: 400, message: 'Error al crear partner', data: response.data };
             }
-            return { statusCode: 201, message: 'Partner creado con éxito', data: response.data };
+
+            // Crear External ID usando los campos del body
+            const partnerId = response.data[0];
+            const externalId = `partner_${dataPartner.externalCompanyId}_${dataPartner.externalPartnerId}`;
+            
+            const externalIdResponse = await odooConector.executeOdooRequest('ir.model.data', 'create', {
+                vals_list: [{
+                    name: externalId,
+                    model: 'res.partner',
+                    module: '__custom__',
+                    res_id: partnerId
+                }]
+            });
+
+            if (!externalIdResponse.success) {
+                console.warn('No se pudo crear el External ID, pero el partner fue creado:', externalIdResponse.message);
+            }
+
+            return { 
+                statusCode: 201, 
+                message: 'Partner creado con éxito', 
+                data: response.data,
+                external_id: externalId
+            };
         } catch (error) {
             console.log('Error en partnerService.createPartner:', error);
             return { statusCode: 500, message: 'Error al crear partner', error: error.message };
@@ -111,6 +187,49 @@ const partnerService = {
         } catch (error) {
             console.log('Error en partnerService.updatePartner:', error);
             return { statusCode: 500, message: 'Error al actualizar partner', error: error.message };
+        }
+    },
+    /**
+     * Actualizar un partner usando su External ID.
+     *
+     * @async
+     * @param {string} externalId - External ID del partner (formato: partner_externalCompanyId_externalPartnerId).
+     * @param {Object} dataPartner - Campos a actualizar (filtrados por CLIENT_FIELDS).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     */
+    async updatePartnerByExternalId(externalId, dataPartner) {
+        try {
+            // Buscar el partner por su External ID
+            const partnerSearch = await this.getPartnerByExternalId(externalId);
+            if (partnerSearch.statusCode !== 200) {
+                return partnerSearch;
+            }
+
+            const partnerId = partnerSearch.data.id;
+            
+            // Actualizar el partner usando el ID encontrado
+            const partner = pickFields(dataPartner, CLIENT_FIELDS);
+            const response = await odooConector.executeOdooRequest('res.partner', 'write', {
+                ids: [Number(partnerId)],
+                vals: partner
+            });
+            
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al actualizar partner', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al actualizar partner', data: response.data };
+            }
+            
+            return { 
+                statusCode: 200, 
+                message: 'Partner actualizado con éxito por External ID', 
+                data: response.data,
+                external_id: externalId
+            };
+        } catch (error) {
+            console.log('Error en partnerService.updatePartnerByExternalId:', error);
+            return { statusCode: 500, message: 'Error al actualizar partner por External ID', error: error.message };
         }
     },
     /**
@@ -185,7 +304,12 @@ const partnerService = {
             if (partnerCreated.statusCode !== 200) {
                 return { statusCode: 400, message: 'Error al crear partner con cuenta', data: { partner: partnerCreated.data, BankAccountSuccess, BankAccountError } };
             }
-            return { statusCode: 201, message: 'Partner con cuenta creado con éxito',data: { partner: partnerCreated.data, BankAccountSuccess, BankAccountError }  };
+            return { 
+                statusCode: 201, 
+                message: 'Partner con cuenta creado con éxito',
+                data: { partner: partnerCreated.data, BankAccountSuccess, BankAccountError },
+                external_id: response.external_id
+            };
         } catch (error) {
             console.log('Error en partnerService.createPartnerWithAccount:', error);
             return { statusCode: 500, message: 'Error al crear partner con cuenta', error: error.message };

@@ -40,6 +40,16 @@ const partnerController = {
             res.status(500).json({ statusCode: 500, message: 'Error al obtener partner', error: error.message });
         }
     },
+    async getPartnerByExternalId(req, res) {
+        const { externalId } = req.params;
+        try {
+            const result = await partnerService.getPartnerByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en partnerController.getPartnerByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener partner por External ID', error: error.message });
+        }
+    },
     async createPartner(req, res) {
         try {
             const result = await partnerService.createPartner(req.body);
@@ -57,6 +67,16 @@ const partnerController = {
         } catch (error) {
             console.error('Error en partnerController.updatePartner:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al actualizar partner', error: error.message });
+        }
+    },
+    async updatePartnerByExternalId(req, res) {
+        try {
+            const { externalId } = req.params;
+            const result = await partnerService.updatePartnerByExternalId(externalId, req.body);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en partnerController.updatePartnerByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al actualizar partner por External ID', error: error.message });
         }
     },
     async deletePartner(req, res) {

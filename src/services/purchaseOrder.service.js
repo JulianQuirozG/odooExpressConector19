@@ -181,12 +181,27 @@ const purchaseOrderService = {
      */
     async updatePurchaseOrder(id, data, action = 'replace') {
         try {
-            // Validar que el ID de cliente exista
+            // Validar que el partner exista, buscando por ID o por External ID
             if (data.partner_id) {
+                // Si viene partner_id, buscar por ID
                 const partnerExist = await partnerService.getOnePartner(data.partner_id);
                 if (partnerExist.statusCode !== 200) {
                     return { statusCode: partnerExist.statusCode, message: partnerExist.message, data: partnerExist.data };
                 }
+            } else if (data.external_partner_id) {
+                // Si no viene partner_id pero sí externalPartnerId, buscar por External ID
+                const partnerResponse = await partnerService.getPartnerByExternalId(data.external_partner_id);
+                
+                if (partnerResponse.statusCode !== 200) {
+                    return {
+                        statusCode: partnerResponse.statusCode,
+                        message: "No se puede actualizar la orden de compra porque el partner no existe",
+                        error: partnerResponse.message || partnerResponse.error,
+                    };
+                }
+                
+                // Si lo encontramos por External ID, asignar el partner_id al data
+                data.partner_id = partnerResponse.data.id;
             }
             console.log("Datos a actualizar:", data);
 

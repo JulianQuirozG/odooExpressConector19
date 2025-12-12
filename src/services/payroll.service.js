@@ -1,13 +1,13 @@
 //Imports odoo connection
 const odooConector = require("../utils/odoo.service");
 
-
 //Imports services
 const employeeService = require("../services/employee.service");
 const moveService = require("../services/bills.service");
 const bankAccountService = require("../services/bankAccount.service");
 const workEntryService = require("../services/workEntry.service");
 const nextPymeService = require("../services/nextPyme.service");
+
 //Utils
 const util_date = require("../utils/date");
 const { payrollStruct } = require("../structs/payroll/payrrol.struct");
