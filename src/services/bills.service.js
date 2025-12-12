@@ -193,14 +193,7 @@ const billService = {
             const billId = response.data[0];
             const externalId = `bill_${dataBill.externalCompanyId}_${dataBill.externalBillId}`;
             
-            const externalIdResponse = await odooConector.executeOdooRequest('ir.model.data', 'create', {
-                vals_list: [{
-                    name: externalId,
-                    model: 'account.move',
-                    module: '__custom__',
-                    res_id: billId
-                }]
-            });
+            const externalIdResponse = await odooConector.createExternalId(externalId, 'account.move', billId);
 
             if (!externalIdResponse.success) {
                 console.warn('No se pudo crear el External ID, pero el partner fue creado:', externalIdResponse.message);
@@ -1145,11 +1138,14 @@ const billService = {
      */
     async getLinesByBillId(id, action = 'id') {
         try {
+            console.log("Obteniendo líneas para factura ID:", id, "con acción:", action);
             //Verificar que la factura exista
             const bill = await this.getOneBill(id);
             if (bill.statusCode !== 200) {
                 return bill;
             }
+
+            console.log("Factura encontrada:", bill);
 
             //Buscar las lineas de esa factura
             const lines = await odooConector.executeOdooRequest('account.move.line', 'search_read', { domain: [['id', 'in', bill.data.invoice_line_ids]] });
@@ -1210,7 +1206,10 @@ const billService = {
             //Si es factura de venta
             if (jsonDian.data.type_document_id === 1) {
                 dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
-                
+                console.log(dianResponse.data);
+
+                console.log("json dian", jsonDian);
+                if(dianResponse.statusCode !== 200) return dianResponse;
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
             }
 
@@ -1461,6 +1460,7 @@ const billService = {
             const diferenciaMs = invoice_date_due - invoice_date;
             const dias = Math.round(diferenciaMs / (1000 * 60 * 60 * 24));
             payment_form.duration_measure = dias;
+console
 
             //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);

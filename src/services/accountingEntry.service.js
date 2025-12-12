@@ -100,7 +100,8 @@ const accountingEntryService = {
             if (bill.data.move_type === 'out_refund') accountingEntryref = `Reversión de utilidad generada automáticamente para ${bill.data.name}`;
             
             //Creamos el asiento contable
-            const accountingEntry = await this.createAccountingEntry(lines, accountingEntryref, bill.data.invoice_date, 12);
+            //FIXME: Se esta quemando el diario para el ingreso para terceros, pero deberia ser administrable julianr-dev@12-12-2025
+            const accountingEntry = await this.createAccountingEntry(lines, accountingEntryref, bill.data.invoice_date, 10);
             if (accountingEntry.statusCode !== 200) return accountingEntry;
 
             return { statusCode: 200, message: 'Ingreso para terceros generados exitosamente', data: accountingEntry.data };

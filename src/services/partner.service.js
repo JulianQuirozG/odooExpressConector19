@@ -134,14 +134,7 @@ const partnerService = {
             const partnerId = response.data[0];
             const externalId = `partner_${dataPartner.externalCompanyId}_${dataPartner.externalPartnerId}`;
             
-            const externalIdResponse = await odooConector.executeOdooRequest('ir.model.data', 'create', {
-                vals_list: [{
-                    name: externalId,
-                    model: 'res.partner',
-                    module: '__custom__',
-                    res_id: partnerId
-                }]
-            });
+            const externalIdResponse = await odooConector.createExternalId(externalId, 'res.partner', partnerId);
 
             if (!externalIdResponse.success) {
                 console.warn('No se pudo crear el External ID, pero el partner fue creado:', externalIdResponse.message);
