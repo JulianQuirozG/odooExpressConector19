@@ -20,6 +20,8 @@ const paymentMethodRoutes = require('./routes/paymentMethod.routes');
 const currencyRoutes = require('./routes/currency.routes');
 const radianRoutes = require('./routes/radian.routes');
 const workEntryRoutes = require('./routes/workEntry.routes');
+const supportDocumentRoutes = require('./routes/supportDocument.routes');
+const mastersRoutes = require('./routes/masters.routes');
 
 //Importar repositorios y servicios necesarios para el cron
 const DbConfig = require('./config/db');
@@ -51,12 +53,14 @@ app.use('/api/radian', radianRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/work-entries', workEntryRoutes);
+app.use('/api/supportDocument', supportDocumentRoutes);
+app.use('/api/masters', mastersRoutes);
 
 // Initialize the database connection
 
 (async () => {
   const db = await DbConfig.init(config.database);
-  if (!db.success) {
+  if (!db.status) {
     console.error('Error connecting to the database:', db.message);
   } else {
     console.log('Connected to MySQL database');

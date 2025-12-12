@@ -176,13 +176,14 @@ const nextPymeService = {
         try {
             // Validar que se proporcionen nóminas
             if (!payrolls || payrolls.length == 0) return { statusCode: 400, message: `No se proporcionaron nóminas para enviar a DIAN`, data: [] };
-            
+
             //Envio nomina por nomina a nextpyme
             const data = [];
             const errors = [];
             for (const payroll of payrolls) {
+
                 //Verifico que los datos de nomina no contengan errores
-                if(payroll.error){
+                if (payroll.error) {
                     errors.push({
                         message: `Error en la nómina ${payroll.error}`,
                         data: []
@@ -200,15 +201,17 @@ const nextPymeService = {
                         data: [errors]
                     });
                 }
+
                 //Si nextpyme regresa exito, verifico la respuesta de DIAN
                 if (response.data.success) {
                     const result = response.data.ResponseDian.Envelope.Body.SendNominaSyncResponse.SendNominaSyncResult;
                     const valid = result.IsValid == 'true';
+                    
                     //Si no es valida, guardo el error
                     if (!valid) {
                         errors.push({
                             message: `Nómina de empleado ${payroll.worker.first_name} rechazada por DIAN: ${result.StatusDescription}`,
-                            data: [result.ErrorMessage]
+                            error: [result.ErrorMessage]
                         });
                     } else {
                         data.push({
@@ -224,7 +227,40 @@ const nextPymeService = {
             console.error('Error al enviar nómina a DIAN:', error);
             return { success: false, error: true, message: 'Error interno del servidor', data: [] };
         }
-    }
+    },
+
+    async sendSupportDocumentToDian(documentData) {
+        try {
+            const response = await nextPymeConnection.nextPymeRequest('support-document', 'post', documentData);
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al enviar el documento de soporte a DIAN', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al enviar el documento de soporte a DIAN', data: response.data };
+            }
+            return { statusCode: 200, message: 'Documento de soporte enviado a DIAN', data: response.data };
+        } catch (error) {
+            console.log('Error en nextPymeService.sendSupportDocumentToDian:', error);
+            return { statusCode: 500, message: 'Error al enviar el documento de soporte a DIAN', error: error.message };
+        }
+    },
+
+    async sendSupportDocumentNoteToDian(documentData) {
+        try {
+            const response = await nextPymeConnection.nextPymeRequest('sd-credit-note', 'post', documentData);
+            console.log('Respuesta de NextPyme al enviar nota de documento de soporte:', response);
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al enviar la nota de documento de soporte a DIAN', error: response.message, data : response.data?.errors || response.data?.payload };
+                }
+                return { statusCode: 400, message: 'Error al enviar la nota de documento de soporte a DIAN', data: response.data.ResponseDian.Envelope.Body.SendBillSyncResponse.SendBillSyncResult.ErrorMessage };
+            }
+            return { statusCode: 200, message: 'Documento de soporte enviado a DIAN', data: response.data };
+        } catch (error) {
+            console.log('Error en nextPymeService.sendSupportDocumentToDian:', error);
+            return { statusCode: 500, message: 'Error al enviar la nota de documento de soporte a DIAN', error: error.message };
+        }
+    },
 }
 
 module.exports = { nextPymeService };

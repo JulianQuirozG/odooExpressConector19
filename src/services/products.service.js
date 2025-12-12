@@ -171,7 +171,6 @@ const productService = {
                 }
                 return { statusCode: 400, message: 'Error al validar productos', data: response.data };
             }
-            
             const foundIds = response.data.map(item => item.id);
             const notFoundIds = ids.filter(id => !foundIds.includes(id));
             return { statusCode: 200, message: 'Validación de productos', data: { foundIds, notFoundIds } };

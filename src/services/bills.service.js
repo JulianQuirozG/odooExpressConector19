@@ -25,6 +25,8 @@ const paramsPaymentMethodsRepository = require("../Repository/params_payment_met
 const paramsLiabilitiesRepository = require("../Repository/param_type_liabilities/param_type_liabilities.repository");
 const { getUnitMeasureByCode } = require("../Repository/param_unit_measures/params_unit_measures");
 const { getTaxByCode } = require("../Repository/param_taxes/params_unit_measures");
+const accountService = require('./account.service');
+const { da } = require('zod/locales');
 
 
 
@@ -36,7 +38,7 @@ const billService = {
      * @param {string[]} [billFields] - Campos a solicitar por factura.
      * @returns {Promise<Object>} Resultado con statusCode, message y data (array de facturas) o error.
      */
-    async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"]) {
+    async getBills(billFields = ["name", "invoice_partner_display_name", "invoice_date", "invoice_date_due", "ref", "amount_untaxed_in_currency_signed", "state"], domain = []) {
         try {
             //Obtenemos todas las facturas
             const response = await odooConector.executeOdooRequest(
@@ -44,38 +46,20 @@ const billService = {
                 "search_read",
                 {
                     fields: billFields,
+                    domain: domain,
                 }
             );
 
             ///Si hay algun error lo gestionamos
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al obtener facturas",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al obtener facturas",
-                    data: response.data,
-                };
-            }
+            if (response.error) return { statusCode: 500, message: "Error al obtener facturas", error: response.message, };
+            if (!response.success) return { statusCode: 400, message: "Error al obtener facturas", data: response.data, };
 
             //Regresamos la información de la consulta
-            return {
-                statusCode: 200,
-                message: "Lista de facturas",
-                data: response.data,
-            };
+            return { statusCode: 200, message: "Lista de facturas", data: response.data };
+
         } catch (error) {
             console.log("Error en billService.getBills:", error);
-            return {
-                statusCode: 500,
-                message: "Error al obtener facturas",
-                error: error.message,
-            };
+            return { statusCode: 500, message: "Error al obtener facturas", error: error.message };
         }
     },
     /**
@@ -100,39 +84,17 @@ const billService = {
             );
 
             //Si hay algun error lo gestionamos
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al obtener factura",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al obtener factura",
-                    data: response.data,
-                };
-            }
+            if (response.error) return { statusCode: 500, message: "Error al obtener factura", error: response.message };
+            if (!response.success) return { statusCode: 400, message: "Error al obtener factura", data: response.data };
 
             //Si no encontramos la factura regresamos 404
-            if (response.data.length === 0) {
-                return { statusCode: 404, message: "Factura no encontrada" };
-            }
+            if (response.data.length === 0) return { statusCode: 404, message: "Factura no encontrada", data: [] };
 
             //Regresamos la información de la consulta
-            return {
-                statusCode: 200,
-                message: "Detalle de la factura",
-                data: response.data[0],
-            };
+            return { statusCode: 200, message: "Detalle de la factura", data: response.data[0] };
         } catch (error) {
             console.log("Error en billService.getOneBill:", error);
-            return {
-                statusCode: 500,
-                message: "Error al obtener factura",
-                error: error.message,
-            };
+            return { statusCode: 500, message: "Error al obtener factura", error: error.message };
         }
     },
     /**
@@ -146,6 +108,7 @@ const billService = {
      * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado o respuesta) o error.
      */
     async createBill(dataBill) {
+        console.log(dataBill, "Estos son los datos de la factura a crear");
         try {
             //verifico al partner si viene en el body
             if (dataBill.partner_id) {
@@ -166,22 +129,40 @@ const billService = {
             //si tiene productos los verifico que existan y construyo las lineas
             if (dataBill.invoice_line_ids && dataBill.invoice_line_ids.length > 0) {
 
-                const productIds = dataBill.invoice_line_ids.map((line) =>
-                    Number(line.product_id)
-                );
+                const productIds = []
+
+                const accountsIds = []
+
+                for (const line of dataBill.invoice_line_ids) {
+                    if (line.account_id && !isNaN(Number(line.account_id))) accountsIds.push(line.account_id);
+                    if (line.product_id && !isNaN(Number(line.product_id))) productIds.push(line.product_id);
+                }
 
                 //le paso la lista de ids de productos sin repetidos para verificar que existan
                 const productsResponse = await productService.validListId([
                     ...new Set(productIds),
                 ]);
 
+                const productsAccountResponse = await accountService.validateAccountList(accountsIds);
+
                 if (productsResponse.statusCode === 200) {
                     //filtro las lineas de la factura para quedarme solo con las que tienen productos existentes
-                    const cosas = dataBill.invoice_line_ids.filter((line) =>
-                        productsResponse.data.foundIds.includes(Number(line.product_id))
-                    );
-                    bill.invoice_line_ids = cosas.map((line) => [0, 0, line]);
+                    const lines = dataBill.invoice_line_ids.filter((line) => {
+                        const raw = line.product_id;
+                        const accountRaw = line.account_id;
+
+                        const hasAid = accountRaw !== undefined && accountRaw !== null;
+                        const hasPid = raw !== undefined && raw !== null;
+                        if (!hasPid && !hasAid) return true; // sin producto y sin cuenta: se mantiene
+
+                        if (hasAid && hasPid) return productsResponse.data.foundIds.includes(raw) && productsAccountResponse.data.foundIds.includes(Number(accountRaw));
+                        if (hasAid) return Number.isFinite(accountRaw) && productsAccountResponse.data.foundIds.includes(Number(accountRaw));
+                        if (hasPid) return Number.isFinite(raw) && productsResponse.data.foundIds.includes(raw);
+                    });
+                    bill.invoice_line_ids = lines.map((line) => [0, 0, line]);
                 }
+
+                console.log("Lineas de la factura a crear:", bill.invoice_line_ids);
             }
             //creo la factura
             const response = await odooConector.executeOdooRequest(
@@ -208,11 +189,28 @@ const billService = {
                 };
             }
 
+             // Crear External ID usando los campos del body
+            const billId = response.data[0];
+            const externalId = `bill_${dataBill.externalCompanyId}_${dataBill.externalBillId}`;
+            
+            const externalIdResponse = await odooConector.executeOdooRequest('ir.model.data', 'create', {
+                vals_list: [{
+                    name: externalId,
+                    model: 'account.move',
+                    module: '__custom__',
+                    res_id: billId
+                }]
+            });
+
+            if (!externalIdResponse.success) {
+                console.warn('No se pudo crear el External ID, pero el partner fue creado:', externalIdResponse.message);
+            }
             //Regresamos la respuesta de la creación
             return {
                 statusCode: 201,
                 message: "Factura creada con éxito",
                 data: response.data,
+                externalId: externalId,
             };
         } catch (error) {
             console.log("Error en billService.createBill:", error);
@@ -238,36 +236,23 @@ const billService = {
      */
     async updateBill(id, dataBill, action = 'replace') {
         try {
-
-            //Verificamos que la factura exista
             const billExists = await this.getOneBill(id);
             if (billExists.statusCode !== 200) {
-                return {
-                    statusCode: billExists.statusCode,
-                    message: billExists.message,
-                    data: billExists.data,
-                };
+                return billExists;
             }
 
-            //verifico al partner si viene en el body
             const bill = pickFields(dataBill, BILL_FIELDS);
             let linesToAdd = [];
+            let errorLines = [];
             if (dataBill.invoice_line_ids && dataBill.invoice_line_ids.length >= 0) {
+
                 const lineIds = billExists.data.invoice_line_ids;
 
-                //si viene replace borro todas las lineas anteriores y agrego las nuevas
-                //verifico si hay lineas para agregar
                 if (dataBill.invoice_line_ids.length > 0) {
-                    //le saco el id de los productos al body y verifico que existan
-                    const productResponse = await productService.validListId(
-                        dataBill.invoice_line_ids.map((line) => {
-                            return Number(line.product_id);
-                        })
-                    );
-                    //obtengo las lineas que tienen productos existentes
-                    linesToAdd = dataBill.invoice_line_ids.filter((line) =>
-                        productResponse.data.foundIds.includes(Number(line.product_id))
-                    );
+
+                    errorLines = await this.validDataLines(dataBill.invoice_line_ids);
+                    linesToAdd = dataBill.invoice_line_ids;
+
                 }
                 if (action === 'replace') {
                     //construyo las lineas que deben ir en el body para construir
@@ -297,36 +282,19 @@ const billService = {
             );
 
             //Si hay algun error lo gestionamos
-            if (!response.success) {
-                if (response.error) {
-                    return {
-                        statusCode: 500,
-                        message: "Error al actualizar factura",
-                        error: response.message,
-                    };
-                }
-                return {
-                    statusCode: 400,
-                    message: "Error al actualizar factura",
-                    data: response.data,
-                };
-            }
 
-            //Regreso la factura actualizada
+            if (response.error) return { statusCode: 500, message: "Error al actualizar factura", error: response.message };
+            if (!response.success) return { statusCode: 400, message: "Error al actualizar factura", data: response.data };
+
             const updateBill = await this.getOneBill(id);
             if (updateBill.statusCode !== 200) return updateBill;
-            return {
-                statusCode: 200,
-                message: "Factura actualizada con éxito",
-                data: updateBill.data,
-            };
+
+            return { statusCode: 200, message: "Factura actualizada con éxito", data: updateBill.data, errors: errorLines.data.errors };
+
         } catch (error) {
+
             console.log("Error en billService.updateBill:", error);
-            return {
-                statusCode: 500,
-                message: "Error al actualizar factura",
-                error: error.message,
-            };
+            return { statusCode: 500, message: "Error al actualizar factura", error: error.message };
         }
     },
     /**
@@ -453,6 +421,7 @@ const billService = {
      * @returns {Promise<Object>} Resultado con statusCode y message o error.
      */
     async confirmBill(id, action = 'compra') {
+        console.log("Confirmando factura con ID:", id, "y acción:", action);
         try {
             //verifico que la factura exista y no este confirmada
             const billExists = await this.getOneBill(id, [['state', '!=', 'posted']]);
@@ -810,7 +779,8 @@ const billService = {
             if (lines.statusCode !== 200) {
                 return lines;
             }
-
+            console.log("ID de la nota crédito creada:", billExists.data.invoice_line_ids);
+            console.log("Lineas obtenidas de la factura original:", lines.data);
             //Actualizo los productos y los datos de la factura en la nota credito
             const updatedCreditNote = await this.updateBill(creditNoteId, {
                 //Datos de la factura
@@ -818,9 +788,9 @@ const billService = {
                 invoice_payment_term_id: billExists.data.invoice_payment_term_id?.[0],
                 invoice_date: billExists.data.invoice_date,
                 x_studio_uuid_dian: null,
-                l10n_co_edi_cufe_cude_ref: null,
+                l10n_co_edi_cufe_cude_ref: null
                 //Productos
-                invoice_line_ids: lines.data
+                //invoice_line_ids: lines.data
             }, 'update');
             if (updatedCreditNote.statusCode !== 200) {
                 return updatedCreditNote;
@@ -845,14 +815,16 @@ const billService = {
      * Crear un pago para una factura confirmada mediante el asistente `account.payment.register`.
      *
      * @async
-     * @param {number|string} invoiceId - ID de la factura (debe estar en estado 'posted').
+     * @param {number|string} invoiceId - ID de la factura o External ID (debe estar en estado 'posted').
      * @param {Object} paymentDatas - Datos del pago (amount, date, journal_id, payment_method_line_id, memo).
      * @returns {Promise<Object>} Resultado con statusCode, message y data (info del pago) o error.
      */
     async createPayment(invoiceId, paymentDatas) {
         try {
-            //Verificar que el id sea valido
-            if (!invoiceId || isNaN(Number(invoiceId))) {
+            let billId = invoiceId;
+
+            // Si no es válido, retornar error
+            if (!invoiceId) {
                 return {
                     statusCode: 400,
                     message: "ID de factura inválido",
@@ -860,8 +832,34 @@ const billService = {
                 };
             }
 
+            // Intentar buscar por ID primero
+            let billExists = null;
+            if (!isNaN(Number(invoiceId))) {
+                billExists = await this.getOneBill(Number(invoiceId), [['state', '=', 'posted']]);
+            }
+
+            // Si no se encontró por ID, intentar buscar por External ID
+            if (!billExists || billExists.statusCode !== 200) {
+                const externalIdSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                    domain: [['name', '=', String(invoiceId)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                    fields: ['res_id']
+                });
+
+                if (externalIdSearch.success && externalIdSearch.data.length > 0) {
+                    billId = externalIdSearch.data[0].res_id;
+                    billExists = await this.getOneBill(billId, [['state', '=', 'posted']]);
+                } else {
+                    return {
+                        statusCode: 404,
+                        message: `No se encontró una factura con ID o External ID: ${invoiceId}`,
+                        data: null
+                    };
+                }
+            } else {
+                billId = Number(invoiceId);
+            }
+
             // Verificar que la factura exista y esté confirmada
-            const billExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
             if (billExists.statusCode !== 200) {
                 return {
                     statusCode: billExists.statusCode,
@@ -896,7 +894,7 @@ const billService = {
                     vals_list: wizardData,
                     context: {
                         active_model: 'account.move',
-                        active_ids: [Number(invoiceId)]
+                        active_ids: [Number(billId)]
                     }
                 }
             );
@@ -929,7 +927,7 @@ const billService = {
             }
 
             // Obtener información actualizada de la factura
-            const updatedInvoice = await this.getOneBill(invoiceId);
+            const updatedInvoice = await this.getOneBill(billId);
 
             return {
                 statusCode: 201,
@@ -1123,7 +1121,7 @@ const billService = {
      *
      * @async
      * @param {number|string} id - ID de la factura.
-     * @param {string} [action='id'] - 'id' para retornar solo product_id como id, 'full' para retornar todo.
+     * @param {string} [action='id'] - 'id' para retornar solo product_id como id arreglo de ids, 'full' para retornar toda la data de las lineas.
      * @returns {Promise<Object>} Resultado con statusCode, message y data (array de líneas) o error.
      */
     async getLinesByBillId(id, action = 'id') {
@@ -1142,6 +1140,8 @@ const billService = {
                 }
                 return { statusCode: 400, message: 'Error al obtener líneas de orden de compra', data: lines.data };
             }
+
+            console.log("Líneas obtenidas:", lines);
 
             //Formateo las lineas para que el product_id sea solo el id y no un array con id y nombre
             if (action === 'id') {
@@ -1194,7 +1194,7 @@ const billService = {
             if (jsonDian.data.type_document_id === 1) {
                 dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
                 console.log(dianResponse.data);
-                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
+                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
             }
 
             //Si es nota credito
@@ -1202,7 +1202,7 @@ const billService = {
                 console.log("Enviando nota de crédito a la DIAN...");
                 dianResponse = await nextPymeConnection.nextPymeService.sendCreditNoteToDian(jsonDian.data);
                 console.log("Datos de la respuesta:", dianResponse.data);
-                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
+                const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
 
             }
 
@@ -1255,27 +1255,31 @@ const billService = {
      *   { urlinvoicepdf: 'ubl2.1/download/900731971/FACT-001.pdf', urlinvoicexml: 'ubl2.1/download/900731971/FACT-001.xml', invoicexml: '<Invoice>...</Invoice>' },
      * );
      */
-    async uploadFilesFromDian(id, dianResponse) {
+    async uploadFilesFromDian(id, dianResponse, modelo = "account.move") {
         try {
             // obtener el pdf y zip archivos desde nextPyme
             const pdf = dianResponse.urlinvoicepdf;
             const pdfFile = await nextPymeService.getPdfInvoiceFromDian(pdf);
 
+
             //Si la respuesta  de la dian trae el .zip en base64 se le asigna, si no se busca
-            dianResponse.attacheddocument = (await nextPymeService.getXmlZipFromDian(dianResponse.urlinvoicexml.split('-')[1])).data;
-            if (pdfFile.statusCode !== 200) return pdfFile;
+
+            // dianResponse.attacheddocument = (await nextPymeService.getXmlZipFromDian(dianResponse.urlinvoicexml.split('-')[1])).data;
+            // if (pdfFile.statusCode !== 200) return pdfFile;
+
+            // const updatedBillSZIP = await attachmentService.createAttachementZIP(modelo, Number(id), { originalname: dianResponse.urlinvoicepdf.split('.')[0] + ".zip", buffer: dianResponse.attacheddocument.filebase64 });
+            // if (updatedBillSZIP.statusCode !== 201) return updatedBillSZIP;
 
             //subimos los archivos a la factura de odoo
-            const updatedBill = await attachmentService.createAttachement("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf, buffer: pdfFile.data });
+            const updatedBill = await attachmentService.createAttachement(modelo, Number(id), { originalname: dianResponse.urlinvoicepdf, buffer: pdfFile.data });
             if (updatedBill.statusCode !== 201) return updatedBill;
 
-            const updatedBillS = await attachmentService.createAttachementXML("account.move", Number(id), { originalname: dianResponse.urlinvoicexml, buffer: dianResponse.invoicexml });
+            const updatedBillS = await attachmentService.createAttachementXML(modelo, Number(id), { originalname: dianResponse.urlinvoicexml, buffer: dianResponse.invoicexml });
             if (updatedBillS.statusCode !== 201) return updatedBillS;
 
-            const updatedBillSZIP = await attachmentService.createAttachementZIP("account.move", Number(id), { originalname: dianResponse.urlinvoicepdf.split('.')[0] + ".zip", buffer: dianResponse.attacheddocument.filebase64 });
-            if (updatedBillSZIP.statusCode !== 201) return updatedBillSZIP;
 
-            return { statusCode: 200, message: 'Archivos obtenidos', data: { updatedBill, updatedBillS, updatedBillSZIP } };
+
+            return { statusCode: 200, message: 'Archivos obtenidos', data: { updatedBill, updatedBillS } };
 
         }
         catch (error) {
@@ -1685,7 +1689,37 @@ const billService = {
                 error: error.message,
             };
         }
-    }
+    },
+    async validDataLines(lines) {
+        try {
+            const errors = [];
+
+            const validProductsIds = await productService.validListId((lines.map(line => (line.product_id)).filter(line => line != null && Number(line))));
+            const validAccountsIds = await accountService.validateAccountList((lines.map(line => (line.account_id)).filter(account => account != null && Number(account))));
+            let i = 0;
+
+            for (const line of lines) {
+
+                if (line.product_id && !validProductsIds.data.foundIds.includes(Number(line.product_id))) {
+                    errors.push({ line_id: i, product_id: line.product_id });
+                    delete line.product_id;
+                }
+
+                if (line.account_id && !validAccountsIds.data.foundIds.includes(Number(line.account_id))) {
+                    errors.push({ line_id: i, account_id: line.account_id });
+                    delete line.account_id;
+                }
+                i++;
+            }
+            
+            return { statusCode: 200, message: 'Validación de líneas completada', data: { errors } };
+
+        } catch (error) {
+            console.error("Error validating data lines:", error);
+            return { statusCode: 500, message: 'Error al validar datos de las líneas', error: error.message };
+        }
+
+    },
 };
 
 module.exports = billService;

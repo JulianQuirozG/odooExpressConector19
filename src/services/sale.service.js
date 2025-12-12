@@ -7,6 +7,7 @@ const purchaseOrderService = require("./purchaseOrder.service");
 const billService = require("./bills.service");
 const { ca, id } = require("zod/locales");
 const partnerService = require("./partner.service");
+const productService = require("./products.service");
 
 const saleService = {
     /**
@@ -161,9 +162,9 @@ const saleService = {
                         invoiceLines.push(line);
                     }
                 }
-                
+
                 //Actualizo la factura con las lineas obtenidas y el tipo de operacion
-                await billService.updateBill(invoice, { invoice_line_ids: invoiceLines, l10n_co_edi_operation_type: "12" }, 'update');
+                await billService.updateBill(invoice, { invoice_line_ids: invoiceLines, l10n_co_edi_operation_type: "12", l10n_co_edi_payment_option_id: 66 }, 'update');
             }
 
             return {
@@ -215,14 +216,31 @@ const saleService = {
             for (const sale of data.sales) {
                 try {
                     const { dataVenta, dataCompra } = sale;
+                    const external_solicitud_transportista = dataVenta.external_solicitud_transportista || null;
+                    const externalCompanyId = dataVenta.externalCompanyId || null;
+
+                    if (!external_solicitud_transportista || !externalCompanyId) {
+                        return {
+                            statusCode: 400,
+                            message: 'Error al crear factura desde orden de compra',
+                            error: 'Faltan los campos external_solicitud_transportista o external_empresa en dataVenta'
+                        };
+                    }
+
+                    delete dataVenta.external_solicitud_transportista;
+                    delete dataVenta.externalCompanyId;
 
                     //crear cotizacion
                     const quotation = await quotationService.createQuotation(dataVenta);
                     if (quotation.statusCode !== 201) return quotation;
 
+                    console.log(quotation.data.id, "Este es el ID de la cotización creada");
+
                     //confirmar cotizacion 
                     const confirmQuotation = await quotationService.confirmQuotation(quotation.data.id);
                     if (confirmQuotation.statusCode !== 200) return confirmQuotation;
+
+                    console.log(confirmQuotation.data, "Esta es la cotización confirmada");
 
                     // Recuperar la información de la orden de compra generada al confirmar la cotización
                     const purchaseOrder = await quotationService.getPurchaseOrdersBySaleOrderId(quotation.data.id);
@@ -240,6 +258,21 @@ const saleService = {
                     //crear la factura de la orden de compra
                     const bill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
                     if (bill.statusCode !== 201) return bill;
+
+                    //Crear External ID para la factura de compra
+                    const externalIdName = `purchase_invoice_${externalCompanyId}_${external_solicitud_transportista}`;
+                    const createExternalId = await odooConector.executeOdooRequest('ir.model.data', 'create', {
+                        vals_list: [{
+                            name: externalIdName,
+                            model: 'account.move',
+                            module: '__custom__',
+                            res_id: bill.data.id
+                        }]
+                    });
+
+                    if (!createExternalId.success) {
+                        console.error('Error al crear External ID para factura de compra:', createExternalId.message);
+                    }
 
                     //Actualizamos la factura de compra validando los campos personalizados
                     const updatePurchaseBill = await billService.updateBill(bill.data.id, { invoice_line_ids: dataCompra.order_line }, 'update');

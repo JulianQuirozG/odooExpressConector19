@@ -12,6 +12,10 @@ const bankAccountSchema = z.object({
 
 
 const clientSchema = z.object({
+  // External IDs para sincronización
+  externalCompanyId: z.string().min(1),
+  externalPartnerId: z.string().min(1),
+
   // Identificación básica
   is_company: z.boolean(),
   company_type: z.enum(['company', 'person']),
@@ -33,8 +37,7 @@ const clientSchema = z.object({
 
   // Identificación fiscal
   l10n_latam_identification_type_id: z.coerce.number().int().min(1),
-  vat: z.string().min(3),
-  website: z.string().min(1), // puede ser email/URL según tu uso
+  vat: z.string().min(3), // puede ser email/URL según tu uso
   category_id: z.null().or(z.array(z.coerce.number().int().min(1))).optional(),
 
   company_id: z.coerce.number().int().min(1),
@@ -48,22 +51,22 @@ const clientSchema = z.object({
   property_payment_term_id: z.coerce.number().int().min(1),
   property_inbound_payment_method_line_id: z.coerce.number().int().min(1),
 
-  property_supplier_payment_term_id: z.coerce.number().int().min(1),
-  property_outbound_payment_method_line_id: z.coerce.number().int().min(1),
-  property_purchase_currency_id: z.coerce.number().int().min(1),
+  property_supplier_payment_term_id: z.coerce.number().int().min(1).optional(),
+  property_outbound_payment_method_line_id: z.coerce.number().int().min(1).optional(),
+  property_purchase_currency_id: z.coerce.number().int().min(1).optional(),
 
   // Fiscal DIAN
   l10n_co_edi_obligation_type_ids: z.array(z.coerce.number().int().min(1)).min(1),
   l10n_co_edi_large_taxpayer: z.boolean(),
   l10n_co_edi_fiscal_regimen: z.enum(['48', '49']),
-  l10n_co_edi_commercial_name: z.string().min(1),
+  l10n_co_edi_commercial_name: z.string().min(1).optional(),
 
   // Varios
   industry_id: z.coerce.number().int().min(1).optional(),
 
   // Inventario
-  property_stock_customer: z.coerce.number().int().min(1),
-  property_stock_supplier: z.coerce.number().int().min(1),
+  property_stock_customer: z.coerce.number().int().min(1).optional(),
+  property_stock_supplier: z.coerce.number().int().min(1).optional(),
 
   // Seguimiento de facturas
   followup_reminder_type: z.enum(['automatic', 'manual', 'none']).default('automatic'),
@@ -79,8 +82,8 @@ const clientSchema = z.object({
     z.tuple([z.coerce.number().int().min(1)])
   ]),
   autopost_bills: z.enum(['ask', 'never', 'always']).default('never'),
-  ignore_abnormal_invoice_amount: z.union([z.boolean(), z.literal(0), z.literal(1)]),
-  ignore_abnormal_invoice_date: z.union([z.boolean(), z.literal(0), z.literal(1)]),
+  ignore_abnormal_invoice_amount: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+  ignore_abnormal_invoice_date: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
   x_studio_registro_mercantil: z.string().optional().default('000000'),
   // Invoicing
   invoice_sending_method: z.enum(['email', 'manual', 'none']).default('email'),
@@ -91,7 +94,7 @@ const clientSchema = z.object({
   comment: z.string().optional().default(''),
 
   // Cuentas bancarias
-  bankAccounts: z.array(bankAccountSchema).min(0)
+  bankAccounts: z.array(bankAccountSchema).min(0).optional()
 }).strict(); // ← impide campos no definidos
 
 module.exports = {clientSchema};
