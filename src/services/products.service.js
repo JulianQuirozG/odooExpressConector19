@@ -36,7 +36,7 @@ const productService = {
      */
     async getOneProduct(id) {
         try {
-            const response = await odooConector.executeOdooRequest('product.template', 'search_read', {
+            const response = await odooConector.executeOdooRequest('product.product', 'search_read', {
                 domain: [['id', '=', id]],
                 limit: 1
             });
@@ -161,7 +161,7 @@ const productService = {
      */
     async validListId(ids){
         try {
-            const response = await odooConector.executeOdooRequest('product.template', 'read', {
+            const response = await odooConector.executeOdooRequest('product.product', 'read', {
                 ids: ids,
                 fields: ['id', "name"]
             });
