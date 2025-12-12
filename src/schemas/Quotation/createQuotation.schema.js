@@ -13,7 +13,8 @@ const orderLineSchema =
   });
 
 const createQuotationSchema = z.object({
-  partner_id: z.number().min(1),
+  partner_id: z.number().min(1).optional(),
+  external_partner_id: z.string().min(1).optional(),
   date_order: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }).optional(),
   date_planned : z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }).optional(),
   validity_date: z.string().refine(val => !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }).optional(),

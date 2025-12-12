@@ -26,6 +26,7 @@ const paramsLiabilitiesRepository = require("../Repository/param_type_liabilitie
 const { getUnitMeasureByCode } = require("../Repository/param_unit_measures/params_unit_measures");
 const { getTaxByCode } = require("../Repository/param_taxes/params_unit_measures");
 const accountService = require('./account.service');
+const { da } = require('zod/locales');
 
 
 
@@ -107,6 +108,7 @@ const billService = {
      * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado o respuesta) o error.
      */
     async createBill(dataBill) {
+        console.log(dataBill, "Estos son los datos de la factura a crear");
         try {
             //verifico al partner si viene en el body
             if (dataBill.partner_id) {
@@ -187,11 +189,28 @@ const billService = {
                 };
             }
 
+             // Crear External ID usando los campos del body
+            const billId = response.data[0];
+            const externalId = `bill_${dataBill.externalCompanyId}_${dataBill.externalBillId}`;
+            
+            const externalIdResponse = await odooConector.executeOdooRequest('ir.model.data', 'create', {
+                vals_list: [{
+                    name: externalId,
+                    model: 'account.move',
+                    module: '__custom__',
+                    res_id: billId
+                }]
+            });
+
+            if (!externalIdResponse.success) {
+                console.warn('No se pudo crear el External ID, pero el partner fue creado:', externalIdResponse.message);
+            }
             //Regresamos la respuesta de la creación
             return {
                 statusCode: 201,
                 message: "Factura creada con éxito",
                 data: response.data,
+                externalId: externalId,
             };
         } catch (error) {
             console.log("Error en billService.createBill:", error);
@@ -796,14 +815,16 @@ const billService = {
      * Crear un pago para una factura confirmada mediante el asistente `account.payment.register`.
      *
      * @async
-     * @param {number|string} invoiceId - ID de la factura (debe estar en estado 'posted').
+     * @param {number|string} invoiceId - ID de la factura o External ID (debe estar en estado 'posted').
      * @param {Object} paymentDatas - Datos del pago (amount, date, journal_id, payment_method_line_id, memo).
      * @returns {Promise<Object>} Resultado con statusCode, message y data (info del pago) o error.
      */
     async createPayment(invoiceId, paymentDatas) {
         try {
-            //Verificar que el id sea valido
-            if (!invoiceId || isNaN(Number(invoiceId))) {
+            let billId = invoiceId;
+
+            // Si no es válido, retornar error
+            if (!invoiceId) {
                 return {
                     statusCode: 400,
                     message: "ID de factura inválido",
@@ -811,8 +832,34 @@ const billService = {
                 };
             }
 
+            // Intentar buscar por ID primero
+            let billExists = null;
+            if (!isNaN(Number(invoiceId))) {
+                billExists = await this.getOneBill(Number(invoiceId), [['state', '=', 'posted']]);
+            }
+
+            // Si no se encontró por ID, intentar buscar por External ID
+            if (!billExists || billExists.statusCode !== 200) {
+                const externalIdSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                    domain: [['name', '=', String(invoiceId)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                    fields: ['res_id']
+                });
+
+                if (externalIdSearch.success && externalIdSearch.data.length > 0) {
+                    billId = externalIdSearch.data[0].res_id;
+                    billExists = await this.getOneBill(billId, [['state', '=', 'posted']]);
+                } else {
+                    return {
+                        statusCode: 404,
+                        message: `No se encontró una factura con ID o External ID: ${invoiceId}`,
+                        data: null
+                    };
+                }
+            } else {
+                billId = Number(invoiceId);
+            }
+
             // Verificar que la factura exista y esté confirmada
-            const billExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
             if (billExists.statusCode !== 200) {
                 return {
                     statusCode: billExists.statusCode,
@@ -847,7 +894,7 @@ const billService = {
                     vals_list: wizardData,
                     context: {
                         active_model: 'account.move',
-                        active_ids: [Number(invoiceId)]
+                        active_ids: [Number(billId)]
                     }
                 }
             );
@@ -880,7 +927,7 @@ const billService = {
             }
 
             // Obtener información actualizada de la factura
-            const updatedInvoice = await this.getOneBill(invoiceId);
+            const updatedInvoice = await this.getOneBill(billId);
 
             return {
                 statusCode: 201,
