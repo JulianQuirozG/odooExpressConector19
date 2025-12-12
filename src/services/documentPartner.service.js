@@ -2,6 +2,20 @@ const { getTypeDocumentByCode } = require("../Repository/params_type_document_id
 const odooConector = require("../utils/odoo.service");
 
 const documentPartnerService = {
+
+    /**
+     * Obtiene el tipo de documento de identificación (l10n_latam.identification.type) por su ID desde Odoo.
+     *
+     * @async
+     * @param {number|string} id - ID del tipo de documento en Odoo (se convertirá a Number).
+     * @returns {Promise<{statusCode:number, message:string, data:any, error?:any}>}
+     *  - 200: data contiene el registro encontrado.
+     *  - 404: no se encontró el tipo de documento.
+     *  - 400/500: error en la solicitud o del servidor.
+     * @example
+     * const res = await documentPartnerService.getDocumentPartnerByid(6);
+     * if (res.statusCode === 200) console.log(res.data.name);
+     */
     async getDocumentPartnerByid(id) {
         try {
             const city = await odooConector.executeOdooRequest("l10n_latam.identification.type", "search_read", { domain: [['id', '=', Number(id)]], limit: 1 });
@@ -18,6 +32,23 @@ const documentPartnerService = {
         }
     },
 
+    /**
+     * Obtiene el código estandarizado (repositorio local) de un tipo de documento por su ID en Odoo.
+     *
+     * Flujo:
+     *  - Lee l10n_latam.identification.type por ID (getDocumentPartnerByid).
+     *  - Usa su id para consultar el repositorio local (getTypeDocumentByCode).
+     *
+     * @async
+     * @param {number|string} id - ID del tipo de documento en Odoo.
+     * @returns {Promise<{statusCode:number, message:string, data:any, error?:any}>}
+     *  - 200: data contiene el código mapeado del repositorio.
+     *  - 404: tipo de documento o código no encontrado en el repositorio.
+     *  - 400/500: error en la solicitud o del servidor.
+     * @example
+     * const res = await documentPartnerService.getDocumentPartnerCodeById(6);
+     * if (res.statusCode === 200) console.log(res.data);
+     */
     async getDocumentPartnerCodeById(id) {
         try {
             const documentPartner = await this.getDocumentPartnerByid(id);

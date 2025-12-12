@@ -124,8 +124,33 @@ const lotesService = {
         }
     },
 
-
-
+    /**
+     * Registra una factura/nota en la tabla de lotes según el tipo.
+     * - Si ya existe el registro, intenta tomar el lease (claim).
+     * - Si no existe, crea el registro.
+     *
+     * Tipos soportados:
+     *  - '01': Factura de venta
+     *  - '91': Nota de crédito
+     *  - '92': Nota de débito
+     *
+     * @async
+     * @param {number|string} id - ID del documento (account.move) a registrar.
+     * @param {'01'|'91'|'92'} type - Tipo de documento del lote.
+     * @returns {Promise<{
+     *   statusCode: number,
+     *   message: string,
+     *   data?: { id: number|string, type: '01'|'91'|'92' },
+     *   error?: string
+     * }>}
+     *  - 200: Registro tomado o creado para procesamiento.
+     *  - 400: Parámetros inválidos o tipo no soportado.
+     *  - 409: No se pudo tomar el lease (otro proceso lo tiene).
+     *  - 500: Error al interactuar con el repositorio.
+     *
+     * @example
+     * await lotesService.registerinvoiceLoteByType(123, '01');
+     */
     async registerinvoiceLoteByType(id, type) {
         try {
             if (!id || !type) {
@@ -168,6 +193,35 @@ const lotesService = {
         }
     },
     
+    /**
+     * Finaliza el registro de un documento en la tabla de lotes según resultado.
+     * - success = true: marca como completo.
+     * - success = false: marca como error.
+     *
+     * Tipos soportados:
+     *  - '01': Factura de venta
+     *  - '91': Nota de crédito
+     *  - '92': Nota de débito
+     *
+     * @async
+     * @param {number|string} id - ID del documento (account.move) a finalizar.
+     * @param {'01'|'91'|'92'} type - Tipo de documento del lote.
+     * @param {boolean} [success=true] - Resultado del procesamiento.
+     * @returns {Promise<{
+     *   statusCode: number,
+     *   message: string,
+     *   data?: { id: number|string, type: '01'|'91'|'92', success: boolean },
+     *   error?: string
+     * }>}
+     *  - 200: Estado actualizado correctamente.
+     *  - 400: Parámetros inválidos o tipo no soportado.
+     *  - 404: Registro de lote no encontrado.
+     *  - 409: No se pudo actualizar a completo/error (estado inconsistente).
+     *  - 500: Error al actualizar el registro.
+     *
+     * @example
+     * await lotesService.FinishInvoiceLoteByType(123, '91', true);
+     */
     async FinishInvoiceLoteByType(id, type, success = true) {
         try {
             if (!id || !type) {

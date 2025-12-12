@@ -8,10 +8,23 @@ const { paymentMethodService } = require('./paymentMethod.service');
 const { documentPartnerService } = require('./documentPartner.service');
 const { unitMeasureService } = require('./unitMeasure.service');
 const { journalService } = require('./journal.service');
-const { getDiffDates } = require('../utils/date');
+const util_date = require('../utils/date');
 const { nextPymeService } = require('./nextPyme.service');
+const { taxService } = require('./tax.service');
 
 const supportDocumentService = {
+
+    /**
+     * Obtiene documentos de soporte (account.move) filtrados por diarios y tipo de movimiento.
+     * Actualmente ignora el parámetro documentId y retorna la lista filtrada.
+     *
+     * @async
+     * @param {number|string} [documentId] - (Opcional) ID del documento; no se utiliza en este método.
+     * @returns {Promise<{statusCode:number, error:boolean, message:string, data:any[]}>}
+     *  - 200: data con lista de movimientos.
+     *  - 404: no se encontraron documentos.
+     *  - 500: error interno.
+     */
     async getSupportDocumentContent(documentId) {
         // Lógica para obtener el contenido del documento de soporte desde la base de datos
         try {
@@ -28,6 +41,17 @@ const supportDocumentService = {
         }
     },
 
+    /**
+     * Obtiene un documento de soporte por ID aplicando filtros adicionales.
+     *
+     * @async
+     * @param {number|string} documentId - ID del account.move.
+     * @param {Array} [domain=[]] - Condiciones adicionales en formato dominio Odoo.
+     * @returns {Promise<{statusCode:number, error:boolean, message:string, data:any}>}
+     *  - 200: data con el movimiento encontrado.
+     *  - 404: no encontrado.
+     *  - 500: error interno.
+     */
     async getSupportDocumentContentById(documentId, domain = []) {
         // Lógica para obtener el contenido del documento de soporte desde la base de datos
         try {
@@ -44,6 +68,18 @@ const supportDocumentService = {
         }
     },
 
+    /**
+     * Crea un documento de soporte (vendor bill) en Odoo forzando:
+     * - move_type = 'in_invoice'
+     * - journal_id = 15 (diario de documentos de soporte)
+     *
+     * @async
+     * @param {Object} documentData - Valores para crear el account.move.
+     * @returns {Promise<{statusCode:number, error:boolean, message:string, data:any}>}
+     *  - 201: documento creado (data).
+     *  - 400: error al crear.
+     *  - 500: error interno.
+     */
     async createSupportDocument(documentData) {
         // Lógica para crear un nuevo documento de soporte en la base de datos
         try {
@@ -67,6 +103,16 @@ const supportDocumentService = {
         }
     },
 
+    /**
+     * Genera la sección "seller" (proveedor) para el JSON de documento de soporte.
+     * Valida campos obligatorios y DV según tipo de documento.
+     *
+     * @async
+     * @param {{ data:Object }} customer - Partner de Odoo (res.partner) con sus campos en data.
+     * @returns {Promise<{success:boolean, message:string, data:Object}>}
+     *  - success true: data con seller completo.
+     *  - success false: message con los campos faltantes.
+     */
     async generate_json_support_document_seller(customer) {
         try {
             const city = await municipalityService.getMunicipalityCodeById(customer.data.city_id[0]);
@@ -119,6 +165,18 @@ const supportDocumentService = {
         }
     },
 
+    /**
+     * Genera la sección "payment_form" del JSON a partir del account.move:
+     * - payment_form_id: 1 contado, 2 crédito (mapeado desde payment term).
+     * - payment_method_id: obtenido desde l10n_co_edi_payment_option_id.
+     * - duration_measure y payment_due_date desde fechas de factura.
+     *
+     * @async
+     * @param {{ data:Object }} supportDocument - Movimiento (account.move) con sus campos en data.
+     * @returns {Promise<{success:boolean, message:string, data:Object}>}
+     *  - success true: data con forma de pago.
+     *  - success false: mensaje de validación.
+     */
     async generate_json_support_document_payment_form(supportDocument) {
         try {
             //En odoo el unico pago a contado es el id 1 el resto son credito(nextpyme 1 contado 2 credito)
@@ -163,6 +221,16 @@ const supportDocumentService = {
         }
     },
 
+    /**
+     * Genera las líneas (invoice_lines) del JSON del documento de soporte.
+     * Incluye unidad de medida UBL, descuentos por línea y start_date del servicio.
+     *
+     * @async
+     * @param {{ data:Object }} supportDocument - Movimiento (account.move) base para obtener sus líneas.
+     * @returns {Promise<{success:boolean, message:string, data:Array}>}
+     *  - success true: data con arreglo de líneas.
+     *  - success false: error de validación o datos faltantes.
+     */
     async generate_json_support_document_lines(supportDocument) {
         try {
             const lines = await billService.getLinesByBillId(supportDocument.data.id, 'full');
@@ -170,7 +238,7 @@ const supportDocumentService = {
             const invoice_lines = [];
 
             for (const line of lines.data) {
-                let unitMeasureCode = { id: "No tiene preguntar a esteban" }; // Valor por defecto unidad
+                let unitMeasureCode = { id: 70 }; // Valor por defecto unidad
                 //console.log(line.product_uom_id)
                 if (line.product_uom_id) {
                     const unitMeasureCodeResponse = await unitMeasureService.getUnitMeasureCodeById(line.product_uom_id[0]);
@@ -206,7 +274,7 @@ const supportDocumentService = {
                     invoice_line.allowance_charges = allowance_charges;
                 }
 
-                const countDays = getDiffDates(new Date(supportDocument.data.l10n_co_dian_post_time.split(" ")[0]), new Date(line.deferred_start_date));
+                const countDays = util_date.getDiffDates(new Date(supportDocument.data.l10n_co_dian_post_time.split(" ")[0]), new Date(line.deferred_start_date));
 
                 invoice_line.start_date = supportDocument.data.l10n_co_dian_post_time.split(" ")[0];
 
@@ -225,6 +293,14 @@ const supportDocumentService = {
         }
     },
 
+    /**
+     * Genera cargos/descuentos globales del documento (allowance_charges).
+     * Actualmente retorna un descuento global 0.00 como estructura por defecto.
+     *
+     * @async
+     * @param {{ data:Object }} supportDocument - Movimiento (account.move).
+     * @returns {Promise<{success:boolean, message:string, data:Array}>}
+     */
     async generate_json_support_document_allowance_charges(supportDocument) {
         try {
             const allowance_charges = [{
@@ -241,6 +317,20 @@ const supportDocumentService = {
         }
     },
 
+    /**
+     * Genera los totales monetarios legales del documento (legal_monetary_totals).
+     *
+     * @async
+     * @param {{ data:Object }} supportDocument - Movimiento (account.move) con montos calculados.
+     * @returns {Promise<{success:boolean, message:string, data:{
+     *   payable_amount:string,
+     *   tax_exclusive_amount:string,
+     *   tax_inclusive_amount:string,
+     *   line_extension_amount:string,
+     *   charge_total_amount:string,
+     *   allowance_total_amount:string
+     * }}>}
+     */
     async generate_json_support_document_legal_monetary_totals(supportDocument) {
         try {
             const legal_monetary_totals = {
@@ -258,6 +348,13 @@ const supportDocumentService = {
         }
     },
 
+    /**
+     * Genera la referencia de facturación (billing_reference) para notas crédito de soporte.
+     *
+     * @async
+     * @param {{uuid:string, number:string|number, issue_date:string}} data - Datos de la factura original.
+     * @returns {Promise<{success:boolean, message:string, data:{uuid:string, number:string|number, issue_date:string}}>}
+     */
     async generate_json_support_document_billing_reference(data) {
 
         try {
@@ -274,6 +371,49 @@ const supportDocumentService = {
         }
     },
 
+    /**
+     * Genera los totales de retención (with_holding_tax_total) del documento.
+     * Actualmente retorna estructura vacía; pendiente implementar.
+     *
+     * @async
+     * @param {{ data:Object }} supportDocument - Movimiento (account.move).
+     * @returns {Promise<{success:boolean, message:string, data:Array}>}
+     */
+    async generate_json_support_document_with_holding_tax_total(supportDocument) {
+
+        try {
+            const taxesCode = await taxService.getTaxCodeById(18);
+            console.log("taxesCode", taxesCode);
+            if (taxesCode.statusCode !== 200) return taxesCode;
+            console.log("taxesCode", taxesCode.data);
+/**
+            const with_holding_tax_total = {
+                tax_id: taxesCode.data.id,
+                tax_amount: taxesCode.data.amount,
+                percent: taxesCode.data.percent,
+                taxable_amount
+            }
+*/
+            return { success: true, message: 'Totales de retención generados con éxito', data: [] };
+        } catch (error) {
+            console.error('Error al generar los totales de retención del documento de soporte:', error);
+            return { success: false, error: true, message: 'Error interno del servidor', data: [] };
+        }
+    },
+
+    /**
+     * Construye el JSON final del documento de soporte para envío a NextPyme/DIAN.
+     * - type_document_id: 11 (SD) o 13 (SD Credit Note si reversed_entry_id).
+     * - Cuando es nota crédito: mueve invoice_lines a credit_note_lines, agrega billing_reference,
+     *   y elimina campos no aplicables.
+     *
+     * @async
+     * @param {number|string} documentId - ID del account.move ya confirmado (state = posted).
+     * @returns {Promise<{statusCode:number, message:string, data:Object}>}
+     *  - 201: JSON generado.
+     *  - 404/400: validaciones fallidas.
+     *  - 500: error interno.
+     */
     async createSupportDocumentJson(documentId) {
 
         // Lógica para crear un nuevo documento de soporte en la base de datos
@@ -323,7 +463,7 @@ const supportDocumentService = {
             const journalData = await journalService.getOneJournal(supportDocument.data.journal_id[0]);
             if (journalData.statusCode !== 200) return journalData;
 
-            console.log("journalData", journalData.data);
+            //console.log("journalData", journalData.data);
 
             const jsonSupportDocument = {
                 date: supportDocument.data.l10n_co_dian_post_time.split(" ")[0],
@@ -367,6 +507,8 @@ const supportDocumentService = {
 
             }
 
+            await this.generate_json_support_document_with_holding_tax_total(supportDocument)
+
             return { statusCode: 201, message: 'Documento creado con éxito', data: jsonSupportDocument };
         } catch (error) {
             console.error('Error al crear el documento de soporte:', error);
@@ -375,6 +517,21 @@ const supportDocumentService = {
 
     },
 
+    /**
+     * Confirma el documento de soporte en Odoo y lo envía a DIAN vía NextPyme.
+     * Flujo:
+     *  1) Confirmar move (post).
+     *  2) Generar JSON (createSupportDocumentJson).
+     *  3) Enviar a NextPyme (SD o SD Note).
+     *  4) Actualizar CUFE/CUDE y UUID en la factura.
+     *  5) Cargar archivos de respuesta al documento.
+     *
+     * @async
+     * @param {number|string} documentId - ID del account.move.
+     * @returns {Promise<{statusCode:number, message:string, data:any}>}
+     *  - 200: confirmado y enviado con éxito.
+     *  - 4xx/5xx: error en confirmación, generación o envío.
+     */
     async confirmSupportDocument(documentId) {
         try {
             //Confirmar el documento de soporte
@@ -416,7 +573,6 @@ const supportDocumentService = {
         }
 
     }
-
 
 }
 
