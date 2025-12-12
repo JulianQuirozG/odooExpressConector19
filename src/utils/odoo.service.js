@@ -59,6 +59,25 @@ const odooConector = {
         }
     },
 
+    async createExternalId(externalId, model, resId) {
+        try {
+            const externalIdResponse = await odooConector.executeOdooRequest('ir.model.data', 'create', {
+                vals_list: [{
+                    name: externalId,
+                    model: model,
+                    module: '__custom__',
+                    res_id: resId
+                }]
+            });
+
+            if (!externalIdResponse.success) return { success: false, error: true, message: 'Error al crear external ID en Odoo' };
+            return { success: true, data: externalIdResponse.data };
+        } catch (error) {
+            console.error('Error al crear external ID en Odoo:', error);
+            return { success: false, error: true, message: 'Error interno del servidor' };
+        }
+    }
+
 }
 
 module.exports = odooConector;

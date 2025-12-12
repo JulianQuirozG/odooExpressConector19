@@ -8,6 +8,7 @@ const billService = require("./bills.service");
 const { ca, id } = require("zod/locales");
 const partnerService = require("./partner.service");
 const productService = require("./products.service");
+const e = require("express");
 
 const saleService = {
     /**
@@ -90,6 +91,34 @@ const saleService = {
         }
     },
 
+    /**
+     * Crea factura(s) de cliente a partir de una o varias órdenes de venta usando el wizard
+     * sale.advance.payment.inv (método 'delivered' y facturación consolidada).
+     *
+     * Flujo:
+     *  1) Valida que los IDs existan y estén "to invoice".
+     *  2) Crea el wizard sale.advance.payment.inv y ejecuta create_invoices.
+     *  3) Para cada factura creada, obtiene las líneas de las SO relacionadas y actualiza la factura
+     *     con dichas líneas y metadatos (l10n_co_edi_operation_type, l10n_co_edi_payment_option_id).
+     *
+     * @async
+     * @param {Array<number|string>} salesOrderIds - IDs de sale.order a facturar.
+     * @returns {Promise<{
+     *   statusCode: number,
+     *   message: string,
+     *   data: any,
+     *   error?: any
+     * }>}
+     *  - 201: data es un arreglo con los IDs de las facturas creadas.
+     *  - 400/404: validaciones fallidas (IDs inválidos o SO no encontradas).
+     *  - 500: error al crear el wizard, generar facturas o leer líneas.
+     *
+     * @example
+     * const res = await saleService.createBillFromSalesOrder([101, 102]);
+     * if (res.statusCode === 201) {
+     *   console.log('Facturas:', res.data); // [invoiceId1, invoiceId2, ...]
+     * }
+     */
     async createBillFromSalesOrder(salesOrderIds) {
         try {
             // Validar los IDs de las órdenes de venta
@@ -97,15 +126,43 @@ const saleService = {
                 return { statusCode: 400, message: 'IDs de órdenes de venta inválidos', data: [] };
             }
 
+            // Resolver IDs (pueden ser IDs normales o External IDs)
+            const resolvedIds = [];
+            for (const orderId of salesOrderIds) {
+                let saleOrderId = orderId;
+
+                // Si no es numérico, intentar buscar por External ID
+                if (isNaN(Number(orderId))) {
+                    console.log('Buscando orden de venta por External ID:', orderId);
+                    const externalIdSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                        domain: [['name', '=', orderId], ['model', '=', 'sale.order'], ['module', '=', '__custom__']],
+                        fields: ['res_id']
+                    });
+
+                    console.log(externalIdSearch, "Resultado de la búsqueda por External ID");
+                    if (externalIdSearch.success && externalIdSearch.data.length > 0) {
+                        saleOrderId = externalIdSearch.data[0].res_id;
+                    } else {
+                        return {
+                            statusCode: 404,
+                            message: `No se encontró una orden de venta con External ID: ${orderId}`,
+                            data: null
+                        };
+                    }
+                } else {
+                    saleOrderId = Number(orderId);
+                }
+
+                resolvedIds.push(saleOrderId);
+            }
 
             // Verifico que las ordenes de venta existan
-            const getSaleOrders = await quotationService.getQuotation(['id'], [['invoice_status', '=', 'to invoice'], ['id', 'in', salesOrderIds]]); //filtro por los ids que me envian
+            const getSaleOrders = await quotationService.getQuotation(['id'], [['invoice_status', '=', 'to invoice'], ['id', 'in', resolvedIds]]); //filtro por los ids que me envian
             if (getSaleOrders.statusCode !== 200) return getSaleOrders;
-            if (getSaleOrders.data.length != salesOrderIds.length) return { statusCode: 404, message: `Órdenes de venta no encontradas: ${salesOrderIds.filter(id => !getSaleOrders.data.map(order => order.id).includes(id)).join(', ')}` };
-            if (getSaleOrders.statusCode !== 200) return getSaleOrders;
+            if (getSaleOrders.data.length != resolvedIds.length) return { statusCode: 404, message: `Órdenes de venta no encontradas: ${resolvedIds.filter(id => !getSaleOrders.data.map(order => order.id).includes(id)).join(', ')}` };
 
             //mapear los ids a numeros
-            const ids = salesOrderIds.map(id => [4, Number(id)]);
+            const ids = resolvedIds.map(id => [4, Number(id)]);
 
             //ejecuto el wizard para traer toda la info y crear la factura
             const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
@@ -165,6 +222,9 @@ const saleService = {
 
                 //Actualizo la factura con las lineas obtenidas y el tipo de operacion
                 await billService.updateBill(invoice, { invoice_line_ids: invoiceLines, l10n_co_edi_operation_type: "12", l10n_co_edi_payment_option_id: 66 }, 'update');
+                
+                //Confirmo la factura y envio a la DIAN 
+                await billService.confirmCreditNote(invoice);
             }
 
             return {
@@ -236,6 +296,14 @@ const saleService = {
 
                     console.log(quotation.data.id, "Este es el ID de la cotización creada");
 
+                    //crear external ID para la cotizacion
+                    const externalSalseOrderIdName = `sale_order_${externalCompanyId}_${external_solicitud_transportista}`;
+                    const createExternalIdQuotation = await odooConector.createExternalId(externalSalseOrderIdName, 'sale.order', quotation.data.id);
+
+                    if (!createExternalIdQuotation.success) {
+                        console.error('Error al crear External ID para factura de compra:', createExternalIdQuotation.message);
+                    }
+
                     //confirmar cotizacion 
                     const confirmQuotation = await quotationService.confirmQuotation(quotation.data.id);
                     if (confirmQuotation.statusCode !== 200) return confirmQuotation;
@@ -260,15 +328,8 @@ const saleService = {
                     if (bill.statusCode !== 201) return bill;
 
                     //Crear External ID para la factura de compra
-                    const externalIdName = `purchase_invoice_${externalCompanyId}_${external_solicitud_transportista}`;
-                    const createExternalId = await odooConector.executeOdooRequest('ir.model.data', 'create', {
-                        vals_list: [{
-                            name: externalIdName,
-                            model: 'account.move',
-                            module: '__custom__',
-                            res_id: bill.data.id
-                        }]
-                    });
+                    const externalPurchaseIdName = `purchase_invoice_${externalCompanyId}_${external_solicitud_transportista}`;
+                    const createExternalId = await odooConector.createExternalId(externalPurchaseIdName, 'account.move', bill.data.id);
 
                     if (!createExternalId.success) {
                         console.error('Error al crear External ID para factura de compra:', createExternalId.message);

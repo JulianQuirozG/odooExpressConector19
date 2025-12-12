@@ -193,14 +193,7 @@ const billService = {
             const billId = response.data[0];
             const externalId = `bill_${dataBill.externalCompanyId}_${dataBill.externalBillId}`;
             
-            const externalIdResponse = await odooConector.executeOdooRequest('ir.model.data', 'create', {
-                vals_list: [{
-                    name: externalId,
-                    model: 'account.move',
-                    module: '__custom__',
-                    res_id: billId
-                }]
-            });
+            const externalIdResponse = await odooConector.createExternalId(externalId, 'account.move', billId);
 
             if (!externalIdResponse.success) {
                 console.warn('No se pudo crear el External ID, pero el partner fue creado:', externalIdResponse.message);
@@ -289,7 +282,7 @@ const billService = {
             const updateBill = await this.getOneBill(id);
             if (updateBill.statusCode !== 200) return updateBill;
 
-            return { statusCode: 200, message: "Factura actualizada con éxito", data: updateBill.data, errors: errorLines.data.errors };
+            return { statusCode: 200, message: "Factura actualizada con éxito", data: updateBill.data, errors: errorLines?.data?.errors };
 
         } catch (error) {
 
@@ -525,6 +518,27 @@ const billService = {
         }
     },
 
+    /**
+     * Confirma, sincroniza con DIAN y adjunta los archivos de respuesta (PDF/XML) a una factura.
+     *
+     * Flujo:
+     *  1) Verifica que el documento exista.
+     *  2) Si la factura no está posteada (state !== 'posted'), ejecuta action_post.
+     *  3) Sincroniza con DIAN (syncDian) y obtiene URLs/contenido de PDF/XML.
+     *  4) Adjunta los archivos al documento en Odoo (uploadFilesFromDian).
+     *
+     * @async
+     * @param {number|string} id - ID del account.move a procesar.
+     * @returns {Promise<{statusCode:number, message:string, data?:any, error?:any}>}
+     *  - 200: Documento confirmado (si aplicaba), sincronizado y con archivos adjuntos.
+     *  - 4xx/5xx: Error al confirmar, sincronizar o adjuntar archivos.
+     *
+     * @example
+     * const res = await billService.SyncAndUpdateBillsDian(123);
+     * if (res.statusCode === 200) {
+     *   console.log('Sincronizado y archivos adjuntos');
+     * }
+     */
     async SyncAndUpdateBillsDian(id) {
         try {
 
@@ -1126,11 +1140,14 @@ const billService = {
      */
     async getLinesByBillId(id, action = 'id') {
         try {
+            console.log("Obteniendo líneas para factura ID:", id, "con acción:", action);
             //Verificar que la factura exista
             const bill = await this.getOneBill(id);
             if (bill.statusCode !== 200) {
                 return bill;
             }
+
+            console.log("Factura encontrada:", bill);
 
             //Buscar las lineas de esa factura
             const lines = await odooConector.executeOdooRequest('account.move.line', 'search_read', { domain: [['id', 'in', bill.data.invoice_line_ids]] });
@@ -1194,6 +1211,9 @@ const billService = {
             if (jsonDian.data.type_document_id === 1) {
                 dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
                 console.log(dianResponse.data);
+
+                console.log("json dian", jsonDian);
+                if(dianResponse.statusCode !== 200) return dianResponse;
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
             }
 
@@ -1444,6 +1464,7 @@ const billService = {
             const diferenciaMs = invoice_date_due - invoice_date;
             const dias = Math.round(diferenciaMs / (1000 * 60 * 60 * 24));
             payment_form.duration_measure = dias;
+console
 
             //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
@@ -1644,6 +1665,20 @@ const billService = {
 
     },
 
+    /**
+     * Obtiene las órdenes de venta relacionadas a una factura (account.move).
+     * Usa la acción action_view_source_sale_orders para recuperar los IDs y luego
+     * lee los registros sale.order con campos básicos.
+     *
+     * @async
+     * @param {number|string} id - ID de la factura (account.move).
+     * @returns {Promise<{statusCode:number, message:string, data:any[], error?:any}>}
+     *  - 200: data con las órdenes de venta relacionadas.
+     *  - 400/500: error al consultar la acción o al leer las órdenes.
+     * @example
+     * const res = await billService.getSaleOrdersByBillId(123);
+     * if (res.statusCode === 200) console.log(res.data.map(so => so.name));
+     */
     async getSaleOrdersByBillId(id) {
         try {
             //verifico que la factura exista
@@ -1690,6 +1725,21 @@ const billService = {
             };
         }
     },
+
+    /**
+     * Valida un arreglo de líneas de factura verificando la existencia de product_id y account_id en Odoo.
+     * - Si un product_id o account_id no existe, lo elimina de la línea (mutación in-place) y agrega un error.
+     *
+     * @async
+     * @param {Array<{product_id?: number|string, account_id?: number|string, [key:string]: any}>} lines
+     *        Líneas a validar (se modifican eliminando IDs inválidos).
+     * @returns {Promise<{statusCode:number, message:string, data:{errors:Array<{line_id:number, product_id?:number|string, account_id?:number|string}>}}, error?:any}>}
+     *  - 200: data.errors contiene los IDs inválidos por línea.
+     *  - 500: error al validar contra Odoo.
+     * @example
+     * const res = await billService.validDataLines([{ product_id: 10, account_id: 500 }]);
+     * if (res.statusCode === 200) console.log(res.data.errors);
+     */
     async validDataLines(lines) {
         try {
             const errors = [];

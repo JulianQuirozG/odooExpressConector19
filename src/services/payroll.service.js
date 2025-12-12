@@ -21,6 +21,7 @@ const paramsPaymentMethodsRepository = require("../Repository/params_payment_met
 const { excelDateToJSDate } = require("../utils/attachements.util");
 
 const payrollService = {
+
     async getJsonPayrollById(id) {
         try {
             //Verfico que el id sea valido
@@ -762,6 +763,7 @@ const payrollService = {
             return { statusCode: 500, success: false, error: true, message: error.message, data: [] };
         }
     },
+    
     /**
      * Construye el JSON de una nómina a partir del payslip id en Odoo.
      *

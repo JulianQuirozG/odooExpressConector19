@@ -155,10 +155,28 @@ const nextPymeService = {
         }
     },
 
+    /**
+     * Envía eventos RADIAN a DIAN vía NextPyme.
+     * Selecciona automáticamente el endpoint:
+     *  - 'send-event-data' si incluye document_reference.cufe,
+     *  - 'send-event' en caso contrario.
+     *
+     * @async
+     * @param {Object} radianData - Payload del evento RADIAN (aceptado por NextPyme).
+     * @param {Object} [radianData.document_reference] - Referencia del documento.
+     * @param {string} [radianData.document_reference.cufe] - CUFE para 'send-event-data'.
+     * @returns {Promise<{statusCode:number, message:string, data?:any, error?:any}>}
+     *  - 200: Datos enviados correctamente.
+     *  - 400: Error en la respuesta de NextPyme.
+     *  - 500: Error de conexión/servidor.
+     * @example
+     * const res = await nextPymeService.sendRadianData({ event_code: '030', document_reference: { cufe: '...' } });
+     * if (res.statusCode === 200) console.log('OK');
+     */
     async sendRadianData(radianData) {
         try {
             const direction = radianData.document_reference?.cufe ? 'send-event-data' : 'send-event';
-            console.log('Enviando datos a Radian vía NextPyme en:', direction);
+
             const response = await nextPymeConnection.nextPymeRequest(direction, 'post', radianData);
 
             if (response.error) return { statusCode: 500, message: 'Error al enviar los datos a Radian', error: response.data };
@@ -172,6 +190,20 @@ const nextPymeService = {
         }
     },
 
+    /**
+     * Envía una o varias nóminas a DIAN vía NextPyme.
+     * Valida cada payload, acumula respuestas y errores individuales.
+     *
+     * @async
+     * @param {Array<Object>} payrolls - Lista de JSON de nómina listos para NextPyme.
+     * @returns {Promise<{statusCode:number, message:string, data:any[], errors?:any[], error?:any}>}
+     *  - 200: data con aceptaciones, errors con rechazos/observaciones.
+     *  - 400: No se proporcionaron nóminas o error de validación de NextPyme.
+     *  - 500: Falla de conexión/servidor.
+     * @example
+     * const res = await nextPymeService.sendPayrolltoDian([payrollJson1, payrollJson2]);
+     * console.log(res.statusCode, res.data, res.errors);
+     */
     async sendPayrolltoDian(payrolls = []) {
         try {
             // Validar que se proporcionen nóminas
@@ -229,6 +261,19 @@ const nextPymeService = {
         }
     },
 
+    /**
+     * Envía un Documento de Soporte (SD) a DIAN vía NextPyme.
+     *
+     * @async
+     * @param {Object} documentData - Payload UBL SD según especificación de NextPyme.
+     * @returns {Promise<{statusCode:number, message:string, data?:any, error?:any}>}
+     *  - 200: Documento enviado correctamente.
+     *  - 400: Error de validación desde NextPyme.
+     *  - 500: Error de conexión/servidor.
+     * @example
+     * const res = await nextPymeService.sendSupportDocumentToDian(sdJson);
+     * if (res.statusCode !== 200) console.error(res);
+     */
     async sendSupportDocumentToDian(documentData) {
         try {
             const response = await nextPymeConnection.nextPymeRequest('support-document', 'post', documentData);
@@ -245,10 +290,23 @@ const nextPymeService = {
         }
     },
 
+    /**
+     * Envía una Nota de Documento de Soporte (SD Credit Note) a DIAN vía NextPyme.
+     *
+     * @async
+     * @param {Object} documentData - Payload UBL de nota crédito SD (endpoint sd-credit-note).
+     * @returns {Promise<{statusCode:number, message:string, data?:any, error?:any}>}
+     *  - 200: Envío exitoso, retorna respuesta de NextPyme.
+     *  - 400: Error de validación (incluye errores detallados cuando están disponibles).
+     *  - 500: Error de conexión/servidor.
+     * @example
+     * const res = await nextPymeService.sendSupportDocumentNoteToDian(sdNoteJson);
+     * console.log(res.statusCode, res.message);
+     */
     async sendSupportDocumentNoteToDian(documentData) {
         try {
             const response = await nextPymeConnection.nextPymeRequest('sd-credit-note', 'post', documentData);
-            console.log('Respuesta de NextPyme al enviar nota de documento de soporte:', response);
+            
             if (!response.success) {
                 if (response.error) {
                     return { statusCode: 500, message: 'Error al enviar la nota de documento de soporte a DIAN', error: response.message, data : response.data?.errors || response.data?.payload };
