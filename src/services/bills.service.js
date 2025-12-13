@@ -1464,7 +1464,6 @@ const billService = {
             const diferenciaMs = invoice_date_due - invoice_date;
             const dias = Math.round(diferenciaMs / (1000 * 60 * 60 * 24));
             payment_form.duration_measure = dias;
-console
 
             //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
@@ -1512,7 +1511,7 @@ console
                     if (!line.x_studio_n_remesa) return { statusCode: 400, message: `La linea ${line.id} no tiene número de remesa interna` };
                     lines2.RNDC_consignment_number = line.x_studio_rad_rndc || "";
                     lines2.internal_consignment_number = line.x_studio_n_remesa || "";
-                    lines2.value_consignment = 0; //FALTA
+                    lines2.value_consignment = line.price_subtotal || 0; //FALTA
                     lines2.unit_measure_consignment_id = Number(unit_measure_id.data[0].id);  //FALTA
                     lines2.quantity_consignment = line.quantity;
                 }
