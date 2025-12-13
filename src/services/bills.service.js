@@ -301,7 +301,7 @@ const billService = {
      */
     async verifyBillLines(id, lines) {
         try {
-            console.log(lines, "Estas son las lineas que llegan");
+            //console.log(lines, "Estas son las lineas que llegan");
             //Verificamos que la factura exista
             const billExists = await this.getOneBill(id);
             if (billExists.statusCode !== 200) {
@@ -311,7 +311,7 @@ const billService = {
                     data: billExists.data,
                 };
             }
-            console.log(billExists, "Factura verificada");
+            //console.log(billExists, "Factura verificada");
             //Verificamos que la cantidad de lineas coincida y que los productos sean válidos
             const lineIds = billExists.data.invoice_line_ids;
             if (lines.length !== lineIds.length || lines.length === 0) {
@@ -320,7 +320,7 @@ const billService = {
                     message: "La cantidad de lineas no coincide con las existentes",
                 };
             }
-            console.log(lines.map((line) => line.product_id), "Estos son los IDs de los productos");
+            //console.log(lines.map((line) => line.product_id), "Estos son los IDs de los productos");
             const productsIds = await productService.validListId(lines.map((line) => line.product_id));
             if (productsIds.statusCode !== 200 || productsIds.data.foundIds.length !== lines.length) {
                 return {
@@ -328,7 +328,7 @@ const billService = {
                     message: "Los productos no son válidos",
                 };
             }
-            console.log(productsIds, "Productos verificados");
+            //console.log(productsIds, "Productos verificados");
             //Actualizamos las lineas de la factura
             const response = await this.updateBillLines(id, 1, lines);
             if (response.statusCode !== 200) {
@@ -414,7 +414,7 @@ const billService = {
      * @returns {Promise<Object>} Resultado con statusCode y message o error.
      */
     async confirmBill(id, action = 'compra') {
-        console.log("Confirmando factura con ID:", id, "y acción:", action);
+        //console.log("Confirmando factura con ID:", id, "y acción:", action);
         try {
             //verifico que la factura exista y no este confirmada
             const billExists = await this.getOneBill(id, [['state', '!=', 'posted']]);
@@ -557,7 +557,6 @@ const billService = {
             //sincronizo con la dian
             const responseDian = await this.syncDian(id);
             if (responseDian.statusCode !== 200) return responseDian;
-            console.log("Respuesta DIAN:", responseDian);
             //subo los archivos de la dian a ODOO
             const uploadFiles = await this.uploadFilesFromDian(id, responseDian.data);
             if (uploadFiles.statusCode !== 200) return uploadFiles;
@@ -793,8 +792,7 @@ const billService = {
             if (lines.statusCode !== 200) {
                 return lines;
             }
-            console.log("ID de la nota crédito creada:", billExists.data.invoice_line_ids);
-            console.log("Lineas obtenidas de la factura original:", lines.data);
+
             //Actualizo los productos y los datos de la factura en la nota credito
             const updatedCreditNote = await this.updateBill(creditNoteId, {
                 //Datos de la factura
@@ -1158,8 +1156,6 @@ const billService = {
                 return { statusCode: 400, message: 'Error al obtener líneas de orden de compra', data: lines.data };
             }
 
-            console.log("Líneas obtenidas:", lines);
-
             //Formateo las lineas para que el product_id sea solo el id y no un array con id y nombre
             if (action === 'id') {
                 lines.data = lines.data.map(line => line.product_id = line.product_id[0]);
@@ -1219,9 +1215,9 @@ const billService = {
 
             //Si es nota credito
             if (jsonDian.data.type_document_id === 4) {
-                console.log("Enviando nota de crédito a la DIAN...");
+                
                 dianResponse = await nextPymeConnection.nextPymeService.sendCreditNoteToDian(jsonDian.data);
-                console.log("Datos de la respuesta:", dianResponse.data);
+                
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
 
             }
@@ -1231,7 +1227,7 @@ const billService = {
                 dianResponse = await nextPymeConnection.nextPymeService.sendDebitNoteToDian(jsonDian.data);
                 if (dianResponse.statusCode === 500) return dianResponse;
 
-                console.log(dianResponse.data);
+                
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
             }
 
@@ -1615,9 +1611,8 @@ console
                 jsonDian.requested_monetary_totals = legal_monetary_totals;
 
                 //Factura de origen de la cual se realizo la nota debito
-                console.log("Buscando factura de origen para nota debito...", bill.data.debit_origin_id[0]);
                 const getBillReference = await this.getOneBill(Number(bill.data.debit_origin_id[0]));
-                console.log("Factura encontrada:", getBillReference);
+               
                 if (getBillReference.statusCode !== 200) return getBillReference;
 
                 const billing_reference = {
@@ -1702,7 +1697,7 @@ console
                 };
             }
             saleOrdersIds = saleOrdersIds.data;
-            console.log(saleOrdersIds, "Estas son las órdenes de venta relacionadas");
+
             //Si solo tiene una orden de venta relacionada
             if (saleOrdersIds.res_id) saleOrdersIds = [saleOrdersIds.res_id];
             else saleOrdersIds = saleOrdersIds.domain[0][2];

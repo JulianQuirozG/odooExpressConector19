@@ -93,9 +93,9 @@ const lotesService = {
     async processJobFacturas(ids, type) {
         try {
             // Lógica para procesar los lotes
-            console.log(`Procesando lote de ${type} con IDs: ${JSON.stringify(ids)}`);
+            //console.log(`Procesando lote de ${type} con IDs: ${JSON.stringify(ids)}`);
             if (!ids || ids.length === 0) {
-                console.log(`No hay IDs para procesar en el lote de ${type}`);
+                //console.log(`No hay IDs para procesar en el lote de ${type}`);
                 return { statusCode: 200, message: `No hay IDs para procesar en el lote de ${type}`, data: { corrects: [], errors: [] } };
             }
             const response = await this.processJob(ids);
