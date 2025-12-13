@@ -22,6 +22,7 @@ const radianRoutes = require('./routes/radian.routes');
 const workEntryRoutes = require('./routes/workEntry.routes');
 const supportDocumentRoutes = require('./routes/supportDocument.routes');
 const mastersRoutes = require('./routes/masters.routes');
+const accountRoutes = require('./routes/account.routes');
 
 //Importar repositorios y servicios necesarios para el cron
 const DbConfig = require('./config/db');
@@ -40,6 +41,7 @@ app.use(express.json());
 app.use('/api/partner', partnerRoutes);
 app.use('/api/bank', bankRoutes);
 app.use('/api/accounts', bankAccountRoutes);
+app.use('/api/account', accountRoutes);
 app.use('/api/product', productRoutes);
 app.use('/api/bills', billsRoutes);
 app.use('/api/attachments', attachmentsRoutes);

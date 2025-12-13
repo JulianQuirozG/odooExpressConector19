@@ -74,7 +74,7 @@ const productService = {
                 product.seller_ids = dataProduct.seller_ids.map((seller) => { return [0, 0, seller]});
             }
             
-            const response = await odooConector.executeOdooRequest('product.template', 'create', {
+            const response = await odooConector.executeOdooRequest('product.product', 'create', {
                 vals_list: [product]
             });
 
