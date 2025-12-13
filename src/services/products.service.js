@@ -12,7 +12,7 @@ const productService = {
      */
     async getProducts(productFields = ['name', 'default_code', 'list_price']) {
         try {
-            const response = await odooConector.executeOdooRequest('product.template', 'search_read', {
+            const response = await odooConector.executeOdooRequest('product.product', 'search_read', {
                 fields: productFields
             });
             if (!response.success) {

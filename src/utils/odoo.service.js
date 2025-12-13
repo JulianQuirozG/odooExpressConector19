@@ -76,6 +76,35 @@ const odooConector = {
             console.error('Error al crear external ID en Odoo:', error);
             return { success: false, error: true, message: 'Error interno del servidor' };
         }
+    },
+    
+    async getExternalId(model, resId) {
+        try {
+            const externalIdResponse = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['model', '=', model], ['res_id', '=', resId]],
+                limit: 1
+            });
+            if (!externalIdResponse.success) return { success: false, error: true, message: 'Error al obtener external ID de Odoo' };
+            if (externalIdResponse.data.length === 0) return { success: false, error: true, message: 'No se encontró external ID en Odoo' };
+            return { success: true, data: externalIdResponse.data[0] };
+        } catch (error) {
+            console.error('Error al obtener external ID de Odoo:', error);
+            return { success: false, error: true, message: 'Error interno del servidor' };
+        }
+    }, 
+    async getByExternalId(externalId , model) {
+        try {
+            const recordResponse = await odooConector.executeOdooRequest(model, 'search_read', {
+                domain: [['id', '=', externalId]],
+                limit: 1
+            });
+            if (!recordResponse.success) return { success: false, error: true, message: 'Error al obtener el registro de Odoo' };
+            if (recordResponse.data.length === 0) return { success: false, error: true, message: 'No se encontró el registro en Odoo' };
+            return { success: true, data: recordResponse.data[0] };
+        } catch (error) {
+            console.error('Error al obtener el registro de Odoo:', error);
+            return { success: false, error: true, message: 'Error interno del servidor' };
+        }
     }
 
 }
