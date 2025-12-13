@@ -19,8 +19,6 @@ exports.createTax = async (id, name, code) => {
 exports.getTaxByCode = async (code) => {
     try {
         const query = "SELECT * FROM param_taxes WHERE code = ?";
-        console.log("code", code);
-        console.log("query", query);
         const params = [String(code ?? '').trim()];
         const result = await dbConnect.executeQuery(query, params);
         return result;

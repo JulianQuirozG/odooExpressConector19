@@ -5,7 +5,7 @@ const validateBody = (schema) => {
     return (req, res, next) => {
         try {
             // Validamos el body con el esquema proporcionado
-            console.log("zod,",schema.parse(req.body));
+            //console.log("zod,",schema.parse(req.body));
             next(); // Si pasa la validación, continúa con la siguiente función
         } catch (error) {
             // Si el error es una instancia de ZodError, lo manejamos de manera específica

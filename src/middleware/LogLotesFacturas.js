@@ -30,7 +30,7 @@ const controlCron = async (req, res, next) => {
 
                 const response = await lotesService.registerinvoiceLoteByType(bill.data.id, bill.data.l10n_co_edi_type);
 
-                console.log('Respuesta al registrar la factura en el lote:', response);
+                //console.log('Respuesta al registrar la factura en el lote:', response);
 
             } catch (e) {
                 console.error('[controlCron] error on enter:', e.message || e);
