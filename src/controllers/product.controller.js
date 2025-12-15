@@ -49,6 +49,22 @@ const productController = {
             console.error('Error en productController.deleteProduct:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al eliminar producto', error: error.message });
         }
+    },
+    async getProductByDaneCode(req, res) {
+        const { daneCode } = req.params;
+        try {
+            const { fields } = req.body || {};
+            const defaultFields = ['id', 'name', 'default_code', 'x_codigo_dane', 'list_price'];
+            
+            const result = await productService.getProductByDaneCode(
+                daneCode,
+                fields || defaultFields
+            );
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en productController.getProductByDaneCode:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener producto por código DANE', error: error.message });
+        }
     }
 }
 
