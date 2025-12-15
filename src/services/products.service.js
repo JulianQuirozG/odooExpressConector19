@@ -74,7 +74,7 @@ const productService = {
                 product.seller_ids = dataProduct.seller_ids.map((seller) => { return [0, 0, seller]});
             }
             
-            const response = await odooConector.executeOdooRequest('product.template', 'create', {
+            const response = await odooConector.executeOdooRequest('product.product', 'create', {
                 vals_list: [product]
             });
 
@@ -177,6 +177,54 @@ const productService = {
         } catch (error) {
             console.log('Error en productService.validListId:', error);
             return { statusCode: 500, message: 'Error al validar productos', error: error.message };
+        }
+    },
+
+    /**
+     * Obtener un producto por su código DANE (x_codigo_dane).
+     *
+     * @async
+     * @param {string} daneCode - Código DANE a buscar (valor de texto).
+     * @param {string[]} [fields=['id','name','default_code','x_codigo_dane','list_price']] - Campos a recuperar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (producto encontrado) o error.
+     *  - 200: producto encontrado.
+     *  - 404: producto no encontrado.
+     *  - 400/500: error en la consulta o validación.
+     * @example
+     * const res = await productService.getProductByDaneCode('10000000');
+     * if (res.statusCode === 200) console.log(res.data);
+     */
+    async getProductByDaneCode(daneCode, fields = ['id', 'name', 'default_code', 'x_codigo_dane', 'list_price']) {
+        try {
+            // Validamos que el código DANE no esté vacío
+            if (!daneCode || daneCode.toString().trim() === '') {
+                return { statusCode: 400, message: 'El código DANE es requerido', data: null };
+            }
+            console.log('Buscando producto con código DANE:', daneCode);
+            // Ejecutamos la búsqueda con filtro exacto por código DANE
+            const response = await odooConector.executeOdooRequest('product.product', 'search_read', {
+                domain: [['x_codigo_dane', 'ilike', `%${daneCode.toString().trim()}%`]],
+                fields: fields
+            });
+
+            // Si hay algún error lo gestionamos
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al obtener producto por código DANE', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al obtener producto por código DANE', data: response.data };
+            }
+
+            // Si no encontramos el producto regresamos 404
+            if (response.data.length === 0) {
+                return { statusCode: 404, message: 'Producto no encontrado con ese código DANE', data: null };
+            }
+
+            // Regresamos el producto encontrado
+            return { statusCode: 200, message: 'Producto encontrado', data: response.data };
+        } catch (error) {
+            console.log('Error en productService.getProductByDaneCode:', error);
+            return { statusCode: 500, message: 'Error al obtener producto por código DANE', error: error.message };
         }
     }
 }
