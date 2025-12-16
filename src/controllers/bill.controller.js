@@ -166,6 +166,16 @@ const billController = {
             console.error('Error en billController.confirmCreditNote:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al confirmar nota de crédito', error: error.message });
         }
+    },
+    async applyPaymentPendingCredits(req, res) {
+        try {
+            const { invoiceExternalId, paymentExternalId } = req.params;
+            const result = await billService.applyPaymentPendingCredits(invoiceExternalId, paymentExternalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.applyPaymentPendingCredits:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al aplicar pago pendiente', error: error.message });
+        }
     }
 }
 
