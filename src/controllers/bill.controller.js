@@ -21,6 +21,16 @@ const billController = {
             res.status(500).json({ statusCode: 500, message: 'Error al obtener factura', error: error.message });
         }
     },
+    async getBillByExternalId(req, res) {
+        const { externalId } = req.params;
+        try {
+            const result = await billService.getBillByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.getBillByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener factura por External ID', error: error.message });
+        }
+    },
     async createBill(req, res) {
         try {
             const result = await billService.createBill(req.body);
@@ -83,7 +93,12 @@ const billController = {
     async creditNote(req, res) {
         try {
             const { id } = req.params;
-            const result = await billService.createCreditNote(id, req.body);
+            //const result = await billService.createCreditNote(id, req.body);
+            console.log('ID recibido para nota de crédito:', id);
+            console.log('Datos recibidos para nota de crédito:', req.body);
+            const result = await billService.createCreditNoteByExternalId(id, req.body);
+
+            console.log('Resultado de createCreditNoteByExternalId:', result);
             res.status(result.statusCode).json(result);
         } catch (error) {
             console.error('Error en billController.creditNote:', error);

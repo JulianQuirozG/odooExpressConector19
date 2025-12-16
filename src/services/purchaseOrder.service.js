@@ -540,7 +540,7 @@ const purchaseOrderService = {
                 return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de ordenes de compra para crear facturas.' };
             }
             const idArray = purchaseOrderId.map((id) => { return Number(id) });
-
+console.log('idArray for creating bills:', idArray);
             const purchaseOrderExists = await this.validListId(idArray);
             if (purchaseOrderExists.statusCode !== 200) {
                 return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
@@ -550,7 +550,7 @@ const purchaseOrderService = {
             if (idsFound.length === 0) {
                 return { statusCode: 404, message: 'Ninguna de las ordenes de compra proporcionadas fue encontrada.', data: [] };
             }
-            //console.log('idsFound for creating bills:', idsFound);
+            console.log('idsFound for creating bills:', idsFound);
             const newBill = await odooConector.executeOdooRequest('purchase.order', 'action_create_invoice', {
                 ids: idsFound
             });
