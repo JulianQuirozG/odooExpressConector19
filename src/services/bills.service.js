@@ -763,6 +763,135 @@ const billService = {
         }
     },
     /**
+     * Crear una nota de débito a partir de una factura confirmada buscando por External ID.
+     *
+     * @async
+     * @param {string} externalId - External ID de la factura origen (debe estar en estado 'posted').
+     * @param {Object} dataDebit - Parámetros para la nota de débito (date, journal_id, externalDebitNoteId, etc.).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (nota creada) o error.
+     */
+    async createDebitNoteByExternalId(externalId, dataDebit) {
+        try {
+            // Si no es válido, retornar error
+            if (!externalId) {
+                return {
+                    statusCode: 400,
+                    message: "External ID de factura inválido",
+                    data: null,
+                };
+            }
+
+            // Validar que se proporcione el external ID para la nota de débito
+            if (!dataDebit.externalDebitNoteId) {
+                return {
+                    statusCode: 400,
+                    message: "External ID de nota de débito es requerido",
+                    data: null,
+                };
+            }
+
+            // Buscar por External ID
+            const externalIdSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(externalId)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!externalIdSearch.success || externalIdSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró una factura con External ID: ${externalId}`,
+                    data: null
+                };
+            }
+            
+            const billId = externalIdSearch.data[0].res_id;
+
+            // Verificar que la factura exista y esté confirmada
+            const billExists = await this.getOneBill(billId, [['state', '=', 'posted']]);
+            if (billExists.statusCode !== 200) {
+                return {
+                    statusCode: billExists.statusCode,
+                    message: billExists.message,
+                    data: billExists.data,
+                };
+            }
+
+            // Crear el wizard de nota de débito
+            const wizardData = {
+                move_ids: [[6, 0, [Number(billId)]]],
+                reason: dataDebit.reason || "Nota de débito",
+                date: dataDebit.date || new Date().toISOString().split("T")[0],
+                journal_id: dataDebit.journal_id || false,
+                l10n_co_edi_description_code_debit: dataDebit.l10n_co_edi_description_code_debit || "1",
+            };
+
+            // Creo el wizard de nota de débito
+            const wizardResponse = await odooConector.executeOdooRequest(
+                "account.debit.note",
+                "create",
+                {
+                    vals_list: [wizardData],
+                }
+            );
+            
+            if (wizardResponse.error) return { statusCode: 500, message: "Error al crear wizard de nota de débito", error: wizardResponse.message };
+            if (!wizardResponse.success) {
+                return {
+                    statusCode: 400,
+                    message: "Error al crear wizard de nota de débito",
+                    error: wizardResponse.message,
+                };
+            }
+
+            // Ejecutar la creación de la nota de débito
+            const debitNoteResponse = await odooConector.executeOdooRequest(
+                "account.debit.note",
+                "create_debit",
+                {
+                    ids: wizardResponse.data,
+                }
+            );
+
+            if (!debitNoteResponse.success) {
+                return {
+                    statusCode: 500,
+                    message: "Error al crear nota de débito",
+                    error: debitNoteResponse.message,
+                };
+            }
+
+            //Actualizar tipo de documento de la nota de debito
+            const debitNoteId = debitNoteResponse.data.res_id;
+            await this.updateBill(debitNoteId, { l10n_co_edi_type: "92", x_studio_uuid_dian: null, l10n_co_edi_cufe_cude_ref: null }, 'update');
+
+            // Crear External ID para la nota de débito
+            const debitNoteExternalId = dataDebit.externalDebitNoteId;
+            const externalIdResponse = await odooConector.createExternalId(debitNoteExternalId, 'account.move', debitNoteId);
+
+            if (!externalIdResponse.success) {
+                console.warn('No se pudo crear el External ID para la nota de débito, pero la nota fue creada:', externalIdResponse.message);
+            }
+
+            //Regreso la nota debito creada
+            return {
+                statusCode: 201,
+                message: "Nota de débito creada con éxito por External ID",
+                data: debitNoteResponse.data,
+                externalId: externalId,
+                debitNoteExternalId: debitNoteExternalId,
+                billId: billId,
+                debitNoteId: debitNoteId
+            };
+        } catch (error) {
+            console.log("Error en billService.createDebitNoteByExternalId:", error);
+            return {
+                statusCode: 500,
+                message: "Error al crear nota de débito por External ID",
+                error: error.message,
+            };
+        }
+    },
+    /**
      * Crear una nota de crédito a partir de una factura confirmada.
      *
      * @async
@@ -872,7 +1001,7 @@ const billService = {
      *
      * @async
      * @param {string} externalId - External ID de la factura origen (debe estar en estado 'posted').
-     * @param {Object} dataCredit - Parámetros para la nota de crédito (date, journal_id, etc.).
+     * @param {Object} dataCredit - Parámetros para la nota de crédito (date, journal_id, externalCreditNoteId, etc.).
      * @returns {Promise<Object>} Resultado con statusCode, message y data (nota creada) o error.
      */
     async createCreditNoteByExternalId(externalId, dataCredit) {
@@ -882,6 +1011,15 @@ const billService = {
                 return {
                     statusCode: 400,
                     message: "External ID de factura inválido",
+                    data: null,
+                };
+            }
+
+            // Validar que se proporcione el external ID para la nota de crédito
+            if (!dataCredit.externalCreditNoteId) {
+                return {
+                    statusCode: 400,
+                    message: "External ID de nota de crédito es requerido",
                     data: null,
                 };
             }
@@ -982,13 +1120,23 @@ const billService = {
 
             const creditNote = await this.confirmCreditNote(creditNoteId);
             
+            // Crear External ID para la nota de crédito
+            const creditNoteExternalId = dataCredit.externalCreditNoteId;
+            const externalIdResponse = await odooConector.createExternalId(creditNoteExternalId, 'account.move', creditNoteId);
+
+            if (!externalIdResponse.success) {
+                console.warn('No se pudo crear el External ID para la nota de crédito, pero la nota fue creada:', externalIdResponse.message);
+            }
+
             //Regreso la nota credito creada
             return {
                 statusCode: 201,
                 message: "Nota de crédito creada con éxito por External ID",
                 data: creditNote.data,
                 externalId: externalId,
-                billId: billId
+                creditNoteExternalId: creditNoteExternalId,
+                billId: billId,
+                creditNoteId: creditNoteId
             };
         } catch (error) {
             console.log("Error en billService.createCreditNoteByExternalId:", error);
