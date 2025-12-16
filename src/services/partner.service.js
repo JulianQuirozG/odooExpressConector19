@@ -105,7 +105,8 @@ const partnerService = {
      * @param {Object} dataPartner - Datos del partner. Se filtran por CLIENT_FIELDS.
      * @param {string} dataPartner.externalCompanyId - ID de la compañía externa (requerido para external_id).
      * @param {string} dataPartner.externalPartnerId - ID del partner externo (requerido para external_id).
-     * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado, external_id) o error.
+     * @param {Array} [dataPartner.bankAccounts] - Array opcional de cuentas bancarias a crear.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado, external_id, cuentas bancarias) o error.
      */
     async createPartner(dataPartner) {
         try {
@@ -132,12 +133,33 @@ const partnerService = {
 
             // Crear External ID usando los campos del body
             const partnerId = response.data[0];
-            const externalId = `partner_${dataPartner.externalCompanyId}_${dataPartner.externalPartnerId}`;
+            const partner_type = dataPartner.type;
+            const externalId = `partner_${partner_type}_${dataPartner.externalCompanyId}_${dataPartner.externalPartnerId}`;
             
             const externalIdResponse = await odooConector.createExternalId(externalId, 'res.partner', partnerId);
 
             if (!externalIdResponse.success) {
                 console.warn('No se pudo crear el External ID, pero el partner fue creado:', externalIdResponse.message);
+            }
+
+            // Crear cuentas bancarias si existen en el request
+            const BankAccountError = [];
+            const BankAccountSuccess = [];
+            if (dataPartner.bankAccounts && dataPartner.bankAccounts.length > 0) {
+                const bankAccounts = dataPartner.bankAccounts.map((account) => { return pickFields(account, BANK_ACCOUNT_PARTNER_FIELDS) })
+                await Promise.all(bankAccounts.map(async (account) => {
+                    if (!BankAccountSuccess.includes(account.acc_number)) {
+                        account.partner_id = partnerId;
+                        const bankAccountResponse = await bankAccountService.createBankAccount(account);
+                        if (bankAccountResponse.statusCode !== 201) {
+                            BankAccountError.push(account.acc_number);
+                        } else {
+                            BankAccountSuccess.push(account.acc_number);
+                        }
+                    } else {
+                        BankAccountSuccess.push(account.acc_number);
+                    }
+                }))
             }
 
             return { 

@@ -92,17 +92,16 @@ const saleService = {
     },
 
     /**
-     * Crea factura(s) de cliente a partir de una o varias órdenes de venta usando el wizard
-     * sale.advance.payment.inv (método 'delivered' y facturación consolidada).
+     * Crea facturas de cliente a partir de órdenes de venta de forma individual.
      *
      * Flujo:
      *  1) Valida que los IDs existan y estén "to invoice".
-     *  2) Crea el wizard sale.advance.payment.inv y ejecuta create_invoices.
-     *  3) Para cada factura creada, obtiene las líneas de las SO relacionadas y actualiza la factura
-     *     con dichas líneas y metadatos (l10n_co_edi_operation_type, l10n_co_edi_payment_option_id).
+     *  2) Crea una factura por cada grupo de órdenes especificado.
+     *  3) Asigna External ID (uuid) a cada factura creada.
+     *  4) Actualiza líneas y confirma cada factura con DIAN.
      *
      * @async
-     * @param {Array<number|string>} salesOrderIds - IDs de sale.order a facturar.
+     * @param {Array<{ids: Array<number|string>, uuid: string}>} salesOrderGroups - Array de objetos con IDs de sale.order y uuid.
      * @returns {Promise<{
      *   statusCode: number,
      *   message: string,
@@ -114,131 +113,249 @@ const saleService = {
      *  - 500: error al crear el wizard, generar facturas o leer líneas.
      *
      * @example
-     * const res = await saleService.createBillFromSalesOrder([101, 102]);
+     * const res = await saleService.createBillFromSalesOrder([
+     *   {ids: [101, 102], uuid: "uuid-123"},
+     *   {ids: [103], uuid: "uuid-456"}
+     * ]);
      * if (res.statusCode === 201) {
-     *   console.log('Facturas:', res.data); // [invoiceId1, invoiceId2, ...]
+     *   console.log('Facturas:', res.data); // [{invoiceId: 1, uuid: "uuid-123"}, ...]
      * }
      */
-    async createBillFromSalesOrder(salesOrderIds) {
+    async createBillFromSalesOrder(salesOrderGroups) {
         try {
-            // Validar los IDs de las órdenes de venta
-            if (!salesOrderIds || salesOrderIds.length === 0) {
-                return { statusCode: 400, message: 'IDs de órdenes de venta inválidos', data: [] };
+            // Validar el array de grupos
+            if (!salesOrderGroups || salesOrderGroups.length === 0) {
+                return { statusCode: 400, message: 'Debe proporcionar al menos un grupo de órdenes de venta', data: [] };
             }
 
-            // Resolver IDs (pueden ser IDs normales o External IDs)
-            const resolvedIds = [];
-            for (const orderId of salesOrderIds) {
-                let saleOrderId = orderId;
+            console.log('Iniciando creación de facturas desde órdenes de venta...');
+            console.log('Grupos recibidos:', salesOrderGroups);
 
-                // Si no es numérico, intentar buscar por External ID
-                if (isNaN(Number(orderId))) {
-                    console.log('Buscando orden de venta por External ID:', orderId);
-                    const externalIdSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
-                        domain: [['name', '=', orderId], ['model', '=', 'sale.order'], ['module', '=', '__custom__']],
-                        fields: ['res_id']
+            const createdInvoices = [];
+
+            // Procesar cada grupo de órdenes de venta
+            for (const group of salesOrderGroups) {
+                try {
+                    const { ids: salesOrderIds, uuid } = group;
+
+                    // Validar que el grupo tenga IDs y uuid
+                    if (!salesOrderIds || salesOrderIds.length === 0) {
+                        createdInvoices.push({
+                            error: 'El grupo no tiene IDs de órdenes de venta',
+                            uuid: uuid || 'sin uuid',
+                            statusCode: 400
+                        });
+                        continue;
+                    }
+
+                    if (!uuid) {
+                        createdInvoices.push({
+                            error: 'El grupo no tiene UUID',
+                            ids: salesOrderIds,
+                            statusCode: 400
+                        });
+                        continue;
+                    }
+
+                    // Resolver IDs (pueden ser IDs normales o External IDs)
+                    const resolvedIds = [];
+                    for (const orderId of salesOrderIds) {
+                        let saleOrderId = orderId;
+
+                        // Si no es numérico, intentar buscar por External ID
+                        if (isNaN(Number(orderId))) {
+                            console.log('Buscando orden de venta por External ID:', orderId);
+                            const externalIdSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                                domain: [['name', '=', orderId], ['model', '=', 'sale.order'], ['module', '=', '__custom__']],
+                                fields: ['res_id']
+                            });
+
+                            console.log('Resultado búsqueda External ID:', externalIdSearch);
+                            if (externalIdSearch.success && externalIdSearch.data.length > 0) {
+                                saleOrderId = externalIdSearch.data[0].res_id;
+                            } else {
+                                createdInvoices.push({
+                                    error: `No se encontró orden de venta con External ID: ${orderId}`,
+                                    uuid: uuid,
+                                    statusCode: 404
+                                });
+                                continue;
+                            }
+                        } else {
+                            saleOrderId = Number(orderId);
+                        }
+
+                        resolvedIds.push(saleOrderId);
+                    }
+
+                    // Si no hay IDs resueltos, continuar con el siguiente grupo
+                    if (resolvedIds.length === 0) {
+                        continue;
+                    }
+
+                    console.log(resolvedIds, "IDs de órdenes de venta resueltos para facturar");
+                    // Verificar que las órdenes de venta existan
+                    const getSaleOrders = await quotationService.getQuotation(['id'], [['invoice_status', '=', 'to invoice'], ['id', 'in', resolvedIds]]);
+                    if (getSaleOrders.statusCode !== 200) {
+                        createdInvoices.push({
+                            error: getSaleOrders.message,
+                            uuid: uuid,
+                            statusCode: getSaleOrders.statusCode
+                        });
+                        continue;
+                    }
+
+                    console.log("Órdenes de venta encontradas para facturar:", getSaleOrders);
+                    if (getSaleOrders.data.length !== resolvedIds.length) {
+                        createdInvoices.push({
+                            error: `Órdenes de venta no encontradas o ya facturadas: ${resolvedIds.filter(id => !getSaleOrders.data.map(order => order.id).includes(id)).join(', ')}`,
+                            uuid: uuid,
+                            statusCode: 404
+                        });
+                        continue;
+                    }
+
+                    // Mapear los IDs para el wizard
+                    const ids = resolvedIds.map(id => [4, Number(id)]);
+
+                    // Crear el wizard para facturación individual (sin consolidar)
+                    const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
+                        vals_list: [{
+                            sale_order_ids: ids,
+                            advance_payment_method: 'delivered',
+                            consolidated_billing: true,
+                        }],
+                        context: { active_model: 'sale.order', active_ids: ids, active_id: ids[0] }
                     });
 
-                    console.log(externalIdSearch, "Resultado de la búsqueda por External ID");
-                    if (externalIdSearch.success && externalIdSearch.data.length > 0) {
-                        saleOrderId = externalIdSearch.data[0].res_id;
-                    } else {
-                        return {
-                            statusCode: 404,
-                            message: `No se encontró una orden de venta con External ID: ${orderId}`,
-                            data: null
-                        };
+                    if (!wizardCreate.success) {
+                        createdInvoices.push({
+                            error: 'Error creando wizard facturación',
+                            uuid: uuid,
+                            statusCode: 500,
+                            detail: wizardCreate.data
+                        });
+                        continue;
                     }
-                } else {
-                    saleOrderId = Number(orderId);
-                }
 
-                resolvedIds.push(saleOrderId);
-            }
+                    const wizardId = wizardCreate.data[0];
 
-            // Verifico que las ordenes de venta existan
-            const getSaleOrders = await quotationService.getQuotation(['id'], [['invoice_status', '=', 'to invoice'], ['id', 'in', resolvedIds]]); //filtro por los ids que me envian
-            if (getSaleOrders.statusCode !== 200) return getSaleOrders;
-            if (getSaleOrders.data.length != resolvedIds.length) return { statusCode: 404, message: `Órdenes de venta no encontradas: ${resolvedIds.filter(id => !getSaleOrders.data.map(order => order.id).includes(id)).join(', ')}` };
-
-            //mapear los ids a numeros
-            const ids = resolvedIds.map(id => [4, Number(id)]);
-
-            //ejecuto el wizard para traer toda la info y crear la factura
-            const wizardCreate = await odooConector.executeOdooRequest('sale.advance.payment.inv', 'create', {
-                vals_list: [{
-                    sale_order_ids: ids,
-                    advance_payment_method: 'delivered',
-                    consolidated_billing: 'true',
-                }],
-                context: { active_model: 'sale.order', active_ids: ids, active_id: ids[0] }
-            });
-
-            if (!wizardCreate.success) {
-                return { statusCode: 500, message: 'Error creando wizard facturación', error: wizardCreate.data };
-            }
-
-            const wizardId = wizardCreate.data[0];
-
-            //creo la factura
-            const response = await odooConector.executeOdooRequest(
-                "sale.advance.payment.inv",
-                "create_invoices",
-                {
-                    ids: wizardId,
-                    context: {
-                        active_model: 'sale.order',
-                        active_ids: ids,
-                        active_id: ids[0]
-                    }
-                }
-            );
-
-            if (response.error) return { statusCode: 500, message: 'Error al crear factura desde orden de venta', error: response.message };
-            if (!response.success) return { statusCode: 400, message: 'Error al crear factura desde orden de venta', data: response.data };
-            const invoices = response.data.res_id == 0 ? response.data.domain[0][2] : [response.data.res_id];
-
-            //Por cada factura creada, la actualizo con el detalle de las lineas de sus ordenes de venta e informacion de pago
-            for (const invoice of invoices) {
-                //obtenemos las ordenes de venta relacionadas a esa factura
-                const saleOrders = await billService.getSaleOrdersByBillId(invoice);
-
-                //obtenemos las lineas de esas ordenes de venta
-                const invoiceLines = [];
-                for (const saleOrder of saleOrders.data) {
-                    const lines = await odooConector.executeOdooRequest('sale.order.line', 'search_read', { domain: [['order_id', '=', saleOrder.id]] });
-                    if (!lines.success) {
-                        if (lines.error) {
-                            return { statusCode: 500, message: 'Error al obtener líneas de orden de compra', error: lines.message };
+                    // Crear la factura
+                    const response = await odooConector.executeOdooRequest(
+                        "sale.advance.payment.inv",
+                        "create_invoices",
+                        {
+                            ids: wizardId,
+                            context: {
+                                active_model: 'sale.order',
+                                active_ids: ids,
+                                active_id: ids[0]
+                            }
                         }
-                        return { statusCode: 400, message: 'Error al obtener líneas de orden de compra', data: lines.data };
-                    }
-                    //Agregamos las lineas de la orden de ventas a las de la factura
-                    for (const line of lines.data) {
-                        line.product_id = line.product_id[0];
-                        invoiceLines.push(line);
-                    }
-                }
+                    );
 
-                //Actualizo la factura con las lineas obtenidas y el tipo de operacion
-                await billService.updateBill(invoice, { invoice_line_ids: invoiceLines, l10n_co_edi_operation_type: "12", l10n_co_edi_payment_option_id: 66 }, 'update');
-                
-                //Confirmo la factura y envio a la DIAN 
-                await billService.confirmCreditNote(invoice);
+                    if (response.error || !response.success) {
+                        createdInvoices.push({
+                            error: 'Error al crear factura desde orden de venta',
+                            uuid: uuid,
+                            statusCode: response.error ? 500 : 400,
+                            detail: response.message || response.data
+                        });
+                        continue;
+                    }
+
+                    const invoices = response.data.res_id == 0 ? response.data.domain[0][2] : [response.data.res_id];
+
+                    // Procesar cada factura creada
+                    for (const invoice of invoices) {
+                        try {
+                            // Crear External ID para la factura
+                            const externalIdResponse = await odooConector.createExternalId(uuid, 'account.move', invoice);
+
+                            if (!externalIdResponse.success) {
+                                console.warn(`No se pudo crear el External ID ${uuid} para la factura ${invoice}:`, externalIdResponse.message);
+                            }
+
+                            // Obtener las órdenes de venta relacionadas a esta factura
+                            const saleOrders = await billService.getSaleOrdersByBillId(invoice);
+
+                            // Obtener las líneas de esas órdenes de venta
+                            const invoiceLines = [];
+                            for (const saleOrder of saleOrders.data) {
+                                const lines = await odooConector.executeOdooRequest('sale.order.line', 'search_read', {
+                                    domain: [['order_id', '=', saleOrder.id]]
+                                });
+
+                                if (!lines.success) {
+                                    console.error(`Error al obtener líneas de orden de venta ${saleOrder.id}`);
+                                    continue;
+                                }
+
+                                // Agregar las líneas de la orden de venta a las de la factura
+                                for (const line of lines.data) {
+                                    line.product_id = line.product_id[0];
+                                    invoiceLines.push(line);
+                                }
+                            }
+
+                            // Actualizar la factura con las líneas obtenidas y el tipo de operación
+                            await billService.updateBill(invoice, {
+                                invoice_line_ids: invoiceLines,
+                                l10n_co_edi_operation_type: "12",
+                                l10n_co_edi_payment_option_id: 66
+                            }, 'update');
+
+                            // Confirmar la factura y enviar a la DIAN
+                            await billService.confirmCreditNote(invoice);
+
+                            createdInvoices.push({
+                                invoiceId: invoice,
+                                uuid: uuid,
+                                externalId: externalIdResponse.success ? uuid : null,
+                                statusCode: 201
+                            });
+                        } catch (invoiceError) {
+                            console.error(`Error procesando factura ${invoice}:`, invoiceError);
+                            createdInvoices.push({
+                                invoiceId: invoice,
+                                uuid: uuid,
+                                error: invoiceError.message,
+                                statusCode: 500
+                            });
+                        }
+                    }
+
+                } catch (groupError) {
+                    console.error('Error procesando grupo de órdenes:', groupError);
+                    createdInvoices.push({
+                        error: groupError.message,
+                        uuid: group.uuid || 'sin uuid',
+                        statusCode: 500
+                    });
+                }
+            }
+
+            // Verificar si todas las facturas fallaron
+            const allFailed = createdInvoices.every(inv => inv.statusCode !== 201);
+            if (allFailed && createdInvoices.length > 0) {
+                return {
+                    statusCode: 500,
+                    message: 'Error: Todas las facturas fallaron en su creación',
+                    data: createdInvoices
+                };
             }
 
             return {
                 statusCode: 201,
-                message: 'Factura(s) creada(s) desde la(s) orden(es) de venta',
-                data: invoices
+                message: 'Proceso de creación de facturas completado',
+                data: createdInvoices
             };
 
-
         } catch (error) {
-            console.error('Error al crear factura desde orden de venta en Odoo', error);
+            console.error('Error al crear facturas desde órdenes de venta en Odoo', error);
             return {
                 statusCode: 500,
-                message: 'Error al crear factura desde orden de venta',
+                message: 'Error al crear facturas desde órdenes de venta',
                 error: error.message
             };
         }

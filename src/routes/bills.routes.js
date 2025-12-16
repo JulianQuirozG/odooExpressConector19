@@ -12,6 +12,7 @@ const { controlCron } = require('../middleware/LogLotesFacturas');
 
 //Aqui van las rutas de bill
 router.get('/', billController.getBill);
+router.get('/external/:externalId', billController.getBillByExternalId);
 router.get('/:id', billController.getOneBill);
 router.post('/', billController.createBill);
 router.put('/:id', billController.updateBill);
