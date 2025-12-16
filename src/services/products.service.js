@@ -56,6 +56,77 @@ const productService = {
         }
     },
     /**
+     * Obtener un producto por su external ID.
+     *
+     * @async
+     * @param {string} externalId - External ID del producto (nombre único).
+     * @param {string[]} [fields=['id','name','default_code','list_price']] - Campos a recuperar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (detalle del producto) o error.
+     *  - 200: producto encontrado.
+     *  - 404: producto no encontrado.
+     *  - 400/500: error en la consulta o validación.
+     * @example
+     * const res = await productService.getProductByExternalId('product_123');
+     * if (res.statusCode === 200) console.log(res.data);
+     */
+    async getProductByExternalId(externalId, fields = ['id', 'name', 'default_code', 'list_price']) {
+        try {
+            // Validamos que el external ID no esté vacío
+            if (!externalId || externalId.toString().trim() === '') {
+                return { statusCode: 400, message: 'El external ID es requerido', data: null };
+            }
+
+            // Primero obtenemos el registro de ir.model.data con ese external ID
+            const externalIdResponse = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', externalId.toString().trim()], ['model', '=', 'product.product']],
+                fields: ['id', 'name', 'res_id', 'model'],
+                limit: 1
+            });
+
+            // Si hay algún error lo gestionamos
+            if (!externalIdResponse.success) {
+                if (externalIdResponse.error) {
+                    return { statusCode: 500, message: 'Error al buscar external ID', error: externalIdResponse.message };
+                }
+                return { statusCode: 400, message: 'Error al buscar external ID', data: externalIdResponse.data };
+            }
+
+            // Si no encontramos el external ID regresamos 404
+            if (externalIdResponse.data.length === 0) {
+                return { statusCode: 404, message: 'Producto no encontrado con ese external ID', data: null };
+            }
+
+            // Obtenemos el res_id (ID del producto)
+            const productId = externalIdResponse.data[0].res_id;
+
+            // Ahora obtenemos el producto con ese ID
+            const productResponse = await odooConector.executeOdooRequest('product.product', 'search_read', {
+                domain: [['id', '=', productId]],
+                fields: fields,
+                limit: 1
+            });
+
+            // Si hay algún error lo gestionamos
+            if (!productResponse.success) {
+                if (productResponse.error) {
+                    return { statusCode: 500, message: 'Error al obtener producto', error: productResponse.message };
+                }
+                return { statusCode: 400, message: 'Error al obtener producto', data: productResponse.data };
+            }
+
+            // Si no encontramos el producto regresamos 404
+            if (productResponse.data.length === 0) {
+                return { statusCode: 404, message: 'Producto no encontrado', data: null };
+            }
+
+            // Regresamos el producto encontrado
+            return { statusCode: 200, message: 'Producto encontrado', data: productResponse.data[0] };
+        } catch (error) {
+            console.log('Error en productService.getProductByExternalId:', error);
+            return { statusCode: 500, message: 'Error al obtener producto por external ID', error: error.message };
+        }
+    },
+    /**
      * Crear un producto (product.template) en Odoo.
      *
      * Si `dataProduct.seller_ids` viene presente, lo mapeará para crear las entradas de proveedores.
@@ -194,7 +265,7 @@ const productService = {
      * const res = await productService.getProductByDaneCode('10000000');
      * if (res.statusCode === 200) console.log(res.data);
      */
-    async getProductByDaneCode(daneCode, fields = ['id', 'name', 'default_code', 'x_codigo_dane', 'list_price']) {
+    async getProductByDaneCodeIlike(daneCode, fields = ['id', 'name', 'default_code', 'x_codigo_dane', 'list_price']) {
         try {
             // Validamos que el código DANE no esté vacío
             if (!daneCode || daneCode.toString().trim() === '') {
@@ -225,6 +296,136 @@ const productService = {
         } catch (error) {
             console.log('Error en productService.getProductByDaneCode:', error);
             return { statusCode: 500, message: 'Error al obtener producto por código DANE', error: error.message };
+        }
+    },
+
+    /**
+     * Obtener un producto por su código DANE (x_codigo_dane).
+     *
+     * @async
+     * @param {string} daneCode - Código DANE a buscar (valor de texto).
+     * @param {string[]} [fields=['id','name','default_code','x_codigo_dane','list_price']] - Campos a recuperar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (producto encontrado) o error.
+     *  - 200: producto encontrado.
+     *  - 404: producto no encontrado.
+     *  - 400/500: error en la consulta o validación.
+     * @example
+     * const res = await productService.getProductByDaneCode('10000000');
+     * if (res.statusCode === 200) console.log(res.data);
+     */
+    async getProductByDaneCode(daneCode, fields = ['id', 'name', 'default_code', 'x_codigo_dane', 'list_price']) {
+        try {
+            // Validamos que el código DANE no esté vacío
+            if (!daneCode || daneCode.toString().trim() === '') {
+                return { statusCode: 400, message: 'El código DANE es requerido', data: null };
+            }
+            console.log('Buscando producto con código DANE:', daneCode);
+            // Ejecutamos la búsqueda con filtro exacto por código DANE
+            const response = await odooConector.executeOdooRequest('product.product', 'search_read', {
+                domain: [['x_codigo_dane', '=', `${daneCode.toString().trim()}`]],
+                fields: fields
+            });
+
+            // Si hay algún error lo gestionamos
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al obtener producto por código DANE', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al obtener producto por código DANE', data: response.data };
+            }
+
+            // Si no encontramos el producto regresamos 404
+            if (response.data.length === 0) {
+                return { statusCode: 404, message: 'Producto no encontrado con ese código DANE', data: null };
+            }
+
+            // Regresamos el producto encontrado
+            return { statusCode: 200, message: 'Producto encontrado', data: response.data };
+        } catch (error) {
+            console.log('Error en productService.getProductByDaneCode:', error);
+            return { statusCode: 500, message: 'Error al obtener producto por código DANE', error: error.message };
+        }
+    },
+
+    /**
+     * Obtener el external ID de un producto por su ID.
+     *
+     * @async
+     * @param {number|string} productId - ID del producto en Odoo.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (external ID encontrado) o error.
+     *  - 200: external ID encontrado.
+     *  - 404: producto sin external ID.
+     *  - 400/500: error en la consulta o validación.
+     * @example
+     * const res = await productService.getExternalIdByProductId(123);
+     * if (res.statusCode === 200) console.log(res.data.name);
+     */
+    async getExternalIdByProductId(productId) {
+        try {
+            // Validamos que el ID del producto sea válido
+            if (!productId || isNaN(Number(productId))) {
+                return { statusCode: 400, message: 'El ID del producto debe ser un número válido', data: null };
+            }
+
+            // Ejecutamos la búsqueda del external ID en ir.model.data
+            const response = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['model', '=', 'product.product'], ['res_id', '=', Number(productId)]],
+                fields: ['id', 'name', 'module', 'model', 'res_id'],
+                limit: 1
+            });
+
+            // Si hay algún error lo gestionamos
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al obtener external ID del producto', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al obtener external ID del producto', data: response.data };
+            }
+
+            // Si no encontramos el external ID regresamos 404
+            if (response.data.length === 0) {
+                return { statusCode: 404, message: 'El producto no tiene un external ID asociado', data: null };
+            }
+
+            // Regresamos el external ID encontrado
+            return { statusCode: 200, message: 'External ID encontrado', data: response.data[0] };
+        } catch (error) {
+            console.log('Error en productService.getExternalIdByProductId:', error);
+            return { statusCode: 500, message: 'Error al obtener external ID del producto', error: error.message };
+        }
+    },
+
+    /**
+     * Obtener el external ID de un producto por su código DANE.
+     *
+     * @async
+     * @param {string} daneCode - Código DANE del producto.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (external ID encontrado) o error.
+     *  - 200: external ID encontrado.
+     *  - 404: producto no encontrado o sin external ID.
+     *  - 400/500: error en la consulta o validación.
+     * @example
+     * const res = await productService.getExternalIdFromDaneCode('10000000');
+     * if (res.statusCode === 200) console.log(res.data.name);
+     */
+    async getExternalIdFromDaneCode(daneCode) {
+        try {
+            // Primero obtenemos el producto por código DANE
+            const productResponse = await this.getProductByDaneCode(daneCode, ['id']);
+            console.log('Respuesta de getProductByDaneCode:', productResponse);
+            if (productResponse.statusCode !== 200) {
+                return { statusCode: 404, message: 'Producto no encontrado con ese código DANE', data: null };
+            }
+            
+            // Obtenemos el ID del producto encontrado
+            const productId = productResponse.data[0].id;
+            
+            // Ahora obtenemos el external ID del producto
+            const externalIdResponse = await this.getExternalIdByProductId(productId);
+            return externalIdResponse;
+        } catch (error) {
+            console.log('Error en productService.getExternalIdFromDaneCode:', error);
+            return { statusCode: 500, message: 'Error al obtener external ID del producto', error: error.message };
         }
     }
 }
