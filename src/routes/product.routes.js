@@ -6,6 +6,7 @@ const router = express.Router();
 
     //Aqui van las rutas de producto
     router.get('/', productController.getProducts);
+    router.get('/dane/:daneCode', productController.getProductByDaneCode);
     router.get('/:id', productController.getOneProduct);
     router.post('/', validateBody(productSchema),productController.createProduct);
     router.put('/:id', productController.updateProduct);

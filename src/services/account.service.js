@@ -1,5 +1,7 @@
 const { validate } = require("node-cron");
 const odooConector = require("../utils/odoo.service");
+const { ACCOUNT_FIELDS } = require("../utils/fields");
+const { pickFields } = require("../utils/util");
 const accountService = {
 
     /**
@@ -120,6 +122,72 @@ const accountService = {
             console.error('Error al validar las cuentas:', error);
             return { statusCode: 500, message: 'Error al validar las cuentas', data: [] };
         }
-    }
+    },
+
+    /**
+     * Crear una nueva cuenta contable en Odoo.
+     *
+     * @async
+     * @param {Object} accountData - Datos de la nueva cuenta (name, code, account_type, etc).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (id creado) o error.
+     */
+    async createAccount(accountData) {
+        try {
+            // Validamos que los campos requeridos estén presentes
+            if (!accountData.name || !accountData.code || !accountData.account_type) {
+                return {
+                    statusCode: 400,
+                    message: 'Los campos name, code y account_type son requeridos',
+                    data: null
+                };
+            }
+
+            // Filtramos los campos permitidos para crear una cuenta
+            const account = pickFields(accountData, ACCOUNT_FIELDS);
+
+            // Ejecutamos la solicitud a Odoo usando el método create
+            const response = await odooConector.executeOdooRequest('account.account', 'create', {
+                vals_list: [account]
+            });
+
+            // Si hay algún error lo gestionamos
+            if (!response.success) {
+                if (response.error) {
+                    return { statusCode: 500, message: 'Error al crear la cuenta', error: response.message };
+                }
+                return { statusCode: 400, message: 'Error al crear la cuenta', data: response.data };
+            }
+
+            // Regresamos la respuesta de la creación
+            return { statusCode: 201, message: 'Cuenta creada con éxito', data: response.data };
+
+        } catch (error) {
+            console.error('Error al crear la cuenta:', error);
+            return { statusCode: 500, message: 'Error al crear la cuenta', error: error.message };
+        }
+    },
+
+      
+    async getOneAccountByCode(accountCode, fields, domain) {
+        // Lógica para obtener una cuenta específica
+        if (!Number(accountCode)) return { statusCode: 400, message: 'El código de la cuenta debe ser un número válido', data: [] };
+
+        const response = await odooConector.executeOdooRequest(
+            "account.account",
+            "search_read",
+            {
+                fields: fields,
+                domain: [...domain, ['code', '=', Number(accountCode)]],
+            }
+        );
+
+        if (response.success && response.data.length === 0) {
+            return { statusCode: 200, message: 'Cuenta no encontrada', data: [] };
+        }
+
+        return { statusCode: 200, message: 'Cuenta encontrada', data: response.data };
+    },
+
+    
 }
 module.exports = accountService;

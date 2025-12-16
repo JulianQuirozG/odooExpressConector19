@@ -231,6 +231,26 @@ const QUOTATION_LINES = [
 const QUOTATION_FIELDS = ["partner_id",
     "order_line", "payment_term_id"];
 
+const ACCOUNT_FIELDS = [
+    "name",
+    "code",
+    "account_type",
+    "company_id",
+    "reconcile",
+    "active",
+    "description",
+    "tag_ids",
+    "tax_ids",
+    "fiscal_category_id",
+    "currency_id",
+    "create_asset",
+    "multiple_assets_per_line",
+    "asset_model_ids",
+    "account_stock_expense_id",
+    "account_stock_variation_id",
+    "non_trade"
+];
+
 module.exports = {
     CLIENT_FIELDS,
     BANK_FIELDS,
@@ -245,5 +265,6 @@ module.exports = {
     QUOTATION_LINES,
     SALE_ORDER_FIELDS,
     PURCHASE_ORDER_FIELDS,
+    ACCOUNT_FIELDS,
 
 };
