@@ -27,6 +27,7 @@ const { getUnitMeasureByCode } = require("../Repository/param_unit_measures/para
 const { getTaxByCode } = require("../Repository/param_taxes/params_unit_measures");
 const accountService = require('./account.service');
 const { da } = require('zod/locales');
+const { json } = require('zod');
 
 
 
@@ -60,6 +61,47 @@ const billService = {
         } catch (error) {
             console.log("Error en billService.getBills:", error);
             return { statusCode: 500, message: "Error al obtener facturas", error: error.message };
+        }
+    },
+    /**
+     * Obtener una factura por su External ID.
+     *
+     * @async
+     * @param {string} externalId - External ID de la factura.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (detalle de la factura) o error.
+     */
+    async getBillByExternalId(externalId) {
+        try {
+            // Buscar el ir.model.data que coincida con el external_id
+            const externalIdData = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [
+                    ['name', '=', externalId],
+                    ['model', '=', 'account.move']
+                ],
+                fields: ['res_id'],
+                limit: 1
+            });
+
+            if (!externalIdData.success) {
+                if (externalIdData.error) {
+                    return { statusCode: 500, message: 'Error al buscar external ID', error: externalIdData.message };
+                }
+                return { statusCode: 400, message: 'Error al buscar external ID', data: externalIdData.data };
+            }
+
+            if (externalIdData.data.length === 0) {
+                return { statusCode: 404, message: 'Factura no encontrada con ese External ID' };
+            }
+
+            // Obtener la factura usando el res_id encontrado
+            const billId = externalIdData.data[0].res_id;
+            const bill = await this.getOneBill(billId);
+            if(bill.statusCode !== 200) return bill;
+            return { statusCode: 200, message: 'Detalle de la factura', data: bill.data };
+            
+        } catch (error) {
+            console.log('Error en billService.getBillByExternalId:', error);
+            return { statusCode: 500, message: 'Error al obtener factura por External ID', error: error.message };
         }
     },
     /**
@@ -752,7 +794,7 @@ const billService = {
      * Crear una nota de crédito a partir de una factura confirmada.
      *
      * @async
-     * @param {number|string} id - ID de la factura origen (debe estar en estado 'posted').
+     * @param {number|string} id - ID interno de Odoo de la factura origen (debe estar en estado 'posted').
      * @param {Object} dataCredit - Parámetros para la nota de crédito (date, journal_id, etc.).
      * @returns {Promise<Object>} Resultado con statusCode, message y data (nota creada) o error.
      */
@@ -836,17 +878,151 @@ const billService = {
                 return updatedCreditNote;
             }
 
+            const creditNote = await this.confirmCreditNote(creditNoteId);
+            
             //Regreso la nota credito creada
             return {
                 statusCode: 201,
                 message: "Nota de crédito creada con éxito",
-                data: creditNoteResponse.data,
+                data: creditNote.data,
             };
         } catch (error) {
             console.log("Error en billService.createCreditNote:", error);
             return {
                 statusCode: 500,
                 message: "Error al crear nota de crédito",
+                error: error.message,
+            };
+        }
+    },
+    /**
+     * Crear una nota de crédito a partir de una factura confirmada buscando por External ID.
+     *
+     * @async
+     * @param {string} externalId - External ID de la factura origen (debe estar en estado 'posted').
+     * @param {Object} dataCredit - Parámetros para la nota de crédito (date, journal_id, etc.).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (nota creada) o error.
+     */
+    async createCreditNoteByExternalId(externalId, dataCredit) {
+        try {
+            // Si no es válido, retornar error
+            if (!externalId) {
+                return {
+                    statusCode: 400,
+                    message: "External ID de factura inválido",
+                    data: null,
+                };
+            }
+
+            // Buscar por External ID
+            const externalIdSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(externalId)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!externalIdSearch.success || externalIdSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró una factura con External ID: ${externalId}`,
+                    data: null
+                };
+            }
+            console.log("External ID encontrado:", externalIdSearch);
+            const billId = externalIdSearch.data[0].res_id;
+
+            // Verificar que la factura exista y esté confirmada
+            const billExists = await this.getOneBill(billId, [['state', '=', 'posted']]);
+            if (billExists.statusCode !== 200) {
+                return {
+                    statusCode: billExists.statusCode,
+                    message: billExists.message,
+                    data: billExists.data,
+                };
+            }
+            console.log("External ID encontrado:", billExists);
+            console.log("InFORMACION DATA CREDITO", dataCredit);
+            // Crear el wizard de nota de credito
+            const wizardData = {
+                move_ids: [Number(billId)],
+                reason: "Anulación",
+                "l10n_co_edi_description_code_credit": "2",
+                date: dataCredit.date || new Date().toISOString().split("T")[0],
+                journal_id: dataCredit.journal_id || false,
+            };
+
+            //Creo el wizard de nota de credito
+            const wizardResponse = await odooConector.executeOdooRequest(
+                "account.move.reversal",
+                "create",
+                {
+                    vals_list: [wizardData],
+                }
+            );
+
+            if (!wizardResponse.success) {
+                return {
+                    statusCode: 500,
+                    message: "Error al crear wizard",
+                    error: wizardResponse.message,
+                };
+            }
+
+            //Crear la nota de credito
+            const creditNoteResponse = await odooConector.executeOdooRequest(
+                "account.move.reversal",
+                "reverse_moves",
+                {
+                    ids: wizardResponse.data,
+                }
+            );
+            if (creditNoteResponse.error) return { statusCode: 500, message: "Error al crear nota de crédito", error: creditNoteResponse.message };
+            if (!creditNoteResponse.success) {
+                return {
+                    statusCode: 500,
+                    message: "Error al crear nota de crédito",
+                    error: creditNoteResponse.message,
+                };
+            }
+
+            //Ahora actualizamos la informacion de la nota credito con los datos y productos de la factura original
+
+            //Consigo las lineas de la factura original
+            const creditNoteId = creditNoteResponse.data.res_id;
+            const lines = await this.getLinesByBillId(billId);
+            if (lines.statusCode !== 200) {
+                return lines;
+            }
+
+            //Actualizo los productos y los datos de la factura en la nota credito
+            const updatedCreditNote = await this.updateBill(creditNoteId, {
+                //Datos de la factura
+                l10n_co_edi_payment_option_id: billExists.data.l10n_co_edi_payment_option_id?.[0],
+                invoice_payment_term_id: billExists.data.invoice_payment_term_id?.[0],
+                invoice_date: billExists.data.invoice_date,
+                x_studio_uuid_dian: null,
+                l10n_co_edi_cufe_cude_ref: null
+                //Productos
+                //invoice_line_ids: lines.data
+            }, 'update');
+            if (updatedCreditNote.statusCode !== 200) {
+                return updatedCreditNote;
+            }
+
+            const creditNote = await this.confirmCreditNote(creditNoteId);
+            
+            //Regreso la nota credito creada
+            return {
+                statusCode: 201,
+                message: "Nota de crédito creada con éxito por External ID",
+                data: creditNote.data,
+                externalId: externalId,
+                billId: billId
+            };
+        } catch (error) {
+            console.log("Error en billService.createCreditNoteByExternalId:", error);
+            return {
+                statusCode: 500,
+                message: "Error al crear nota de crédito por External ID",
                 error: error.message,
             };
         }
@@ -1234,16 +1410,17 @@ const billService = {
             //Si es factura de venta
             if (jsonDian.data.type_document_id === 1) {
                 dianResponse = await nextPymeConnection.nextPymeService.sendInvoiceToDian(jsonDian.data);
-                console.log(dianResponse.data);
+                //console.log(dianResponse.data);
 
-                console.log("json dian", jsonDian);
+                //console.log("json dian", jsonDian);
                 if(dianResponse.statusCode !== 200) return dianResponse;
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
             }
 
             //Si es nota credito
             if (jsonDian.data.type_document_id === 4) {
-                
+                 console.log("Json dian");
+                console.log(jsonDian.data);
                 dianResponse = await nextPymeConnection.nextPymeService.sendCreditNoteToDian(jsonDian.data);
                 
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
@@ -1252,6 +1429,7 @@ const billService = {
 
             //Si es nota debito
             if (jsonDian.data.type_document_id === 5) {
+               
                 dianResponse = await nextPymeConnection.nextPymeService.sendDebitNoteToDian(jsonDian.data);
                 if (dianResponse.statusCode === 500) return dianResponse;
 
@@ -1488,7 +1666,6 @@ const billService = {
             const diferenciaMs = invoice_date_due - invoice_date;
             const dias = Math.round(diferenciaMs / (1000 * 60 * 60 * 24));
             payment_form.duration_measure = dias;
-console
 
             //Numero de resolucion de la factura
             const journalData = await journalService.getOneJournal(bill.data.journal_id[0]);
@@ -1536,7 +1713,7 @@ console
                     if (!line.x_studio_n_remesa) return { statusCode: 400, message: `La linea ${line.id} no tiene número de remesa interna` };
                     lines2.RNDC_consignment_number = line.x_studio_rad_rndc || "";
                     lines2.internal_consignment_number = line.x_studio_n_remesa || "";
-                    lines2.value_consignment = 0; //FALTA
+                    lines2.value_consignment = line.price_subtotal || 0; //FALTA
                     lines2.unit_measure_consignment_id = Number(unit_measure_id.data[0].id);  //FALTA
                     lines2.quantity_consignment = line.quantity;
                 }
@@ -1562,6 +1739,7 @@ console
                     const tax_id = await getTaxByCode(taxTypeData.data[0].code);
                     if (tax_id.data[0].length === 0) return { statusCode: 404, message: `El tipo de impuesto con código ${taxTypeData.data[0].code} no está configurado en la tabla de parámetros` };
 
+                    console.log("Tax data:", taxData.data[0]);
                     tax_line.tax_id = tax_id.data[0].id;
                     tax_line.tax_amount = taxData.data[0].amount === 0 ? 0 : line.price_subtotal * (taxData.data[0].amount / 100);
                     tax_line.percent = taxData.data[0].amount;
@@ -1569,6 +1747,7 @@ console
 
 
                     tax_totals.push({ ...tax_line });
+                    console.log("Tax totals:", tax_totals);
 
                     //Taxt toal pero de la las lineas
                     //Verificamos si ya evaluamos el tipo de impuesto
@@ -1613,7 +1792,7 @@ console
             //construyo el json para la dian
             //Campos generales de las facturas, notas credito y notas debito
             jsonDian.type_document_id = type_document_id.id;
-            jsonDian.tax_totals = tax_totals_bill;
+            if(tax_totals_bill.length > 0) jsonDian.tax_totals = tax_totals_bill;
             jsonDian.sendmail = sendEmail;
             jsonDian.notes = notes;
             jsonDian.payment_form = payment_form;
