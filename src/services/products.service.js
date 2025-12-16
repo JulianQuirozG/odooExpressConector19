@@ -28,6 +28,85 @@ const productService = {
         }
     },
     /**
+     * Obtener productos por un patrón de external ID (búsqueda ILIKE).
+     *
+     * @async
+     * @param {string} externalIdPattern - Patrón de external ID a buscar (ej: "product_%" o "prod").
+     * @param {string[]} [fields=['id','name','default_code','list_price']] - Campos a recuperar de los productos.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (array de productos encontrados) o error.
+     *  - 200: productos encontrados.
+     *  - 404: ningún producto coincide con el patrón.
+     *  - 400/500: error en la consulta o validación.
+     * @example
+     * const res = await productService.getProductsByExternalIdsIlike('product_');
+     * if (res.statusCode === 200) console.log(res.data);
+     */
+    async getProductsByExternalIdsIlike(externalIdPattern, fields = ['id', 'name', 'default_code', 'list_price']) {
+        try {
+            // Validamos que el patrón de external ID no esté vacío
+            if (!externalIdPattern || externalIdPattern.toString().trim() === '') {
+                return { statusCode: 400, message: 'El patrón de external ID es requerido', data: [] };
+            }
+
+            // Primero buscamos en ir.model.data los external IDs que coincidan con el patrón
+            const externalIdsResponse = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', 'ilike', `%${externalIdPattern.toString().trim()}%`], ['model', '=', 'product.product']],
+                fields: ['id', 'name', 'res_id', 'model']
+            });
+
+            // Si hay algún error lo gestionamos
+            if (!externalIdsResponse.success) {
+                if (externalIdsResponse.error) {
+                    return { statusCode: 500, message: 'Error al buscar external IDs', error: externalIdsResponse.message };
+                }
+                return { statusCode: 400, message: 'Error al buscar external IDs', data: [] };
+            }
+
+            // Si no encontramos external IDs regresamos 404
+            if (externalIdsResponse.data.length === 0) {
+                return { statusCode: 404, message: 'Ningún producto encontrado con ese patrón de external ID', data: [] };
+            }
+
+            // Extraemos los IDs de los productos (res_id)
+            const productIds = externalIdsResponse.data.map(item => item.res_id);
+
+            // Ahora obtenemos los productos con esos IDs
+            const productsResponse = await odooConector.executeOdooRequest('product.product', 'search_read', {
+                domain: [['id', 'in', productIds]],
+                fields: fields
+            });
+          
+            // Si hay algún error lo gestionamos
+            if (!productsResponse.success) {
+                if (productsResponse.error) {
+                    return { statusCode: 500, message: 'Error al obtener productos', error: productsResponse.message };
+                }
+                return { statusCode: 400, message: 'Error al obtener productos', data: [] };
+            }
+
+            // Si no encontramos productos regresamos 404
+            if (productsResponse.data.length === 0) {
+                return { statusCode: 404, message: 'Ningún producto encontrado con ese patrón de external ID', data: [] };
+            }
+
+            //Ahora añadimos a al objeto de respuesta los external IDs correspondientes a cada producto
+            const productsWithExternalIds = productsResponse.data.map(product => {
+                const externalIdEntry = externalIdsResponse.data.find(item => item.res_id === product.id);
+                return {
+                    ...product,
+                    external_id: externalIdEntry ? externalIdEntry.name : null
+                };
+            });
+
+            // Regresamos los productos encontrados
+            return { statusCode: 200, message: 'Productos encontrados por patrón de external ID', data: productsWithExternalIds };
+        } catch (error) {
+            console.log('Error en productService.getProductsByExternalIdsIlike:', error);
+            return { statusCode: 500, message: 'Error al obtener productos por patrón de external ID', error: error.message };
+        }
+    },
+
+    /**
      * Obtener un producto por su ID.
      *
      * @async

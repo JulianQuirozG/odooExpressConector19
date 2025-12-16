@@ -11,6 +11,22 @@ const productController = {
             res.status(500).json({ statusCode: 500, message: 'Error al obtener productos', error: error.message });
         }
     },
+    async getProductsByExternalIdsIlike(req, res) {
+        const { externalIdPattern } = req.params;
+        try {
+            const { fields } = req.body || {};
+            const defaultFields = ['id', 'name', 'default_code', 'list_price','x_codigo_dane'];
+            
+            const result = await productService.getProductsByExternalIdsIlike(
+                externalIdPattern,
+                fields || defaultFields
+            );
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en productController.getProductsByExternalIdsIlike:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener productos por patrón de external ID', error: error.message });
+        }
+    },
     async getOneProduct(req, res) {
         const { id } = req.params;
         try {

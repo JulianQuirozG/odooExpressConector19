@@ -8,6 +8,7 @@ const router = express.Router();
     router.get('/', productController.getProducts);
     router.get('/dane/:daneCode', productController.getProductByDaneCode);
     router.get('/external/:externalId', productController.getProductByExternalId);
+    router.get('/external-ids-ilike/:externalIdPattern', productController.getProductsByExternalIdsIlike);
     router.get('/external-id/:productId', productController.getExternalIdByProductId);
     router.get('/external-id-by-dane/:daneCode', productController.getExternalIdFromDaneCode);
     router.get('/:id', productController.getOneProduct);
