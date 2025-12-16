@@ -264,14 +264,42 @@ const billService = {
      * - 'update': actualizar las líneas existentes (se validan tamaños y productos).
      *
      * @async
-     * @param {number|string} id - ID de la factura a actualizar.
+     * @param {number|string} id - ID o External ID de la factura a actualizar (ej: 123, "bill_14_545646", "NC_14_654698541").
      * @param {Object} dataBill - Campos a actualizar (se filtran con BILL_FIELDS).
      * @param {string} [action='replace'] - Modo de actualización de líneas ('replace'|'update').
      * @returns {Promise<Object>} Resultado con statusCode, message y data (factura actualizada) o error.
      */
     async updateBill(id, dataBill, action = 'replace') {
         try {
-            const billExists = await this.getOneBill(id);
+            let billId = id;
+            let billExists = null;
+
+            // Intentar buscar por ID si es un número
+            if (!isNaN(Number(id))) {
+                billExists = await this.getOneBill(Number(id));
+            }
+
+            // Si no se encontró por ID o no es un número, intentar buscar por External ID
+            if (!billExists || billExists.statusCode !== 200) {
+                const externalIdSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                    domain: [['name', '=', String(id)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                    fields: ['res_id']
+                });
+
+                if (externalIdSearch.success && externalIdSearch.data.length > 0) {
+                    billId = externalIdSearch.data[0].res_id;
+                    billExists = await this.getOneBill(billId);
+                } else {
+                    return {
+                        statusCode: 404,
+                        message: `No se encontró una factura con ID o External ID: ${id}`,
+                        data: null
+                    };
+                }
+            } else {
+                billId = Number(id);
+            }
+
             if (billExists.statusCode !== 200) {
                 return billExists;
             }
@@ -294,7 +322,7 @@ const billService = {
                     const productsFound = linesToAdd.map((line) => [0, 0, pickFields(line, INVOICE_LINE_FIELDS)]);
                     bill.invoice_line_ids = productsFound;
                     if (lineIds.length > 0) {
-                        const deleted = await this.updateBillLines(id, 2, lineIds);
+                        const deleted = await this.updateBillLines(billId, 2, lineIds);
                         if (deleted.statusCode !== 200) {
                             return deleted;
                         }
@@ -302,7 +330,7 @@ const billService = {
                 } else if (action === 'update') {
                     //si viene update ceirfico el tamaño de las linas y las actualizo
 
-                    await this.verifyBillLines(id, dataBill.invoice_line_ids.map((line) => { return pickFields(line, INVOICE_LINE_FIELDS); }));
+                    await this.verifyBillLines(billId, dataBill.invoice_line_ids.map((line) => { return pickFields(line, INVOICE_LINE_FIELDS); }));
                 }
             }
 
@@ -311,7 +339,7 @@ const billService = {
                 "account.move",
                 "write",
                 {
-                    ids: [Number(id)],
+                    ids: [Number(billId)],
                     vals: bill,
                 }
             );
@@ -321,7 +349,7 @@ const billService = {
             if (response.error) return { statusCode: 500, message: "Error al actualizar factura", error: response.message };
             if (!response.success) return { statusCode: 400, message: "Error al actualizar factura", data: response.data };
 
-            const updateBill = await this.getOneBill(id);
+            const updateBill = await this.getOneBill(billId);
             if (updateBill.statusCode !== 200) return updateBill;
 
             return { statusCode: 200, message: "Factura actualizada con éxito", data: updateBill.data, errors: errorLines?.data?.errors };
