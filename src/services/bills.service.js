@@ -96,9 +96,9 @@ const billService = {
             // Obtener la factura usando el res_id encontrado
             const billId = externalIdData.data[0].res_id;
             const bill = await this.getOneBill(billId);
-            if(bill.statusCode !== 200) return bill;
+            if (bill.statusCode !== 200) return bill;
             return { statusCode: 200, message: 'Detalle de la factura', data: bill.data };
-            
+
         } catch (error) {
             console.log('Error en billService.getBillByExternalId:', error);
             return { statusCode: 500, message: 'Error al obtener factura por External ID', error: error.message };
@@ -231,10 +231,10 @@ const billService = {
                 };
             }
 
-             // Crear External ID usando los campos del body
+            // Crear External ID usando los campos del body
             const billId = response.data[0];
             const externalId = `bill_${dataBill.externalCompanyId}_${dataBill.externalBillId}`;
-            
+
             const externalIdResponse = await odooConector.createExternalId(externalId, 'account.move', billId);
 
             if (!externalIdResponse.success) {
@@ -1008,7 +1008,7 @@ const billService = {
             }
 
             const creditNote = await this.confirmCreditNote(creditNoteId);
-            
+
             //Regreso la nota credito creada
             return {
                 statusCode: 201,
@@ -1289,15 +1289,36 @@ const billService = {
                     error: payment.message,
                 };
             }
-
+            console.log("payment ", payment)
             // Obtener información actualizada de la factura
             const updatedInvoice = await this.getOneBill(billId);
+            
+            let externalId = "";
+
+            if (paymentDatas.externalCompanyId != null && paymentDatas.externalPaymentId != null && paymentDatas.externalPaymentType != null) {
+
+                console.log("externalCompanyId", paymentDatas.externalCompanyId)
+                console.log("externalPaymentId", paymentDatas.externalPaymentId)
+                console.log("externalCompanyId", paymentDatas.externalPaymentType)
+
+                const externalCompany = paymentDatas.externalCompanyId;
+                const externalPaymentId = paymentDatas.externalPaymentId;
+                const externalPaymentType = paymentDatas.externalPaymentType;
+
+                const externalIdFormat = `payment_${externalPaymentType}_${externalCompany}_${externalPaymentId}`;
+
+                console.log("external: ", externalIdFormat);
+                const externalIdCreate = await odooConector.createExternalId(externalIdFormat, 'account.payment', payment.data.res_id);
+                externalId = externalIdFormat;
+            }
+
 
             return {
                 statusCode: 201,
                 message: "Pago creado con éxito",
                 data: payment.data,
-                invoice: updatedInvoice.statusCode === 200 ? updatedInvoice.data : null
+                invoice: updatedInvoice.statusCode === 200 ? updatedInvoice.data : null,
+                externalId: externalId || ""
             };
 
 
@@ -1366,6 +1387,7 @@ const billService = {
      */
     async applyCreditNote(invoiceId, creditMoveId) {
         try {
+            console.log("Aplicando nota de crédito:", creditMoveId, "a la factura:", invoiceId);
             //Consultar notas de credito del cliente
             const outstandingCredits = await this.listOutstandingCredits(invoiceId);
             const creditToApply = outstandingCredits.data.find(credit => credit.id === creditMoveId);
@@ -1407,6 +1429,423 @@ const billService = {
             return {
                 statusCode: 500,
                 message: "Error al aplicar nota de crédito",
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Aplicar un pago pendiente a una factura buscando ambos por External ID.
+     * 
+     * Flujo:
+     * 1. Busca la factura por External ID
+     * 2. Busca el pago por External ID
+     * 3. Obtiene la lista de créditos pendientes de la factura
+     * 4. Verifica si el pago está disponible en los pendientes
+     * 5. Si existe, aplica el pago a la factura
+     *
+     * @async
+     * @param {string} invoiceExternalId - External ID de la factura (ej: "bill_14_545646")
+     * @param {string} paymentExternalId - External ID del pago (ej: "payment_FACT_14_545646")
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     *  - 200: Pago aplicado exitosamente
+     *  - 404: Factura o pago no encontrados, o pago no disponible
+     *  - 400/500: Error en validación o consulta
+     * 
+     * @example
+     * const res = await billService.applyPaymentPendingCredits('bill_14_545646', 'payment_FACT_14_545646');
+     * if (res.statusCode === 200) console.log('Pago aplicado exitosamente');
+     */
+    async applyPaymentPendingCredits(invoiceExternalId, paymentExternalId) {
+        try {
+            // Validar que los parámetros no estén vacíos
+            if (!invoiceExternalId || !paymentExternalId) {
+                return {
+                    statusCode: 400,
+                    message: "El External ID de la factura y del pago son requeridos",
+                    data: null
+                };
+            }
+
+            // Buscar la factura por External ID
+            const invoiceExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(invoiceExternalId)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!invoiceExternalSearch.success || invoiceExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró una factura con External ID: ${invoiceExternalId}`,
+                    data: null
+                };
+            }
+
+            const invoiceId = invoiceExternalSearch.data[0].res_id;
+            console.log("Factura encontrada por External ID:", invoiceId);
+
+            // Verificar que la factura exista y esté confirmada
+            const invoiceExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            if (invoiceExists.statusCode !== 200) {
+                return {
+                    statusCode: invoiceExists.statusCode,
+                    message: invoiceExists.message,
+                    data: invoiceExists.data
+                };
+            }
+
+            // Buscar el pago por External ID
+            const paymentExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(paymentExternalId)], ['model', '=', 'account.payment'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!paymentExternalSearch.success || paymentExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró un pago con External ID: ${paymentExternalId}`,
+                    data: null
+                };
+            }
+
+            const paymentId = paymentExternalSearch.data[0].res_id;
+            
+            console.log("Pago encontrado por External ID:", paymentId);
+
+            // Obtener la lista de créditos pendientes de la factura
+            const outstandingCredits = await this.listOutstandingCredits(invoiceId);
+            if (outstandingCredits.statusCode !== 200) {
+                return outstandingCredits;
+            }
+
+            console.log("Créditos pendientes:", outstandingCredits.data);
+
+            // Buscar si el pago está disponible en los créditos pendientes
+            const paymentAvailable = outstandingCredits.data.find(credit => credit.account_payment_id === paymentId);
+
+            
+            if (!paymentAvailable) {
+                return {
+                    statusCode: 404,
+                    message: `El pago con External ID ${paymentExternalId} (ID: ${paymentId}) no está disponible como crédito pendiente para esta factura`,
+                    data: {
+                        invoiceExternalId: invoiceExternalId,
+                        invoiceId: invoiceId,
+                        paymentExternalId: paymentExternalId,
+                        paymentId: paymentId,
+                        availableCredits: outstandingCredits.data.map(c => ({ id: c.id, name: c.name }))
+                    }
+                };
+            }
+            const paymentPending = paymentAvailable.id;
+
+            // Aplicar el pago a la factura
+            const applyResult = await this.applyCreditNote(invoiceId, paymentPending);
+
+            if (applyResult.statusCode === 200) {
+                // Obtener la factura actualizada
+                const updatedInvoice = await this.getOneBill(invoiceId);
+                return {
+                    statusCode: 200,
+                    message: "Pago aplicado exitosamente a la factura",
+                    data: {
+                        invoiceExternalId: invoiceExternalId,
+                        invoiceId: invoiceId,
+                        paymentExternalId: paymentExternalId,
+                        paymentId: paymentId,
+                        updatedInvoice: updatedInvoice.statusCode === 200 ? updatedInvoice.data : null,
+                        previousBalance: invoiceExists.data.amount_residual,
+                        paymentAmount: paymentAvailable.amount,
+                        newBalance: updatedInvoice.statusCode === 200 ? updatedInvoice.data.amount_residual : null
+                    }
+                };
+            }
+
+            return applyResult;
+
+        } catch (error) {
+            console.log("Error en billService.applyPaymentPendingCredits:", error);
+            return {
+                statusCode: 500,
+                message: "Error al aplicar pago pendiente",
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Listar los pagos aplicados a una factura desde el widget `invoice_payments_widget`.
+     *
+     * @async
+     * @param {number|string} invoiceId - ID de la factura.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (array de pagos) o error.
+     *  - 200: Pagos obtenidos exitosamente.
+     *  - 404: Factura no encontrada o no confirmada.
+     *  - 500: Error en la consulta.
+     * 
+     * @example
+     * const res = await billService.listInvoicePayments(102);
+     * if (res.statusCode === 200) {
+     *   // res.data contiene array de pagos con partial_id, move_id, etc.
+     * }
+     */
+    async listInvoicePayments(invoiceId) {
+        try {
+            // Verificar que la factura exista y esté confirmada
+            const billExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            if (billExists.statusCode !== 200) {
+                return {
+                    statusCode: billExists.statusCode,
+                    message: billExists.message,
+                    data: billExists.data,
+                };
+            }
+
+            //ahora obtengo los datos del campo "invoice_payments_widget" donde se listan los pagos
+            const invoicePayments = billExists.data.invoice_payments_widget;
+
+            if (!invoicePayments) {
+                return {
+                    statusCode: 200,
+                    message: "Pagos obtenidos con éxito",
+                    data: [],
+                };
+            }
+
+            //Regreso la información de los pagos
+            return {
+                statusCode: 200,
+                message: "Pagos obtenidos con éxito",
+                data: invoicePayments.content,
+            };
+        } catch (error) {
+            console.log("Error en billService.listInvoicePayments:", error);
+            return {
+                statusCode: 500,
+                message: "Error al obtener pagos de la factura",
+                error: error.message,
+            };
+        }
+    },
+
+    /**
+     * Deshacer la conciliación entre un pago y una factura (romper la conciliación).
+     * 
+     * Utiliza el método Odoo `js_remove_outstanding_partial` para desvincu lar un pago
+     * que fue aplicado a una factura, dejando ambos sin conciliación.
+     *
+     * @async
+     * @param {number|string} invoiceId - ID de la factura (account.move).
+     * @param {number|string} partialId - ID de la conciliación (partial) a deshacer.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     *  - 200: Conciliación desecha exitosamente.
+     *  - 404: Factura no encontrada o conciliación no disponible.
+     *  - 400/500: Error en validación o consulta.
+     * 
+     * @example
+     * // Deshacer conciliación del pago partial_id 75 en la factura 102
+     * const res = await billService.removeOutstandingPartial(102, 75);
+     * if (res.statusCode === 200) console.log('Conciliación desecha');
+     */
+    async removeOutstandingPartial(invoiceId, account_payment_id) {
+        try {
+            // Validar que los parámetros no estén vacíos
+            if (!invoiceId || !account_payment_id) {
+                return {
+                    statusCode: 400,
+                    message: "El ID de la factura y el ID del pago (moveId) son requeridos",
+                    data: null
+                };
+            }
+
+            // Verificar que la factura exista y esté confirmada
+            const invoiceExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            if (invoiceExists.statusCode !== 200) {
+                return {
+                    statusCode: invoiceExists.statusCode,
+                    message: invoiceExists.message,
+                    data: invoiceExists.data
+                };
+            }
+
+            // Obtener la lista de pagos para verificar que el partial existe
+            const invoicePayments = await this.listInvoicePayments(invoiceId);
+            if (invoicePayments.statusCode !== 200) {
+                return invoicePayments;
+            }
+
+            console.log("Pagos de la factura:", invoicePayments.data);
+            console.log("Buscando partial con move_id:", account_payment_id);
+            // Buscar si el partial existe en los pagos
+            const partialExists = invoicePayments.data.find(payment => Number(payment.account_payment_id) === Number(account_payment_id));
+
+            if (!partialExists) {
+                return {
+                    statusCode: 404,
+                    message: `El pago con ID ${account_payment_id} no se encuentra entre los pagos de esta factura`,
+                    data: {
+                        invoiceId: invoiceId,
+                        account_payment_id: account_payment_id,
+                        availablePartials: invoicePayments.data.map(p => ({ 
+                            partial_id: p.partial_id, 
+                            name: p.name,
+                            amount: p.amount,
+                            date: p.date
+                        }))
+                    }
+                };
+            }
+
+            console.log("Partial encontrado:", partialExists);
+            const partialId = partialExists.partial_id;
+            const moveId = partialExists.move_id;
+            // Deshacer la conciliación utilizando js_remove_outstanding_partial
+            const response = await odooConector.executeOdooRequest(
+                'account.move',
+                'js_remove_outstanding_partial',
+                {
+                    ids: [Number(moveId)],
+                    partial_id: Number(partialId)
+                });
+
+            if (!response.success) {
+                if (response.error) {
+                    return {
+                        statusCode: 500,
+                        message: "Error al deshacer la conciliación",
+                        error: response.message
+                    };
+                }
+                return { 
+                    statusCode: 400, 
+                    message: "Error al deshacer la conciliación", 
+                    data: response.data 
+                };
+            }
+
+            // Obtener la factura actualizada
+            const updatedInvoice = await this.getOneBill(invoiceId);
+
+            //Regreso la información de la consulta
+            return { 
+                statusCode: 200, 
+                message: "Conciliación desecha exitosamente",
+                data: {
+                    invoiceId: invoiceId,
+                    moveId: moveId,
+                    partialId: partialId,
+                    updatedInvoice: updatedInvoice.statusCode === 200 ? updatedInvoice.data : null,
+                    removedPayment: {
+                        name: partialExists.name,
+                        amount: partialExists.amount,
+                        date: partialExists.date
+                    }
+                }
+            };
+
+        } catch (error) {
+            console.log("Error en billService.removeOutstandingPartial:", error);
+            return {
+                statusCode: 500,
+                message: "Error al deshacer la conciliación",
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Deshacer la conciliación entre un pago y una factura buscando ambos por External ID.
+     * 
+     * Utiliza el método Odoo `js_remove_outstanding_partial` para desvincular un pago
+     * que fue aplicado a una factura, dejando ambos sin conciliación.
+     *
+     * @async
+     * @param {string} invoiceExternalId - External ID de la factura (account.move).
+     * @param {string} paymentExternalId - External ID del pago (account.payment).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     *  - 200: Conciliación desecha exitosamente.
+     *  - 404: Factura o pago no encontrados, o conciliación no disponible.
+     *  - 400/500: Error en validación o consulta.
+     * 
+     * @example
+     * // Deshacer conciliación por External IDs
+     * const res = await billService.removeOutstandingPartialByExternalId('bill_14_545646', 'payment_FACT_14_545646');
+     * if (res.statusCode === 200) console.log('Conciliación desecha');
+     */
+    async removeOutstandingPartialByExternalId(invoiceExternalId, paymentExternalId) {
+        try {
+            // Validar que los parámetros no estén vacíos
+            if (!invoiceExternalId || !paymentExternalId) {
+                return {
+                    statusCode: 400,
+                    message: "El External ID de la factura y del pago son requeridos",
+                    data: null
+                };
+            }
+
+            // Buscar la factura por External ID
+            const invoiceExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(invoiceExternalId)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!invoiceExternalSearch.success || invoiceExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró una factura con External ID: ${invoiceExternalId}`,
+                    data: null
+                };
+            }
+
+            const invoiceId = invoiceExternalSearch.data[0].res_id;
+            console.log("Factura encontrada por External ID:", invoiceId);
+
+            // Buscar el pago por External ID
+            const paymentExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(paymentExternalId)], ['model', '=', 'account.payment'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!paymentExternalSearch.success || paymentExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró un pago con External ID: ${paymentExternalId}`,
+                    data: null
+                };
+            }
+
+            const paymentMoveId = paymentExternalSearch.data[0].res_id;
+            console.log("Pago encontrado por External ID:", paymentMoveId);
+
+            // Reutilizar removeOutstandingPartial con los IDs internos
+            console.log("Deshaciendo conciliación entre factura ID", invoiceId, "y pago move ID", paymentMoveId);
+            const removeResult = await this.removeOutstandingPartial(invoiceId, paymentMoveId);
+
+            // Si hubo error, retornar sin formatear
+            if (removeResult.statusCode !== 200) {
+                return removeResult;
+            }
+
+            // Formatear la respuesta incluyendo los External IDs
+            return {
+                statusCode: 200,
+                message: "Conciliación desecha exitosamente por External ID",
+                data: {
+                    invoiceExternalId: invoiceExternalId,
+                    invoiceId: invoiceId,
+                    paymentExternalId: paymentExternalId,
+                    paymentMoveId: paymentMoveId,
+                    partialId: removeResult.data.partialId,
+                    updatedInvoice: removeResult.data.updatedInvoice,
+                    removedPayment: removeResult.data.removedPayment
+                }
+            };
+
+        } catch (error) {
+            console.log("Error en billService.removeOutstandingPartialByExternalId:", error);
+            return {
+                statusCode: 500,
+                message: "Error al deshacer la conciliación por External ID",
                 error: error.message
             };
         }
@@ -1561,27 +2000,27 @@ const billService = {
                 //console.log(dianResponse.data);
 
                 //console.log("json dian", jsonDian);
-                if(dianResponse.statusCode !== 200) return dianResponse;
+                if (dianResponse.statusCode !== 200) return dianResponse;
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cufe || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
             }
 
             //Si es nota credito
             if (jsonDian.data.type_document_id === 4) {
-                 console.log("Json dian");
+                console.log("Json dian");
                 console.log(jsonDian.data);
                 dianResponse = await nextPymeConnection.nextPymeService.sendCreditNoteToDian(jsonDian.data);
-                
+
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude || '', x_studio_uuid_dian: dianResponse.data.uuid_dian || '' }, 'update');
 
             }
 
             //Si es nota debito
             if (jsonDian.data.type_document_id === 5) {
-               
+
                 dianResponse = await nextPymeConnection.nextPymeService.sendDebitNoteToDian(jsonDian.data);
                 if (dianResponse.statusCode === 500) return dianResponse;
 
-                
+
                 const billUpdate = await this.updateBill(id, { l10n_co_edi_cufe_cude_ref: dianResponse.data.cude, x_studio_uuid_dian: dianResponse.data.uuid_dian }, 'update');
             }
 
@@ -1940,7 +2379,7 @@ const billService = {
             //construyo el json para la dian
             //Campos generales de las facturas, notas credito y notas debito
             jsonDian.type_document_id = type_document_id.id;
-            if(tax_totals_bill.length > 0) jsonDian.tax_totals = tax_totals_bill;
+            if (tax_totals_bill.length > 0) jsonDian.tax_totals = tax_totals_bill;
             jsonDian.sendmail = sendEmail;
             jsonDian.notes = notes;
             jsonDian.payment_form = payment_form;
@@ -1971,7 +2410,7 @@ const billService = {
 
                 //Factura de origen de la cual se realizo la nota debito
                 const getBillReference = await this.getOneBill(Number(bill.data.debit_origin_id[0]));
-               
+
                 if (getBillReference.statusCode !== 200) return getBillReference;
 
                 const billing_reference = {
@@ -2117,7 +2556,7 @@ const billService = {
                 }
                 i++;
             }
-            
+
             return { statusCode: 200, message: 'Validación de líneas completada', data: { errors } };
 
         } catch (error) {

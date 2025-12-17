@@ -5,6 +5,8 @@ const createdPaymentSchema = z.object({
     date: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: 'Debe ser una fecha válida' }),
     journal_id: z.number().min(1), // En este momento deberia ser 6, pero depende del metodo de pago
     payment_method_line_id: z.number().min(1),
+    external_id: z.string().optional(),
+    external_company_id: z.string().optional(),
 }).strict(); 
 
 module.exports = createdPaymentSchema;
