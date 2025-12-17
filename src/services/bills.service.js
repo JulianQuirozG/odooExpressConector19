@@ -1949,7 +1949,11 @@ const billService = {
             jsonDian.number = number;
             if (type_document_id.id !== 5) jsonDian.prefix = prefix;
             jsonDian.customer = customer;
-
+            jsonDian.send_email_cc_list_as_email_cc = true;
+            //FIXME: Campo temporal hasta que NextPyme habilite el envio de copia a otro correo 
+            jsonDian.email_cc_list = [ {
+                 email: "estebanmueve@hotmail.com"
+            }]
             //Campos específicos segun el tipo de documento
             if (type_document_id.id == 1) {
                 //Campos de factura de venta
@@ -1998,6 +2002,8 @@ const billService = {
                 jsonDian.billing_reference = billing_reference;
             }
 
+
+            console.log("JSON DIAN creado:", jsonDian);
             return {
                 statusCode: 200,
                 message: 'JSON para DIAN creado con éxito',

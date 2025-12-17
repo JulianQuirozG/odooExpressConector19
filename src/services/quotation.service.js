@@ -145,6 +145,7 @@ const quotationService = {
                 // Asignar el ID interno de Odoo al data
                 data.company_id = companySearch.data[0].res_id;
             }
+            console.log(data, "Datos procesados para crear la cotización");
 
             // Verificar que el partner exista, buscando por ID o por External ID
             let partnerResponse;
