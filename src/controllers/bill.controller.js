@@ -83,7 +83,10 @@ const billController = {
     async debitNote(req, res) {
         try {
             const { id } = req.params;
-            const result = await billService.createDebitNote(id, req.body);
+            // const result = await billService.createDebitNote(id, req.body);
+            console.log( 'ID recibido para nota de débito:', id);
+            console.log('Datos recibidos para nota de débito:', req.body);
+            const result = await billService.createDebitNoteByExternalId(id, req.body);
             res.status(result.statusCode).json(result);
         } catch (error) {
             console.error('Error en billController.debitNote:', error);

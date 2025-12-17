@@ -116,8 +116,35 @@ const quotationService = {
      */
     async createQuotation(dataQuotation) {
         try {
+            console.log(dataQuotation, "Datos recibidos para crear la cotización - sin procesar");
             const data = pickFields(dataQuotation, QUOTATION_FIELDS);
+
+            
             console.log(dataQuotation, "Datos recibidos para crear la cotización");
+
+            // Buscar la compañía por External ID si viene company_id
+            if (dataQuotation.company_id) {
+                const companyExternalId = dataQuotation.company_id;
+                const companySearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                    domain: [
+                        ['name', '=', companyExternalId],
+                        ['model', '=', 'res.company']
+                    ],
+                    fields: ['res_id'],
+                    limit: 1
+                });
+
+                if (!companySearch.success || companySearch.data.length === 0) {
+                    return {
+                        statusCode: 404,
+                        message: `No se encontró una compañía con External ID: ${companyExternalId}`,
+                        error: "COMPANY_NOT_FOUND"
+                    };
+                }
+
+                // Asignar el ID interno de Odoo al data
+                data.company_id = companySearch.data[0].res_id;
+            }
 
             // Verificar que el partner exista, buscando por ID o por External ID
             let partnerResponse;

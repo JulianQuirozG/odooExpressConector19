@@ -229,7 +229,7 @@ const QUOTATION_LINES = [
 ];
 
 const QUOTATION_FIELDS = ["partner_id",
-    "order_line", "payment_term_id"];
+    "order_line", "payment_term_id", "company_id"];
 
 const ACCOUNT_FIELDS = [
     "name",
