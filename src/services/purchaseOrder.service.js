@@ -191,7 +191,7 @@ const purchaseOrderService = {
             } else if (data.external_partner_id) {
                 // Si no viene partner_id pero sí externalPartnerId, buscar por External ID
                 const partnerResponse = await partnerService.getPartnerByExternalId(data.external_partner_id);
-                
+
                 if (partnerResponse.statusCode !== 200) {
                     return {
                         statusCode: partnerResponse.statusCode,
@@ -199,7 +199,7 @@ const purchaseOrderService = {
                         error: partnerResponse.message || partnerResponse.error,
                     };
                 }
-                
+
                 // Si lo encontramos por External ID, asignar el partner_id al data
                 data.partner_id = partnerResponse.data.id;
             }
@@ -536,11 +536,13 @@ const purchaseOrderService = {
      */
     async createBillFromPurchaseOrder(purchaseOrderId) {
         try {
+            //Compruebo la lista de ids de ordenes de venta a procesar
             if (!purchaseOrderId || !Array.isArray(purchaseOrderId) || purchaseOrderId.length === 0) {
                 return { statusCode: 400, message: 'Debe proporcionar una lista de IDs de ordenes de compra para crear facturas.' };
             }
             const idArray = purchaseOrderId.map((id) => { return Number(id) });
-console.log('idArray for creating bills:', idArray);
+
+            //Valido la lista de las ordenes a facturar
             const purchaseOrderExists = await this.validListId(idArray);
             if (purchaseOrderExists.statusCode !== 200) {
                 return { statusCode: purchaseOrderExists.statusCode, message: purchaseOrderExists.message, data: purchaseOrderExists.data };
@@ -550,7 +552,9 @@ console.log('idArray for creating bills:', idArray);
             if (idsFound.length === 0) {
                 return { statusCode: 404, message: 'Ninguna de las ordenes de compra proporcionadas fue encontrada.', data: [] };
             }
-            console.log('idsFound for creating bills:', idsFound);
+            
+
+            //Creo las facturas en Odoo a partir de las ordenes de compra encontradas
             const newBill = await odooConector.executeOdooRequest('purchase.order', 'action_create_invoice', {
                 ids: idsFound
             });

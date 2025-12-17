@@ -404,8 +404,11 @@ const saleService = {
                         };
                     }
 
+                    dataVenta.company_id = "company_" + externalCompanyId;
                     delete dataVenta.external_solicitud_transportista;
                     delete dataVenta.externalCompanyId;
+
+                    
 
                     //crear cotizacion
                     const quotation = await quotationService.createQuotation(dataVenta);

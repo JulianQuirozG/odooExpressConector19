@@ -121,6 +121,31 @@ const partnerService = {
             }
 
             const partner = pickFields(dataPartner, CLIENT_FIELDS)
+
+            // Buscar la compañía por External ID si viene externalCompanyId
+            if (dataPartner.externalCompanyId) {
+                const companyExternalId = `company_${dataPartner.externalCompanyId}`;
+                const companySearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                    domain: [
+                        ['name', '=', companyExternalId],
+                        ['model', '=', 'res.company']
+                    ],
+                    fields: ['res_id'],
+                    limit: 1
+                });
+
+                if (!companySearch.success || companySearch.data.length === 0) {
+                    return {
+                        statusCode: 404,
+                        message: `No se encontró una compañía con External ID: ${companyExternalId}`,
+                        error: "COMPANY_NOT_FOUND"
+                    };
+                }
+
+                // Asignar el ID interno de Odoo al partner
+                partner.company_id = companySearch.data[0].res_id;
+            }
+
             const response = await odooConector.executeOdooRequest('res.partner', 'create', {
                 vals_list: [partner]
             });
