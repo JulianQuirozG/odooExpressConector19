@@ -176,6 +176,36 @@ const billController = {
             console.error('Error en billController.applyPaymentPendingCredits:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al aplicar pago pendiente', error: error.message });
         }
+    },
+    async listInvoicePayments(req, res) {
+        try {
+            const { invoiceId } = req.params;
+            const result = await billService.listInvoicePayments(invoiceId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.listInvoicePayments:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener pagos de la factura', error: error.message });
+        }
+    },
+    async removeOutstandingPartial(req, res) {
+        try {
+            const { invoiceId, partialId } = req.params;
+            const result = await billService.removeOutstandingPartial(invoiceId, partialId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.removeOutstandingPartial:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al deshacer la conciliación', error: error.message });
+        }
+    },
+    async removeOutstandingPartialByExternalId(req, res) {
+        try {
+            const { invoiceExternalId, paymentExternalId } = req.params;
+            const result = await billService.removeOutstandingPartialByExternalId(invoiceExternalId, paymentExternalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.removeOutstandingPartialByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al deshacer la conciliación por External ID', error: error.message });
+        }
     }
 }
 

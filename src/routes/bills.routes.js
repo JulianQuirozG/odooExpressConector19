@@ -28,5 +28,8 @@ router.put('/verify-lines/:id', billController.verifyBillLines);
 router.get('/dian-json/:id', billController.getBillDianJson);
 router.put('/confirm-credit-note/:id', billController.confirmCreditNote);
 router.post('/apply-payment/:invoiceExternalId/:paymentExternalId', billController.applyPaymentPendingCredits);
+router.get('/invoice-payments/:invoiceId', billController.listInvoicePayments);
+router.post('/remove-payment/:invoiceId/:partialId', billController.removeOutstandingPartial);
+router.post('/remove-payment-external/:invoiceExternalId/:paymentExternalId', billController.removeOutstandingPartialByExternalId);
 
 module.exports = router;

@@ -1424,6 +1424,284 @@ const billService = {
             };
         }
     },
+
+    /**
+     * Listar los pagos aplicados a una factura desde el widget `invoice_payments_widget`.
+     *
+     * @async
+     * @param {number|string} invoiceId - ID de la factura.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data (array de pagos) o error.
+     *  - 200: Pagos obtenidos exitosamente.
+     *  - 404: Factura no encontrada o no confirmada.
+     *  - 500: Error en la consulta.
+     * 
+     * @example
+     * const res = await billService.listInvoicePayments(102);
+     * if (res.statusCode === 200) {
+     *   // res.data contiene array de pagos con partial_id, move_id, etc.
+     * }
+     */
+    async listInvoicePayments(invoiceId) {
+        try {
+            // Verificar que la factura exista y esté confirmada
+            const billExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            if (billExists.statusCode !== 200) {
+                return {
+                    statusCode: billExists.statusCode,
+                    message: billExists.message,
+                    data: billExists.data,
+                };
+            }
+
+            //ahora obtengo los datos del campo "invoice_payments_widget" donde se listan los pagos
+            const invoicePayments = billExists.data.invoice_payments_widget;
+
+            if (!invoicePayments) {
+                return {
+                    statusCode: 200,
+                    message: "Pagos obtenidos con éxito",
+                    data: [],
+                };
+            }
+
+            //Regreso la información de los pagos
+            return {
+                statusCode: 200,
+                message: "Pagos obtenidos con éxito",
+                data: invoicePayments.content,
+            };
+        } catch (error) {
+            console.log("Error en billService.listInvoicePayments:", error);
+            return {
+                statusCode: 500,
+                message: "Error al obtener pagos de la factura",
+                error: error.message,
+            };
+        }
+    },
+
+    /**
+     * Deshacer la conciliación entre un pago y una factura (romper la conciliación).
+     * 
+     * Utiliza el método Odoo `js_remove_outstanding_partial` para desvincu lar un pago
+     * que fue aplicado a una factura, dejando ambos sin conciliación.
+     *
+     * @async
+     * @param {number|string} invoiceId - ID de la factura (account.move).
+     * @param {number|string} partialId - ID de la conciliación (partial) a deshacer.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     *  - 200: Conciliación desecha exitosamente.
+     *  - 404: Factura no encontrada o conciliación no disponible.
+     *  - 400/500: Error en validación o consulta.
+     * 
+     * @example
+     * // Deshacer conciliación del pago partial_id 75 en la factura 102
+     * const res = await billService.removeOutstandingPartial(102, 75);
+     * if (res.statusCode === 200) console.log('Conciliación desecha');
+     */
+    async removeOutstandingPartial(invoiceId, account_payment_id) {
+        try {
+            // Validar que los parámetros no estén vacíos
+            if (!invoiceId || !account_payment_id) {
+                return {
+                    statusCode: 400,
+                    message: "El ID de la factura y el ID del pago (moveId) son requeridos",
+                    data: null
+                };
+            }
+
+            // Verificar que la factura exista y esté confirmada
+            const invoiceExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            if (invoiceExists.statusCode !== 200) {
+                return {
+                    statusCode: invoiceExists.statusCode,
+                    message: invoiceExists.message,
+                    data: invoiceExists.data
+                };
+            }
+
+            // Obtener la lista de pagos para verificar que el partial existe
+            const invoicePayments = await this.listInvoicePayments(invoiceId);
+            if (invoicePayments.statusCode !== 200) {
+                return invoicePayments;
+            }
+
+            console.log("Pagos de la factura:", invoicePayments.data);
+            console.log("Buscando partial con move_id:", account_payment_id);
+            // Buscar si el partial existe en los pagos
+            const partialExists = invoicePayments.data.find(payment => Number(payment.account_payment_id) === Number(account_payment_id));
+
+            if (!partialExists) {
+                return {
+                    statusCode: 404,
+                    message: `El pago con ID ${account_payment_id} no se encuentra entre los pagos de esta factura`,
+                    data: {
+                        invoiceId: invoiceId,
+                        account_payment_id: account_payment_id,
+                        availablePartials: invoicePayments.data.map(p => ({ 
+                            partial_id: p.partial_id, 
+                            name: p.name,
+                            amount: p.amount,
+                            date: p.date
+                        }))
+                    }
+                };
+            }
+
+            console.log("Partial encontrado:", partialExists);
+            const partialId = partialExists.partial_id;
+            const moveId = partialExists.move_id;
+            // Deshacer la conciliación utilizando js_remove_outstanding_partial
+            const response = await odooConector.executeOdooRequest(
+                'account.move',
+                'js_remove_outstanding_partial',
+                {
+                    ids: [Number(moveId)],
+                    partial_id: Number(partialId)
+                });
+
+            if (!response.success) {
+                if (response.error) {
+                    return {
+                        statusCode: 500,
+                        message: "Error al deshacer la conciliación",
+                        error: response.message
+                    };
+                }
+                return { 
+                    statusCode: 400, 
+                    message: "Error al deshacer la conciliación", 
+                    data: response.data 
+                };
+            }
+
+            // Obtener la factura actualizada
+            const updatedInvoice = await this.getOneBill(invoiceId);
+
+            //Regreso la información de la consulta
+            return { 
+                statusCode: 200, 
+                message: "Conciliación desecha exitosamente",
+                data: {
+                    invoiceId: invoiceId,
+                    moveId: moveId,
+                    partialId: partialId,
+                    updatedInvoice: updatedInvoice.statusCode === 200 ? updatedInvoice.data : null,
+                    removedPayment: {
+                        name: partialExists.name,
+                        amount: partialExists.amount,
+                        date: partialExists.date
+                    }
+                }
+            };
+
+        } catch (error) {
+            console.log("Error en billService.removeOutstandingPartial:", error);
+            return {
+                statusCode: 500,
+                message: "Error al deshacer la conciliación",
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Deshacer la conciliación entre un pago y una factura buscando ambos por External ID.
+     * 
+     * Utiliza el método Odoo `js_remove_outstanding_partial` para desvincular un pago
+     * que fue aplicado a una factura, dejando ambos sin conciliación.
+     *
+     * @async
+     * @param {string} invoiceExternalId - External ID de la factura (account.move).
+     * @param {string} paymentExternalId - External ID del pago (account.payment).
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     *  - 200: Conciliación desecha exitosamente.
+     *  - 404: Factura o pago no encontrados, o conciliación no disponible.
+     *  - 400/500: Error en validación o consulta.
+     * 
+     * @example
+     * // Deshacer conciliación por External IDs
+     * const res = await billService.removeOutstandingPartialByExternalId('bill_14_545646', 'payment_FACT_14_545646');
+     * if (res.statusCode === 200) console.log('Conciliación desecha');
+     */
+    async removeOutstandingPartialByExternalId(invoiceExternalId, paymentExternalId) {
+        try {
+            // Validar que los parámetros no estén vacíos
+            if (!invoiceExternalId || !paymentExternalId) {
+                return {
+                    statusCode: 400,
+                    message: "El External ID de la factura y del pago son requeridos",
+                    data: null
+                };
+            }
+
+            // Buscar la factura por External ID
+            const invoiceExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(invoiceExternalId)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!invoiceExternalSearch.success || invoiceExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró una factura con External ID: ${invoiceExternalId}`,
+                    data: null
+                };
+            }
+
+            const invoiceId = invoiceExternalSearch.data[0].res_id;
+            console.log("Factura encontrada por External ID:", invoiceId);
+
+            // Buscar el pago por External ID
+            const paymentExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(paymentExternalId)], ['model', '=', 'account.payment'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!paymentExternalSearch.success || paymentExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró un pago con External ID: ${paymentExternalId}`,
+                    data: null
+                };
+            }
+
+            const paymentMoveId = paymentExternalSearch.data[0].res_id;
+            console.log("Pago encontrado por External ID:", paymentMoveId);
+
+            // Reutilizar removeOutstandingPartial con los IDs internos
+            console.log("Deshaciendo conciliación entre factura ID", invoiceId, "y pago move ID", paymentMoveId);
+            const removeResult = await this.removeOutstandingPartial(invoiceId, paymentMoveId);
+
+            // Si hubo error, retornar sin formatear
+            if (removeResult.statusCode !== 200) {
+                return removeResult;
+            }
+
+            // Formatear la respuesta incluyendo los External IDs
+            return {
+                statusCode: 200,
+                message: "Conciliación desecha exitosamente por External ID",
+                data: {
+                    invoiceExternalId: invoiceExternalId,
+                    invoiceId: invoiceId,
+                    paymentExternalId: paymentExternalId,
+                    paymentMoveId: paymentMoveId,
+                    partialId: removeResult.data.partialId,
+                    updatedInvoice: removeResult.data.updatedInvoice,
+                    removedPayment: removeResult.data.removedPayment
+                }
+            };
+
+        } catch (error) {
+            console.log("Error en billService.removeOutstandingPartialByExternalId:", error);
+            return {
+                statusCode: 500,
+                message: "Error al deshacer la conciliación por External ID",
+                error: error.message
+            };
+        }
+    },
     /**
      * Actualizar las líneas de una factura con comandos Odoo (1,2,3,5,6...): actualizar, eliminar, desconectar, etc.
      *
