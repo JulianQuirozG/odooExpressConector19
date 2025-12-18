@@ -2736,23 +2736,23 @@ const billService = {
      */
     async releaseBillPaymentsAndPO(invoiceBillExternalId, paymentExternalIds, purchaseOrderId) {
         try {
-            // Validar parámetros
-            if (!invoiceBillExternalId || !paymentExternalIds || !purchaseOrderId) {
-                return {
-                    statusCode: 400,
-                    message: "Se requieren: invoiceBillExternalId, paymentExternalIds (array no vacío) y purchaseOrderId",
-                    data: null
-                };
-            }
+            // // Validar parámetros
+            // if (!invoiceBillExternalId || !paymentExternalIds || !purchaseOrderId) {
+            //     return {
+            //         statusCode: 400,
+            //         message: "Se requieren: invoiceBillExternalId, paymentExternalIds (array no vacío) y purchaseOrderId",
+            //         data: null
+            //     };
+            // }
 
-            // Verificar que paymentExternalIds sea un array
-            if (!Array.isArray(paymentExternalIds)) {
-                return {
-                    statusCode: 400,
-                    message: "paymentExternalIds debe ser un array",
-                    data: null
-                };
-            }
+            // // Verificar que paymentExternalIds sea un array
+            // if (!Array.isArray(paymentExternalIds)) {
+            //     return {
+            //         statusCode: 400,
+            //         message: "paymentExternalIds debe ser un array",
+            //         data: null
+            //     };
+            // }
 
             const results = {
                 invoiceBillExternalId: invoiceBillExternalId,
@@ -2778,31 +2778,31 @@ const billService = {
             const invoiceId = invoiceBill.data.id;
             console.log(`Factura encontrada: ${invoiceId}`);
 
-            // Paso 2: Liberar cada pago
-            if (paymentExternalIds.length > 0) {
-                for (let paymentExternalId of paymentExternalIds) {
-                    console.log(`Procesando liberación de pago: ${paymentExternalId}`);
+            // // Paso 2: Liberar cada pago
+            // if (paymentExternalIds.length > 0) {
+            //     for (let paymentExternalId of paymentExternalIds) {
+            //         console.log(`Procesando liberación de pago: ${paymentExternalId}`);
 
-                    const releasePaymentResult = await this.removeOutstandingPartialByExternalId(invoiceBillExternalId, paymentExternalId);
+            //         const releasePaymentResult = await this.removeOutstandingPartialByExternalId(invoiceBillExternalId, paymentExternalId);
 
-                    if (releasePaymentResult.statusCode === 200) {
-                        results.releasedPayments.push({
-                            paymentExternalId: paymentExternalId,
-                            status: 'success',
-                            data: releasePaymentResult.data
-                        });
-                        console.log(`Pago liberado exitosamente: ${paymentExternalId}`);
-                    } else {
-                        results.failedPayments.push({
-                            paymentExternalId: paymentExternalId,
-                            status: 'failed',
-                            message: releasePaymentResult.message,
-                            error: releasePaymentResult.error
-                        });
-                        console.log(`Error al liberar pago ${paymentExternalId}: ${releasePaymentResult.message}`);
-                    }
-                }
-            }
+            //         if (releasePaymentResult.statusCode === 200) {
+            //             results.releasedPayments.push({
+            //                 paymentExternalId: paymentExternalId,
+            //                 status: 'success',
+            //                 data: releasePaymentResult.data
+            //             });
+            //             console.log(`Pago liberado exitosamente: ${paymentExternalId}`);
+            //         } else {
+            //             results.failedPayments.push({
+            //                 paymentExternalId: paymentExternalId,
+            //                 status: 'failed',
+            //                 message: releasePaymentResult.message,
+            //                 error: releasePaymentResult.error
+            //             });
+            //             console.log(`Error al liberar pago ${paymentExternalId}: ${releasePaymentResult.message}`);
+            //         }
+            //     }
+            // }
 
             // Paso 3: Resetear la factura a borrador
             console.log(`Reestableciendo factura a borrador: ${invoiceId}`);
@@ -2818,7 +2818,7 @@ const billService = {
             } else {
                 results.billReset = {
                     status: 'success',
-                    message: resetBillResult.message
+                    message: resetBillResult.messagefinalStatusCode
                 };
                 console.log(`Factura reestablecida a borrador exitosamente`);
             }
@@ -2849,7 +2849,8 @@ const billService = {
             }
 
             // Determinar statusCode final
-            const finalStatusCode = results.failedPayments.length === 0 && results.billReset.status === 'success' ? 200 : 206;
+            //const finalStatusCode = results.failedPayments.length === 0 && results.billReset.status === 'success' ? 200 : 206;
+            const finalStatusCode =results.billReset.status === 'success' ? 200 : 206;
 
             return {
                 statusCode: finalStatusCode,
