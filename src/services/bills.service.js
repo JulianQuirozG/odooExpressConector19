@@ -708,6 +708,65 @@ const billService = {
         }
     },
     /**
+     * Cancelar una factura. Realiza la acción `button_cancel` en Odoo.
+     *
+     * @async
+     * @param {number|string} id - ID de la factura a cancelar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     */
+    async cancelBill(id) {
+        try {
+            //verifico que la factura exista y no este ya cancelada
+            const billExists = await this.getOneBill(id, [['state', '!=', 'cancel']]);
+            if (billExists.statusCode !== 200) {
+                return {
+                    statusCode: billExists.statusCode,
+                    message: billExists.message,
+                    data: billExists.data,
+                };
+            }
+
+            //cancelo la factura
+            const response = await odooConector.executeOdooRequest(
+                "account.move",
+                "button_cancel",
+                {
+                    ids: [Number(id)],
+                }
+            );
+
+            //Si hay algun error lo gestionamos
+            if (!response.success) {
+                if (response.error) {
+                    return {
+                        statusCode: 500,
+                        message: "Error al cancelar factura",
+                        error: response.message,
+                    };
+                }
+                return {
+                    statusCode: 400,
+                    message: "Error al cancelar factura",
+                    data: response.data,
+                };
+            }
+
+            //Regreso la respuesta de la consulta
+            return {
+                statusCode: 200,
+                message: "Factura cancelada con éxito",
+                data: response.data,
+            };
+        } catch (error) {
+            console.log("Error en billService.cancelBill:", error);
+            return {
+                statusCode: 500,
+                message: "Error al cancelar factura",
+                error: error.message,
+            };
+        }
+    },
+    /**
      * Crear una nota de débito a partir de una factura confirmada.
      *
      * @async
@@ -2578,6 +2637,165 @@ const billService = {
             return { statusCode: 500, message: 'Error al validar datos de las líneas', error: error.message };
         }
 
+    },
+
+    /**
+     * Liberar una factura de compra cancelando sus pagos aplicados y su orden de compra asociada.
+     *
+     * Flujo:
+     * 1. Busca la factura por External ID
+     * 2. Para cada pago en paymentExternalIds, remueve la conciliación (libera el pago)
+     * 3. Libera la orden de compra reseteándola a borrador
+     * 4. Retorna un resumen con los resultados de cada operación
+     *
+     * @async
+     * @param {string} invoiceBillExternalId - External ID de la factura de compra (account.move)
+     * @param {string[]} paymentExternalIds - Array de External IDs de pagos a liberar
+     * @param {number|string} purchaseOrderId - ID de la orden de compra a liberar
+     * @returns {Promise<Object>} Resultado con statusCode, message y data con detalles de cada operación
+     *  - 200: Factura y pagos liberados exitosamente
+     *  - 400/500: Error en validación o procesamiento
+     *
+     * @example
+     * const res = await billService.releaseBillPaymentsAndPO(
+     *   'bill_14_545646',
+     *   ['payment_FACT_14_545646', 'payment_FACT_14_545647'],
+     *   123
+     * );
+     */
+    async releaseBillPaymentsAndPO(invoiceBillExternalId, paymentExternalIds, purchaseOrderId) {
+        try {
+            // Validar parámetros
+            if (!invoiceBillExternalId || !paymentExternalIds || !purchaseOrderId) {
+                return {
+                    statusCode: 400,
+                    message: "Se requieren: invoiceBillExternalId, paymentExternalIds (array no vacío) y purchaseOrderId",
+                    data: null
+                };
+            }
+
+            // Verificar que paymentExternalIds sea un array
+            if (!Array.isArray(paymentExternalIds)) {
+                return {
+                    statusCode: 400,
+                    message: "paymentExternalIds debe ser un array",
+                    data: null
+                };
+            }
+
+            const results = {
+                invoiceBillExternalId: invoiceBillExternalId,
+                purchaseOrderId: purchaseOrderId,
+                releasedPayments: [],
+                failedPayments: [],
+                purchaseOrderRelease: null,
+                invoice: null
+            };
+
+            console.log(`Iniciando liberación de factura: ${invoiceBillExternalId}`);
+
+            // Paso 1: Verificar que la factura existe
+            const invoiceBill = await this.getBillByExternalId(invoiceBillExternalId);
+            if (invoiceBill.statusCode !== 200) {
+                return {
+                    statusCode: 404,
+                    message: `Factura no encontrada con External ID: ${invoiceBillExternalId}`,
+                    data: invoiceBill.data
+                };
+            }
+
+            const invoiceId = invoiceBill.data.id;
+            console.log(`Factura encontrada: ${invoiceId}`);
+
+            // Paso 2: Liberar cada pago
+            if (paymentExternalIds.length > 0) {
+                for (let paymentExternalId of paymentExternalIds) {
+                    console.log(`Procesando liberación de pago: ${paymentExternalId}`);
+
+                    const releasePaymentResult = await this.removeOutstandingPartialByExternalId(invoiceBillExternalId, paymentExternalId);
+
+                    if (releasePaymentResult.statusCode === 200) {
+                        results.releasedPayments.push({
+                            paymentExternalId: paymentExternalId,
+                            status: 'success',
+                            data: releasePaymentResult.data
+                        });
+                        console.log(`Pago liberado exitosamente: ${paymentExternalId}`);
+                    } else {
+                        results.failedPayments.push({
+                            paymentExternalId: paymentExternalId,
+                            status: 'failed',
+                            message: releasePaymentResult.message,
+                            error: releasePaymentResult.error
+                        });
+                        console.log(`Error al liberar pago ${paymentExternalId}: ${releasePaymentResult.message}`);
+                    }
+                }
+            }
+
+            // Paso 3: Resetear la factura a borrador
+            console.log(`Reestableciendo factura a borrador: ${invoiceId}`);
+            const resetBillResult = await this.resetToDraftBill(invoiceId);
+            
+            if (resetBillResult.statusCode !== 200) {
+                results.billReset = {
+                    status: 'failed',
+                    message: resetBillResult.message,
+                    error: resetBillResult.error
+                };
+                console.log(`Error al resetear factura: ${resetBillResult.message}`);
+            } else {
+                results.billReset = {
+                    status: 'success',
+                    message: resetBillResult.message
+                };
+                console.log(`Factura reestablecida a borrador exitosamente`);
+            }
+
+            // Paso 4: Cancelar la factura
+            console.log(`Cancelando factura: ${invoiceId}`);
+            const cancelBillResult = await this.cancelBill(invoiceId);
+            
+            if (cancelBillResult.statusCode !== 200) {
+                results.billCancel = {
+                    status: 'failed',
+                    message: cancelBillResult.message,
+                    error: cancelBillResult.error
+                };
+                console.log(`Error al cancelar factura: ${cancelBillResult.message}`);
+            } else {
+                results.billCancel = {
+                    status: 'success',
+                    message: cancelBillResult.message
+                };
+                console.log(`Factura cancelada exitosamente`);
+            }
+
+            // Paso 5: Obtener factura actualizada
+            const updatedInvoice = await this.getOneBill(invoiceId);
+            if (updatedInvoice.statusCode === 200) {
+                results.invoice = updatedInvoice.data;
+            }
+
+            // Determinar statusCode final
+            const finalStatusCode = results.failedPayments.length === 0 && results.billReset.status === 'success' && results.billCancel.status === 'success' ? 200 : 206;
+
+            return {
+                statusCode: finalStatusCode,
+                message: finalStatusCode === 200 
+                    ? "Factura, pagos y orden de compra liberados exitosamente" 
+                    : "Factura liberada parcialmente con algunos errores",
+                data: results
+            };
+
+        } catch (error) {
+            console.log("Error en billService.releaseBillPaymentsAndPO:", error);
+            return {
+                statusCode: 500,
+                message: "Error al liberar factura, pagos y orden de compra",
+                error: error.message
+            };
+        }
     },
 };
 
