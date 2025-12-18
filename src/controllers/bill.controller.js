@@ -70,6 +70,16 @@ const billController = {
             res.status(500).json({ statusCode: 500, message: 'Error al confirmar factura', error: error.message });
         }
     },
+    async confirmBillByExternalId(req, res) {
+        try {
+            const { externalId } = req.params;
+            const result = await billService.confirmBillByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.confirmBillByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al confirmar factura por External ID', error: error.message });
+        }
+    },
     async resetToDraftBill(req, res) {
         try {
             const { id } = req.params;
@@ -78,6 +88,16 @@ const billController = {
         } catch (error) {
             console.error('Error en billController.resetToDraftBill:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al reestablecer factura a borrador', error: error.message });
+        }
+    },
+    async cancelBill(req, res) {
+        try {
+            const { id } = req.params;
+            const result = await billService.cancelBill(id);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.cancelBill:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al cancelar factura', error: error.message });
         }
     },
     async debitNote(req, res) {
@@ -208,6 +228,28 @@ const billController = {
         } catch (error) {
             console.error('Error en billController.removeOutstandingPartialByExternalId:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al deshacer la conciliación por External ID', error: error.message });
+        }
+    },
+    async releaseBillPaymentsAndPO(req, res) {
+        try {
+            const { invoiceBillExternalId } = req.params;
+            const { paymentExternalIds, purchaseOrderId } = req.body;
+            const result = await billService.releaseBillPaymentsAndPO(invoiceBillExternalId, paymentExternalIds, purchaseOrderId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.releaseBillPaymentsAndPO:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al liberar factura, pagos y orden de compra', error: error.message });
+        }
+    },
+    async updateBillLinesFromPayloadByExternalIds(req, res) {
+        try {
+            const { billExternalId } = req.params;
+            const { invoice_lines } = req.body;
+            const result = await billService.updateBillLinesFromPayloadByExternalIds(billExternalId, invoice_lines);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en billController.updateBillLinesFromPayloadByExternalIds:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al actualizar líneas de factura por External ID', error: error.message });
         }
     }
 }
