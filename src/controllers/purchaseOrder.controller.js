@@ -76,6 +76,17 @@ const purchaseOrderController = {
             res.status(500).json({ statusCode: 500, message: 'Error al confirmar la orden de compra', error: error.message });
         }
     },
+    async confirmPurchaseOrderByExternalId(req, res) {
+        try {
+            const { externalId } = req.params;
+            const result = await purchaseOrderService.confirmPurchaseOrderByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error en purchaseOrderController.confirmPurchaseOrderByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al confirmar la orden de compra por External ID', error: error.message });
+        }
+    },
     async createBillFromPurchaseOrder(req, res) {
         try {
             const { id } = req.body;

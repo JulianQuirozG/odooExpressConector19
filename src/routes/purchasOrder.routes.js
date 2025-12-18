@@ -15,6 +15,7 @@ router.put('/editRows/:id', purchaseOrderController.updatePurchaseOrderLines);
 router.post('/update-lines-payload-external/:purchaseOrderExternalId', purchaseOrderController.updatePurchaseOrderLinesFromPayloadByExternalIds);
 router.put('/update-lines/:id', purchaseOrderController.updatePurchaseOrderLinesFromPayload);
 router.post('/confirm/:id', purchaseOrderController.confirmPurchaseOrder);
+router.put('/confirm-external/:externalId', purchaseOrderController.confirmPurchaseOrderByExternalId);
 router.post('/create-bill', purchaseOrderController.createBillFromPurchaseOrder);
 router.post('/validListId', purchaseOrderController.validListId);
 router.post('/verifyStock/:id', purchaseOrderController.verifyAndUpdatePurchaseOrderLines);

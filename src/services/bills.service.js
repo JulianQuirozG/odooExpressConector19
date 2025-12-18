@@ -537,6 +537,77 @@ const billService = {
         }
     },
     /**
+     * Confirmar una factura buscando por External ID.
+     *
+     * @async
+     * @param {string} externalId - External ID de la factura a confirmar.
+     * @param {string} [action='compra'] - Tipo de confirmación.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     *  - 200: Factura confirmada exitosamente.
+     *  - 404: Factura no encontrada con el External ID.
+     *  - 400/500: Error en validación o confirmación.
+     *
+     * @example
+     * const res = await billService.confirmBillByExternalId('bill_14_123456');
+     * if (res.statusCode === 200) console.log('Factura confirmada');
+     */
+    async confirmBillByExternalId(externalId, action = 'compra') {
+        try {
+            // Validar que el parámetro no esté vacío
+            if (!externalId) {
+                return {
+                    statusCode: 400,
+                    message: "El External ID de la factura es requerido",
+                    data: null
+                };
+            }
+
+            // Buscar la factura por External ID
+            const billExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(externalId)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!billExternalSearch.success || billExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró una factura con External ID: ${externalId}`,
+                    data: null
+                };
+            }
+
+            const billId = billExternalSearch.data[0].res_id;
+            console.log("Factura encontrada por External ID:", billId);
+
+            // Reutilizar confirmBill con el ID interno
+            const confirmResult = await this.confirmBill(billId, action);
+
+            // Si hubo error, retornar sin formatear
+            if (confirmResult.statusCode !== 200) {
+                return confirmResult;
+            }
+
+            // Formatear la respuesta incluyendo el External ID
+            return {
+                statusCode: 200,
+                message: "Factura confirmada exitosamente por External ID",
+                data: {
+                    externalId: externalId,
+                    billId: billId,
+                    result: confirmResult.data
+                }
+            };
+
+        } catch (error) {
+            console.log("Error en billService.confirmBillByExternalId:", error);
+            return {
+                statusCode: 500,
+                message: "Error al confirmar factura por External ID",
+                error: error.message
+            };
+        }
+    },
+    /**
      * Confirmar una nota de crédito: verifica, confirma y sincroniza con DIAN.
      *
      * @async
@@ -2752,24 +2823,24 @@ const billService = {
                 console.log(`Factura reestablecida a borrador exitosamente`);
             }
 
-            // Paso 4: Cancelar la factura
-            console.log(`Cancelando factura: ${invoiceId}`);
-            const cancelBillResult = await this.cancelBill(invoiceId);
+            // // Paso 4: Cancelar la factura
+            // console.log(`Cancelando factura: ${invoiceId}`);
+            // const cancelBillResult = await this.cancelBill(invoiceId);
             
-            if (cancelBillResult.statusCode !== 200) {
-                results.billCancel = {
-                    status: 'failed',
-                    message: cancelBillResult.message,
-                    error: cancelBillResult.error
-                };
-                console.log(`Error al cancelar factura: ${cancelBillResult.message}`);
-            } else {
-                results.billCancel = {
-                    status: 'success',
-                    message: cancelBillResult.message
-                };
-                console.log(`Factura cancelada exitosamente`);
-            }
+            // if (cancelBillResult.statusCode !== 200) {
+            //     results.billCancel = {
+            //         status: 'failed',
+            //         message: cancelBillResult.message,
+            //         error: cancelBillResult.error
+            //     };
+            //     console.log(`Error al cancelar factura: ${cancelBillResult.message}`);
+            // } else {
+            //     results.billCancel = {
+            //         status: 'success',
+            //         message: cancelBillResult.message
+            //     };
+            //     console.log(`Factura cancelada exitosamente`);
+            // }
 
             // Paso 5: Obtener factura actualizada
             const updatedInvoice = await this.getOneBill(invoiceId);
@@ -2778,7 +2849,7 @@ const billService = {
             }
 
             // Determinar statusCode final
-            const finalStatusCode = results.failedPayments.length === 0 && results.billReset.status === 'success' && results.billCancel.status === 'success' ? 200 : 206;
+            const finalStatusCode = results.failedPayments.length === 0 && results.billReset.status === 'success' ? 200 : 206;
 
             return {
                 statusCode: finalStatusCode,
@@ -2793,6 +2864,282 @@ const billService = {
             return {
                 statusCode: 500,
                 message: "Error al liberar factura, pagos y orden de compra",
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Actualiza líneas de una factura desde un payload con External IDs
+     * Resuelve los External IDs a IDs internos para la factura y productos
+     * @async
+     * @function updateBillLinesFromPayloadByExternalIds
+     * @param {string} billExternalId - External ID de la factura
+     * @param {Array<Object>} invoiceLines - Array de líneas a procesar
+     * @param {string} invoiceLines[].product_external_id - External ID del producto (requerido)
+     * @param {number} invoiceLines[].quantity - Cantidad del producto
+     * @param {number} invoiceLines[].price_unit - Precio unitario
+     * @param {string} [invoiceLines[].name] - Descripción de la línea
+     * @param {string} [invoiceLines[].date_maturity] - Fecha de vencimiento
+     * @param {string} [invoiceLines[].action] - Acción: 'UPDATE', 'DELETE', o undefined para crear
+     * @returns {Promise<Object>} Respuesta con el resultado de la operación
+     * @returns {number} returns.statusCode - Código de estado HTTP (200, 400, 404, 500)
+     * @returns {string} returns.message - Mensaje descriptivo
+     * @returns {Object} returns.data - Datos de respuesta con factura actualizada
+     * @returns {string} [returns.error] - Mensaje de error si ocurre
+     * 
+     * @example
+     * const payload = {
+     *   invoice_lines: [
+     *     { 
+     *       product_external_id: 'prod_001', 
+     *       quantity: 5, 
+     *       price_unit: 100000,
+     *       action: 'UPDATE'
+     *     }
+     *   ]
+     * };
+     * const result = await billService.updateBillLinesFromPayloadByExternalIds(
+     *   'bill_external_123', 
+     *   payload.invoice_lines
+     * );
+     */
+    async updateBillLinesFromPayloadByExternalIds(billExternalId, invoiceLines = []) {
+        try {
+            // Validar que el External ID de la factura esté presente
+            if (!billExternalId) {
+                return {
+                    statusCode: 400,
+                    message: 'El External ID de la factura es requerido',
+                    data: null
+                };
+            }
+
+            // Buscar la factura por External ID
+            const billExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(billExternalId)], ['model', '=', 'account.move'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+            console.log("Resultado de búsqueda de factura por External ID:", billExternalSearch);
+            if (!billExternalSearch.success || billExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró una factura con External ID: ${billExternalId}`,
+                    data: null
+                };
+            }
+
+            const billId = billExternalSearch.data[0].res_id;
+            console.log("Factura encontrada por External ID:", billId);
+
+            // Validar que se proporcionen líneas
+            if (!invoiceLines || !Array.isArray(invoiceLines) || invoiceLines.length === 0) {
+                return { 
+                    statusCode: 400, 
+                    message: 'Debe proporcionar un array de invoice_lines para actualizar' 
+                };
+            }
+
+            // Validar y resolver External IDs de productos
+            const productExternalIds = invoiceLines
+                .filter(line => line.product_external_id)
+                .map(line => line.product_external_id);
+
+            if (productExternalIds.length === 0) {
+                return {
+                    statusCode: 400,
+                    message: 'Todas las líneas deben tener un product_external_id',
+                    data: null
+                };
+            }
+
+            // Buscar los productos por sus External IDs
+            const productsExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [
+                    ['name', 'in', productExternalIds],
+                    ['model', '=', 'product.product'],
+                    ['module', '=', '__custom__']
+                ],
+                fields: ['name', 'res_id']
+            });
+
+            if (!productsExternalSearch.success) {
+                return {
+                    statusCode: 500,
+                    message: 'Error al buscar productos por External ID',
+                    error: productsExternalSearch.message
+                };
+            }
+
+            // Crear un mapa de External ID -> product_id interno
+            const productIdMap = {};
+            productsExternalSearch.data.forEach(product => {
+                productIdMap[product.name] = product.res_id;
+            });
+
+            // Verificar que todos los productos fueron encontrados
+            const foundProductExternalIds = Object.keys(productIdMap);
+            const missingProductIds = productExternalIds.filter(id => !foundProductExternalIds.includes(id));
+
+            if (missingProductIds.length > 0) {
+                return {
+                    statusCode: 404,
+                    message: `Los siguientes productos no fueron encontrados: ${missingProductIds.join(', ')}`,
+                    data: {
+                        notFoundProductExternalIds: missingProductIds,
+                        billId: billId
+                    }
+                };
+            }
+
+            console.log("Productos encontrados por External ID:", productIdMap);
+
+            // Obtener la factura actual
+            const billExists = await this.getOneBill(billId);
+            if (billExists.statusCode !== 200) {
+                return { 
+                    statusCode: billExists.statusCode, 
+                    message: billExists.message, 
+                    data: billExists.data 
+                };
+            }
+
+            // Obtener las líneas actuales de la factura
+            const linesResult = await this.getLinesByBillId(billId, 'full');
+            if (linesResult.statusCode !== 200) {
+                return { 
+                    statusCode: linesResult.statusCode,
+                    message: linesResult.message,
+                    data: linesResult.data
+                };
+            }
+
+            // Transformar las líneas reemplazando product_external_id por product_id
+            const transformedInvoiceLines = invoiceLines.map((line, index) => {
+                if (!line.product_external_id) {
+                    throw new Error(`Línea ${index + 1}: El product_external_id es requerido`);
+                }
+
+                const product_id = productIdMap[line.product_external_id];
+                if (!product_id) {
+                    throw new Error(`Línea ${index + 1}: Producto no encontrado para External ID: ${line.product_external_id}`);
+                }
+
+                return {
+                    product_id: product_id,
+                    quantity: line.quantity,
+                    price_unit: line.price_unit,
+                    name: line.name,
+                    date_maturity: line.date_maturity,
+                    action: line.action
+                };
+            });
+
+            console.log("Líneas transformadas con product_id interno:", transformedInvoiceLines);
+
+            // Agrupar líneas por acción: actualizar, eliminar, crear
+            const linesToUpdate = [];
+            const linesToDelete = [];
+            const linesToCreate = [];
+            let lineIndex = 0;
+
+            // Procesar cada línea transformada
+            transformedInvoiceLines.forEach((transformedLine) => {
+                if (transformedLine.action === 'DELETE') {
+                    // Marcar para eliminación - eliminar todas las existentes
+                    billExists.data.invoice_line_ids.forEach(lineId => {
+                        linesToDelete.push(lineId);
+                    });
+                    console.log(`Línea marcada para eliminación`);
+                } else {
+                    // Crear nuevas líneas o actualizar
+                    const newLineData = {
+                        product_id: transformedLine.product_id,
+                        quantity: transformedLine.quantity,
+                        price_unit: transformedLine.price_unit
+                    };
+                    
+                    if (transformedLine.name) {
+                        newLineData.name = transformedLine.name;
+                    }
+                    
+                    if (transformedLine.date_maturity) {
+                        newLineData.date_maturity = transformedLine.date_maturity;
+                    }
+
+                    linesToCreate.push(newLineData);
+                    console.log(`Línea será creada o actualizada`);
+                }
+            });
+
+            console.log('Líneas a crear:', linesToCreate);
+            console.log('Líneas a eliminar:', linesToDelete);
+
+            // Ejecutar actualizaciones, eliminaciones y creaciones
+            const updateResults = [];
+
+            // 1. Eliminar líneas primero si es necesario
+            if (linesToDelete.length > 0) {
+                console.log('Eliminando líneas:', linesToDelete);
+                const deleteResponse = await this.updateBillLines(billId, 2, linesToDelete);
+                if (deleteResponse.statusCode !== 200) {
+                    return {
+                        statusCode: deleteResponse.statusCode,
+                        message: 'Error al eliminar líneas de factura',
+                        error: deleteResponse.error
+                    };
+                }
+                updateResults.push({ action: 'DELETE', count: linesToDelete.length });
+            }
+
+            // 2. Crear nuevas líneas
+            if (linesToCreate.length > 0) {
+                console.log('Creando nuevas líneas...');
+                // Para crear nuevas líneas, usamos el comando 0 (create)
+                const createCommands = linesToCreate.map(lineData => [0, 0, lineData]);
+                
+                const createResponse = await odooConector.executeOdooRequest("account.move", "write", {
+                    ids: [Number(billId)],
+                    vals: {
+                        invoice_line_ids: createCommands
+                    }
+                });
+
+                if (!createResponse.success) {
+                    return {
+                        statusCode: createResponse.statusCode || 500,
+                        message: 'Error al crear nuevas líneas de factura',
+                        error: createResponse.error || createResponse.message
+                    };
+                }
+                updateResults.push({ action: 'CREATE', count: linesToCreate.length });
+            }
+
+            // Obtener la factura actualizada
+            const updatedBill = await this.getOneBill(billId);
+
+            return { 
+                statusCode: 200, 
+                message: 'Líneas de factura actualizadas con éxito', 
+                data: {
+                    billId: billId,
+                    billExternalId: billExternalId,
+                    bill: updatedBill.data,
+                    linesProcessed: transformedInvoiceLines.length,
+                    updateResults: updateResults,
+                    summary: {
+                        created: linesToCreate.length,
+                        deleted: linesToDelete.length,
+                        total: transformedInvoiceLines.length
+                    }
+                }
+            };
+
+        } catch (error) {
+            console.error("Error en updateBillLinesFromPayloadByExternalIds:", error);
+            return {
+                statusCode: 500,
+                message: 'Error al actualizar líneas de factura desde payload con External IDs',
                 error: error.message
             };
         }
