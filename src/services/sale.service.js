@@ -443,12 +443,14 @@ const saleService = {
                     const confirmPurchaseOrder = await purchaseOrderService.confirmPurchaseOrder(purchaseOrderId);
                     if (confirmPurchaseOrder.statusCode !== 200) return confirmPurchaseOrder;
 
+
                     //crear la factura de la orden de compra
                     const bill = await purchaseOrderService.createBillFromPurchaseOrder([purchaseOrderId]);
                     if (bill.statusCode !== 201) return bill;
 
                     //Crear External ID para la factura de compra
-                    const externalPurchaseIdName = `purchase_invoice_${externalCompanyId}_${external_solicitud_transportista}`;
+                    const externalPurchaseIdName = dataCompra.external_bill_id;
+                    console.log("Venta ", sale);
                     const createExternalId = await odooConector.createExternalId(externalPurchaseIdName, 'account.move', bill.data.id);
 
                     if (!createExternalId.success) {

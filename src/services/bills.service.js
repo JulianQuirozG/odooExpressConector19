@@ -1079,40 +1079,8 @@ const billService = {
             }
             console.log("External ID encontrado:", billExists);
             console.log("InFORMACION DATA CREDITO", dataCredit);
-            // Crear el wizard de nota de credito
-            const wizardData = {
-                move_ids: [Number(billId)],
-                reason: "Anulación",
-                "l10n_co_edi_description_code_credit": "2",
-                date: dataCredit.date || new Date().toISOString().split("T")[0],
-                journal_id: dataCredit.journal_id || false,
-            };
-
-            //Creo el wizard de nota de credito
-            const wizardResponse = await odooConector.executeOdooRequest(
-                "account.move.reversal",
-                "create",
-                {
-                    vals_list: [wizardData],
-                }
-            );
-
-            if (!wizardResponse.success) {
-                return {
-                    statusCode: 500,
-                    message: "Error al crear wizard",
-                    error: wizardResponse.message,
-                };
-            }
-
-            //Crear la nota de credito
-            const creditNoteResponse = await odooConector.executeOdooRequest(
-                "account.move.reversal",
-                "reverse_moves",
-                {
-                    ids: wizardResponse.data,
-                }
-            );
+           
+            const creditNoteResponse = await this.generateCreditNoteOdoo(billId, dataCredit);
             if (creditNoteResponse.error) return { statusCode: 500, message: "Error al crear nota de crédito", error: creditNoteResponse.message };
             if (!creditNoteResponse.success) {
                 return {
@@ -1146,7 +1114,11 @@ const billService = {
                 return updatedCreditNote;
             }
 
-            const creditNote = await this.confirmCreditNote(creditNoteId);
+            if (billExists.data.move_type != 'in_invoice') {
+                await this.confirmCreditNote(creditNoteId);
+            }else{
+                await this.confirmBill(creditNoteId);
+            }
             
             // Crear External ID para la nota de crédito
             const creditNoteExternalId = dataCredit.externalCreditNoteId;
@@ -1160,7 +1132,7 @@ const billService = {
             return {
                 statusCode: 201,
                 message: "Nota de crédito creada con éxito por External ID",
-                data: creditNote.data,
+                data: creditNoteId,
                 externalId: externalId,
                 creditNoteExternalId: creditNoteExternalId,
                 billId: billId,
@@ -1171,6 +1143,53 @@ const billService = {
             return {
                 statusCode: 500,
                 message: "Error al crear nota de crédito por External ID",
+                error: error.message,
+            };
+        }
+    },
+
+    async generateCreditNoteOdoo(billId, dataCredit) {
+        try {
+           const wizardData = {
+                move_ids: [Number(billId)],
+                reason: "Anulación",
+                "l10n_co_edi_description_code_credit": "2",
+                date: dataCredit.date || new Date().toISOString().split("T")[0],
+                journal_id: dataCredit.journal_id || false,
+            };
+
+            //Creo el wizard de nota de credito
+            const wizardResponse = await odooConector.executeOdooRequest(
+                "account.move.reversal",
+                "create",
+                {
+                    vals_list: [wizardData],
+                }
+            );
+
+            if (!wizardResponse.success) {
+                return {
+                    statusCode: 500,
+                    message: "Error al crear wizard",
+                    error: wizardResponse.message,
+                };
+            }
+
+            //Crear la nota de credito
+            const creditNoteResponse = await odooConector.executeOdooRequest(
+                "account.move.reversal",
+                "reverse_moves",
+                {
+                    ids: wizardResponse.data,
+                }
+            );
+
+            return creditNoteResponse;
+        } catch (error) {
+            console.log("Error en billService.generateCreditNoteOdoo:", error);
+            return {
+                statusCode: 500,
+                message: "Error al generar nota de crédito en Odoo",
                 error: error.message,
             };
         }
@@ -2388,7 +2407,6 @@ const billService = {
             jsonDian.number = number;
             if (type_document_id.id !== 5) jsonDian.prefix = prefix;
             jsonDian.customer = customer;
-
             //Campos específicos segun el tipo de documento
             if (type_document_id.id == 1) {
                 //Campos de factura de venta
@@ -2437,6 +2455,8 @@ const billService = {
                 jsonDian.billing_reference = billing_reference;
             }
 
+
+            console.log("JSON DIAN creado:", jsonDian);
             return {
                 statusCode: 200,
                 message: 'JSON para DIAN creado con éxito',
