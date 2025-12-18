@@ -518,6 +518,76 @@ const purchaseOrderService = {
         }
     },
     /**
+     * Confirmar una orden de compra buscando por External ID.
+     *
+     * @async
+     * @param {string} externalId - External ID de la orden de compra a confirmar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     *  - 200: Orden confirmada exitosamente.
+     *  - 404: Orden no encontrada con el External ID.
+     *  - 400/500: Error en validación o confirmación.
+     *
+     * @example
+     * const res = await purchaseOrderService.confirmPurchaseOrderByExternalId('po_14_123456');
+     * if (res.statusCode === 200) console.log('Orden confirmada');
+     */
+    async confirmPurchaseOrderByExternalId(externalId) {
+        try {
+            // Validar que el parámetro no esté vacío
+            if (!externalId) {
+                return {
+                    statusCode: 400,
+                    message: "El External ID de la orden de compra es requerido",
+                    data: null
+                };
+            }
+
+            // Buscar la orden de compra por External ID
+            const poExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', String(externalId)], ['model', '=', 'purchase.order'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            if (!poExternalSearch.success || poExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró una orden de compra con External ID: ${externalId}`,
+                    data: null
+                };
+            }
+
+            const purchaseOrderId = poExternalSearch.data[0].res_id;
+            console.log("Orden de compra encontrada por External ID:", purchaseOrderId);
+
+            // Reutilizar confirmPurchaseOrder con el ID interno
+            const confirmResult = await this.confirmPurchaseOrder(purchaseOrderId);
+
+            // Si hubo error, retornar sin formatear
+            if (confirmResult.statusCode !== 200) {
+                return confirmResult;
+            }
+
+            // Formatear la respuesta incluyendo el External ID
+            return {
+                statusCode: 200,
+                message: "Orden de compra confirmada exitosamente por External ID",
+                data: {
+                    externalId: externalId,
+                    purchaseOrderId: purchaseOrderId,
+                    result: confirmResult.data
+                }
+            };
+
+        } catch (error) {
+            console.log("Error en purchaseOrderService.confirmPurchaseOrderByExternalId:", error);
+            return {
+                statusCode: 500,
+                message: "Error al confirmar orden de compra por External ID",
+                error: error.message
+            };
+        }
+    },
+    /**
      * Crea una factura (bill) a partir de una o más órdenes de compra
      * @async
      * @function createBillFromPurchaseOrder
