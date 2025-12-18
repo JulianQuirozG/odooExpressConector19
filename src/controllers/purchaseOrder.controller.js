@@ -23,6 +23,16 @@ const purchaseOrderController = {
             res.status(500).json({ statusCode: 500, message: 'Error al obtener orden de compra', error: error.message });
         }
     },
+    async getPurchaseOrderWithLinesDetail(req, res) {
+        try {
+            const result = await purchaseOrderService.getPurchaseOrderWithLinesDetail(req.params.id);
+            res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error en purchaseOrderController.getPurchaseOrderWithLinesDetail:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al obtener orden de compra con detalle', error: error.message });
+        }
+    },
     async createPurchaseOrder(req, res) {
         try {
             const result = await purchaseOrderService.createPurchaseOrder(req.body);
@@ -97,6 +107,74 @@ const purchaseOrderController = {
         catch (error) {
             console.error('Error en purchaseOrderController.verifyAndUpdatePurchaseOrderLines:', error);
             res.status(500).json({ statusCode: 500, message: 'Error al verificar y actualizar las líneas de la orden de compra', error: error.message });
+        }
+    },
+    async cancelPurchaseOrder(req, res) {
+        try {
+            const { id } = req.params;
+            const result = await purchaseOrderService.cancelPurchaseOrder(id);
+            res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error en purchaseOrderController.cancelPurchaseOrder:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al cancelar orden de compra', error: error.message });
+        }
+    },
+    async cancelPurchaseOrderByExternalId(req, res) {
+        try {
+            const { externalId } = req.params;
+            const result = await purchaseOrderService.cancelPurchaseOrderByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error en purchaseOrderController.cancelPurchaseOrderByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al cancelar orden de compra por External ID', error: error.message });
+        }
+    },
+    async resetToDraftPurchaseOrder(req, res) {
+        try {
+            const { id } = req.params;
+            const result = await purchaseOrderService.resetToDraftPurchaseOrder(id);
+            res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error en purchaseOrderController.resetToDraftPurchaseOrder:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al resetear orden de compra a borrador', error: error.message });
+        }
+    },
+    async resetToDraftPurchaseOrderByExternalId(req, res) {
+        try {
+            const { externalId } = req.params;
+            const result = await purchaseOrderService.resetToDraftPurchaseOrderByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error en purchaseOrderController.resetToDraftPurchaseOrderByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al resetear orden de compra a borrador por External ID', error: error.message });
+        }
+    },
+    async updatePurchaseOrderLinesFromPayload(req, res) {
+        try {
+            const { id } = req.params;
+            const { order_lines } = req.body;
+            const result = await purchaseOrderService.updatePurchaseOrderLinesFromPayload(id, order_lines);
+            res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error en purchaseOrderController.updatePurchaseOrderLinesFromPayload:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al actualizar líneas de orden de compra desde payload', error: error.message });
+        }
+    },
+    async updatePurchaseOrderLinesFromPayloadByExternalIds(req, res) {
+        try {
+            const { purchaseOrderExternalId } = req.params;
+            const { order_lines } = req.body;
+            const result = await purchaseOrderService.updatePurchaseOrderLinesFromPayloadByExternalIds(purchaseOrderExternalId, order_lines);
+            res.status(result.statusCode).json(result);
+        }
+        catch (error) {
+            console.error('Error en purchaseOrderController.updatePurchaseOrderLinesFromPayloadByExternalIds:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al actualizar líneas de orden de compra desde payload con External IDs', error: error.message });
         }
     }
 };
