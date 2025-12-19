@@ -122,6 +122,31 @@ const partnerService = {
 
             const partner = pickFields(dataPartner, CLIENT_FIELDS)
 
+            // Buscar el municipio por city_code si viene en dataPartner
+            if (dataPartner.city_code) {
+                const citySearch = await odooConector.executeOdooRequest('res.city', 'search_read', {
+                    domain: [
+                        ['x_nuevo_codigo_dane_centro_poblado', '=', dataPartner.city_code]
+                    ],
+                    fields: ['id', 'country_id', 'state_id'],
+                    limit: 1
+                });
+
+                if (!citySearch.success || citySearch.data.length === 0) {
+                    return {
+                        statusCode: 404,
+                        message: `No se encontró un municipio con código DANE: ${dataPartner.city_code}`,
+                        error: "CITY_NOT_FOUND"
+                    };
+                }
+
+                const cityData = citySearch.data[0];
+                // Asignar los campos al partner
+                partner.city_id = cityData.id;
+                partner.country_id = cityData.country_id[0];
+                partner.state_id = cityData.state_id[0];
+            }
+
             // Buscar la compañía por External ID si viene externalCompanyId
             if (dataPartner.externalCompanyId) {
                 const companyExternalId = `company_${dataPartner.externalCompanyId}`;
@@ -144,6 +169,7 @@ const partnerService = {
 
                 // Asignar el ID interno de Odoo al partner
                 partner.company_id = companySearch.data[0].res_id;
+                console.log("Datos para crear el tercero", partner);
             }
 
             const response = await odooConector.executeOdooRequest('res.partner', 'create', {
