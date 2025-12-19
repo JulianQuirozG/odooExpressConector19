@@ -3051,13 +3051,13 @@ const billService = {
                 const existingLine = linesResult.data.find(
                     line => line.x_studio_n_remesa === transformedLine.x_studio_n_remesa
                 );
-                if (transformedLine.action === 'DELETE' && existingLine != null) {
+                if (transformedLine.action === 'DELETE' && existingLine) {
                     // Marcar para eliminación - eliminar todas las existentes
 
                     linesToDelete.push(existingLine.id);
 
                     console.log(`Línea marcada para eliminación`);
-                } else if(transformedLine.action === 'UPDATE' && existingLine != null){
+                } else if(transformedLine.action === 'UPDATE' && existingLine){
                      const newLineData = {
                         id: existingLine.id,
                         product_id: transformedLine.product_id,
@@ -3081,7 +3081,7 @@ const billService = {
                     console.log(`Línea será actualizada`);
                 
                 } 
-                else if (transformedLine.action === 'CREATE'){
+                else if (transformedLine.action === 'CREATE' && !existingLine){
                     // Crear nuevas líneas
                     const newLineData = {
                         product_id: transformedLine.product_id,
