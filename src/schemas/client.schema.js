@@ -34,6 +34,7 @@ const clientSchema = z.object({
   state_id: z.coerce.number().int().min(1),
   country_id: z.coerce.number().int().min(1),
   function: z.string().optional().default(''),
+  city_code: z.number().optional().default(0),
 
   // Identificación fiscal
   l10n_latam_identification_type_id: z.coerce.number().int().min(1),

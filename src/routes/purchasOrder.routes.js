@@ -12,7 +12,7 @@ router.get('/:id', purchaseOrderController.getPurchaseOrderById);
 router.post('/', purchaseOrderController.createPurchaseOrder);
 router.put('/:id', purchaseOrderController.updatePurchaseOrder);
 router.put('/editRows/:id', purchaseOrderController.updatePurchaseOrderLines);
-router.post('/update-lines-payload-external/:purchaseOrderExternalId', purchaseOrderController.updatePurchaseOrderLinesFromPayloadByExternalIds);
+router.put('/update-lines-payload-external/:purchaseOrderExternalId', purchaseOrderController.updatePurchaseOrderLinesFromPayloadByExternalIds);
 router.put('/update-lines/:id', purchaseOrderController.updatePurchaseOrderLinesFromPayload);
 router.post('/confirm/:id', purchaseOrderController.confirmPurchaseOrder);
 router.put('/confirm-external/:externalId', purchaseOrderController.confirmPurchaseOrderByExternalId);

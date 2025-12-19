@@ -646,17 +646,38 @@ const quotationService = {
             // Preparar acciones: eliminar todas si alguna línea pide DELETE, y crear el resto
             const linesToDelete = [];
             const linesToCreate = [];
-            const hasDelete = transformedLines.some(l => l.action === 'DELETE');
-            if (hasDelete && Array.isArray(linesResult.data)) {
-                linesResult.data.forEach(line => linesToDelete.push(line.id));
-            }
+            const linesToUpdate = [];
+            let lineIndex = 0;
 
-            transformedLines.forEach(l => {
-                if (l.action !== 'DELETE') {
-                    const newLine = { product_id: l.product_id, product_uom_qty: l.product_uom_qty, price_unit: l.price_unit };
-                    if (l.name) newLine.name = l.name;
-                    if (l.x_studio_n_remesa) newLine.x_studio_n_remesa = l.x_studio_n_remesa;
-                    linesToCreate.push(newLine);
+            // Procesar cada línea transformada
+            transformedLines.forEach((transformedLine) => {
+                const existingLine = linesResult.data.find(
+                    line => line.x_studio_n_remesa === transformedLine.x_studio_n_remesa
+                );
+                if (transformedLine.action === 'DELETE') {
+                    // Marcar para eliminación - eliminar todas las existentes
+
+                    linesToDelete.push(existingLine.id);
+
+                    console.log(`Línea marcada para eliminación`);
+                } else {
+                    // Crear nuevas líneas o actualizar
+                    const newLineData = {
+                        product_id: transformedLine.product_id,
+                        quantity: transformedLine.quantity,
+                        price_unit: transformedLine.price_unit
+                    };
+
+                    if (transformedLine.name) {
+                        newLineData.name = transformedLine.name;
+                    }
+
+                    if (transformedLine.date_maturity) {
+                        newLineData.date_maturity = transformedLine.date_maturity;
+                    }
+
+                    linesToCreate.push(newLineData);
+                    console.log(`Línea será creada o actualizada`);
                 }
             });
 
