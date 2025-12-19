@@ -3032,6 +3032,7 @@ const billService = {
                     price_unit: line.price_unit,
                     name: line.name,
                     x_studio_n_remesa: line.x_studio_n_remesa,
+                    x_studio_rad_rndc: line.x_studio_rad_rndc,
                     date_maturity: line.date_maturity,
                     action: line.action
                 };
@@ -3050,15 +3051,15 @@ const billService = {
                 const existingLine = linesResult.data.find(
                     line => line.x_studio_n_remesa === transformedLine.x_studio_n_remesa
                 );
-                if (transformedLine.action === 'DELETE') {
+                if (transformedLine.action === 'DELETE' && existingLine != null) {
                     // Marcar para eliminación - eliminar todas las existentes
 
                     linesToDelete.push(existingLine.id);
 
                     console.log(`Línea marcada para eliminación`);
-                } else {
-                    // Crear nuevas líneas o actualizar
-                    const newLineData = {
+                } else if(transformedLine.action === 'UPDATE' && existingLine != null){
+                     const newLineData = {
+                        id: existingLine.id,
                         product_id: transformedLine.product_id,
                         quantity: transformedLine.quantity,
                         price_unit: transformedLine.price_unit
@@ -3072,13 +3073,42 @@ const billService = {
                         newLineData.date_maturity = transformedLine.date_maturity;
                     }
 
+                    if(transformedLine.x_studio_rad_rndc){
+                        newLineData.x_studio_rad_rndc = transformedLine.x_studio_rad_rndc;
+                    }
+
+                    linesToUpdate.push(newLineData);
+                    console.log(`Línea será actualizada`);
+                
+                } 
+                else if (transformedLine.action === 'CREATE'){
+                    // Crear nuevas líneas
+                    const newLineData = {
+                        product_id: transformedLine.product_id,
+                        quantity: transformedLine.quantity,
+                        price_unit: transformedLine.price_unit,
+                        x_studio_n_remesa: transformedLine.x_studio_n_remesa,
+                        x_studio_rad_rndc: transformedLine.x_studio_rad_rndc
+                    };
+
+                    if (transformedLine.name) {
+                        newLineData.name = transformedLine.name;
+                    }
+
+                    if (transformedLine.date_maturity) {
+                        newLineData.date_maturity = transformedLine.date_maturity;
+                    }
+
+
+
                     linesToCreate.push(newLineData);
-                    console.log(`Línea será creada o actualizada`);
+                    console.log(`Línea será creada`);
                 }
             });
 
             console.log('Líneas a crear:', linesToCreate);
             console.log('Líneas a eliminar:', linesToDelete);
+            console.log('Líneas a actualizar:', linesToUpdate);
 
             // Ejecutar actualizaciones, eliminaciones y creaciones
             const updateResults = [];
@@ -3118,6 +3148,23 @@ const billService = {
                     };
                 }
                 updateResults.push({ action: 'CREATE', count: linesToCreate.length });
+            }
+
+            if(linesToUpdate.length > 0){
+                const updateCommands = linesToUpdate.map((lineData) => {
+                    // Separar el id del resto de las propiedades
+                    const { id, ...dataWithoutId } = lineData;
+                    return [1, id, dataWithoutId];
+                    }
+                );
+
+                console.log('Actualizando líneas existentes...');
+                const updateResponse = await odooConector.executeOdooRequest("account.move", "write", {
+                    ids: [Number(billId)],
+                    vals: {
+                        invoice_line_ids: updateCommands
+                    }
+                });
             }
 
             // Obtener la factura actualizada
