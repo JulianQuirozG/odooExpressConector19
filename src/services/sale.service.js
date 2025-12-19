@@ -418,7 +418,7 @@ const saleService = {
                     console.log(quotation.data.id, "Este es el ID de la cotización creada");
 
                     //crear external ID para la cotizacion
-                    const externalSalseOrderIdName = `sale_order_${externalCompanyId}_${external_solicitud_transportista}`;
+                    const externalSalseOrderIdName = dataVenta.external_sale_order_id;
                     const createExternalIdQuotation = await odooConector.createExternalId(externalSalseOrderIdName, 'sale.order', quotation.data.id);
 
                     if (!createExternalIdQuotation.success) {
@@ -439,7 +439,7 @@ const saleService = {
                     //actualizar orden de compra 
                     const updatePurchaseOrder = await purchaseOrderService.updatePurchaseOrder(purchaseOrderId, dataCompra, 'update');
                     if (updatePurchaseOrder.statusCode !== 200) return updatePurchaseOrder;
-                    const createExternalIdorder = await odooConector.createExternalId(dataCompra.external_purchase_order_id, 'purchase.order', purchaseOrder.data.id);
+                    const createExternalIdorder = await odooConector.createExternalId(dataCompra.external_purchase_order_id, 'purchase.order', purchaseOrderId);
 
                     //Confirmar orden de compra
                     const confirmPurchaseOrder = await purchaseOrderService.confirmPurchaseOrder(purchaseOrderId);

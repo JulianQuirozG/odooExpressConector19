@@ -961,7 +961,7 @@ const billService = {
                     data: null
                 };
             }
-            
+
             const billId = externalIdSearch.data[0].res_id;
 
             // Verificar que la factura exista y esté confirmada
@@ -991,7 +991,7 @@ const billService = {
                     vals_list: [wizardData],
                 }
             );
-            
+
             if (wizardResponse.error) return { statusCode: 500, message: "Error al crear wizard de nota de débito", error: wizardResponse.message };
             if (!wizardResponse.success) {
                 return {
@@ -1209,7 +1209,7 @@ const billService = {
             }
             console.log("External ID encontrado:", billExists);
             console.log("InFORMACION DATA CREDITO", dataCredit);
-           
+
             const creditNoteResponse = await this.generateCreditNoteOdoo(billId, dataCredit);
             if (creditNoteResponse.error) return { statusCode: 500, message: "Error al crear nota de crédito", error: creditNoteResponse.message };
             if (!creditNoteResponse.success) {
@@ -1246,10 +1246,10 @@ const billService = {
 
             if (billExists.data.move_type != 'in_invoice') {
                 await this.confirmCreditNote(creditNoteId);
-            }else{
+            } else {
                 await this.confirmBill(creditNoteId);
             }
-            
+
             // Crear External ID para la nota de crédito
             const creditNoteExternalId = dataCredit.externalCreditNoteId;
             const externalIdResponse = await odooConector.createExternalId(creditNoteExternalId, 'account.move', creditNoteId);
@@ -1280,7 +1280,7 @@ const billService = {
 
     async generateCreditNoteOdoo(billId, dataCredit) {
         try {
-           const wizardData = {
+            const wizardData = {
                 move_ids: [Number(billId)],
                 reason: "Anulación",
                 "l10n_co_edi_description_code_credit": "2",
@@ -1441,7 +1441,7 @@ const billService = {
             console.log("payment ", payment)
             // Obtener información actualizada de la factura
             const updatedInvoice = await this.getOneBill(billId);
-            
+
             let externalId = "";
 
             if (paymentDatas.externalCompanyId != null && paymentDatas.externalPaymentId != null && paymentDatas.externalPaymentType != null) {
@@ -1658,7 +1658,7 @@ const billService = {
             }
 
             const paymentId = paymentExternalSearch.data[0].res_id;
-            
+
             console.log("Pago encontrado por External ID:", paymentId);
 
             // Obtener la lista de créditos pendientes de la factura
@@ -1672,7 +1672,7 @@ const billService = {
             // Buscar si el pago está disponible en los créditos pendientes
             const paymentAvailable = outstandingCredits.data.find(credit => credit.account_payment_id === paymentId);
 
-            
+
             if (!paymentAvailable) {
                 return {
                     statusCode: 404,
@@ -1835,8 +1835,8 @@ const billService = {
                     data: {
                         invoiceId: invoiceId,
                         account_payment_id: account_payment_id,
-                        availablePartials: invoicePayments.data.map(p => ({ 
-                            partial_id: p.partial_id, 
+                        availablePartials: invoicePayments.data.map(p => ({
+                            partial_id: p.partial_id,
                             name: p.name,
                             amount: p.amount,
                             date: p.date
@@ -1865,10 +1865,10 @@ const billService = {
                         error: response.message
                     };
                 }
-                return { 
-                    statusCode: 400, 
-                    message: "Error al deshacer la conciliación", 
-                    data: response.data 
+                return {
+                    statusCode: 400,
+                    message: "Error al deshacer la conciliación",
+                    data: response.data
                 };
             }
 
@@ -1876,8 +1876,8 @@ const billService = {
             const updatedInvoice = await this.getOneBill(invoiceId);
 
             //Regreso la información de la consulta
-            return { 
-                statusCode: 200, 
+            return {
+                statusCode: 200,
                 message: "Conciliación desecha exitosamente",
                 data: {
                     invoiceId: invoiceId,
@@ -2807,7 +2807,7 @@ const billService = {
             // Paso 3: Resetear la factura a borrador
             console.log(`Reestableciendo factura a borrador: ${invoiceId}`);
             const resetBillResult = await this.resetToDraftBill(invoiceId);
-            
+
             if (resetBillResult.statusCode !== 200) {
                 results.billReset = {
                     status: 'failed',
@@ -2826,7 +2826,7 @@ const billService = {
             // // Paso 4: Cancelar la factura
             // console.log(`Cancelando factura: ${invoiceId}`);
             // const cancelBillResult = await this.cancelBill(invoiceId);
-            
+
             // if (cancelBillResult.statusCode !== 200) {
             //     results.billCancel = {
             //         status: 'failed',
@@ -2850,12 +2850,12 @@ const billService = {
 
             // Determinar statusCode final
             //const finalStatusCode = results.failedPayments.length === 0 && results.billReset.status === 'success' ? 200 : 206;
-            const finalStatusCode =results.billReset.status === 'success' ? 200 : 206;
+            const finalStatusCode = results.billReset.status === 'success' ? 200 : 206;
 
             return {
                 statusCode: finalStatusCode,
-                message: finalStatusCode === 200 
-                    ? "Factura, pagos y orden de compra liberados exitosamente" 
+                message: finalStatusCode === 200
+                    ? "Factura, pagos y orden de compra liberados exitosamente"
                     : "Factura liberada parcialmente con algunos errores",
                 data: results
             };
@@ -2935,9 +2935,9 @@ const billService = {
 
             // Validar que se proporcionen líneas
             if (!invoiceLines || !Array.isArray(invoiceLines) || invoiceLines.length === 0) {
-                return { 
-                    statusCode: 400, 
-                    message: 'Debe proporcionar un array de invoice_lines para actualizar' 
+                return {
+                    statusCode: 400,
+                    message: 'Debe proporcionar un array de invoice_lines para actualizar'
                 };
             }
 
@@ -2998,17 +2998,17 @@ const billService = {
             // Obtener la factura actual
             const billExists = await this.getOneBill(billId);
             if (billExists.statusCode !== 200) {
-                return { 
-                    statusCode: billExists.statusCode, 
-                    message: billExists.message, 
-                    data: billExists.data 
+                return {
+                    statusCode: billExists.statusCode,
+                    message: billExists.message,
+                    data: billExists.data
                 };
             }
 
             // Obtener las líneas actuales de la factura
             const linesResult = await this.getLinesByBillId(billId, 'full');
             if (linesResult.statusCode !== 200) {
-                return { 
+                return {
                     statusCode: linesResult.statusCode,
                     message: linesResult.message,
                     data: linesResult.data
@@ -3031,6 +3031,7 @@ const billService = {
                     quantity: line.quantity,
                     price_unit: line.price_unit,
                     name: line.name,
+                    x_studio_n_remesa: line.x_studio_n_remesa,
                     date_maturity: line.date_maturity,
                     action: line.action
                 };
@@ -3046,11 +3047,14 @@ const billService = {
 
             // Procesar cada línea transformada
             transformedInvoiceLines.forEach((transformedLine) => {
+                const existingLine = linesResult.data.find(
+                    line => line.x_studio_n_remesa === transformedLine.x_studio_n_remesa
+                );
                 if (transformedLine.action === 'DELETE') {
                     // Marcar para eliminación - eliminar todas las existentes
-                    billExists.data.invoice_line_ids.forEach(lineId => {
-                        linesToDelete.push(lineId);
-                    });
+
+                    linesToDelete.push(existingLine.id);
+
                     console.log(`Línea marcada para eliminación`);
                 } else {
                     // Crear nuevas líneas o actualizar
@@ -3059,11 +3063,11 @@ const billService = {
                         quantity: transformedLine.quantity,
                         price_unit: transformedLine.price_unit
                     };
-                    
+
                     if (transformedLine.name) {
                         newLineData.name = transformedLine.name;
                     }
-                    
+
                     if (transformedLine.date_maturity) {
                         newLineData.date_maturity = transformedLine.date_maturity;
                     }
@@ -3098,7 +3102,7 @@ const billService = {
                 console.log('Creando nuevas líneas...');
                 // Para crear nuevas líneas, usamos el comando 0 (create)
                 const createCommands = linesToCreate.map(lineData => [0, 0, lineData]);
-                
+
                 const createResponse = await odooConector.executeOdooRequest("account.move", "write", {
                     ids: [Number(billId)],
                     vals: {
@@ -3119,9 +3123,9 @@ const billService = {
             // Obtener la factura actualizada
             const updatedBill = await this.getOneBill(billId);
 
-            return { 
-                statusCode: 200, 
-                message: 'Líneas de factura actualizadas con éxito', 
+            return {
+                statusCode: 200,
+                message: 'Líneas de factura actualizadas con éxito',
                 data: {
                     billId: billId,
                     billExternalId: billExternalId,

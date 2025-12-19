@@ -31,6 +31,47 @@ const quotationController = {
             res.status(500).json({ statusCode: 500, message: 'Error al crear cotización', error: error.message });
         }
     },
+    async updateQuotationLinesFromPayloadByExternalIds(req, res) {
+        try {
+            const { quotationExternalId } = req.params;
+            const { order_lines } = req.body;
+            const result = await quotationService.updateQuotationLinesFromPayloadByExternalIds(quotationExternalId, order_lines);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en quotationController.updateQuotationLinesFromPayloadByExternalIds:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al actualizar líneas de cotización por External ID', error: error.message });
+        }
+    },
+    async resetToDraftQuotationByExternalId(req, res) {
+        try {
+            const { externalId } = req.params;
+            const result = await quotationService.resetToDraftQuotationByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en quotationController.resetToDraftQuotationByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al resetear cotización a borrador por External ID', error: error.message });
+        }
+    },
+    async cancelQuotationByExternalId(req, res) {
+        try {
+            const { externalId } = req.params;
+            const result = await quotationService.cancelQuotationByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en quotationController.cancelQuotationByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al cancelar cotización por External ID', error: error.message });
+        }
+    },
+    async confirmQuotationByExternalId(req, res) {
+        try {
+            const { externalId } = req.params;
+            const result = await quotationService.confirmQuotationByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en quotationController.confirmQuotationByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al confirmar cotización por External ID', error: error.message });
+        }
+    },
     /**
     async updateBill(req, res) {
         try{
