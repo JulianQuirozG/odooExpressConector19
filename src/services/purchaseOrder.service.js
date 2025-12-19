@@ -1008,21 +1008,24 @@ const purchaseOrderService = {
                 const existingLine = linesResult.data.find(
                     line => line.x_studio_n_remesa === transformedLine.x_studio_n_remesa
                 );
-
+                console.log(`Procesando línea con x_studio_n_remesa: ${transformedLine.x_studio_n_remesa}`);
+                console.log(existingLine)
                 if (existingLine) {
                     // La línea existe
-                    if (transformedLine.action === 'DELETE') {
+                    if (transformedLine.action === 'DELETE' && existingLine != null) {
                         // Marcar para eliminación
                         linesToDelete.push(existingLine.id);
                         console.log(`Línea ${transformedLine.x_studio_n_remesa} marcada para eliminación (ID: ${existingLine.id})`);
-                    } else {
+                    }
+                    else if (transformedLine.action === 'UPDATE' && existingLine != null) {
                         // Actualizar línea existente (action UPDATE o undefined)
                         const updatedLineData = {
+                            //id: existingLine ? existingLine.id : undefined,
                             product_id: transformedLine.product_id,
                             product_qty: transformedLine.product_qty,
                             price_unit: transformedLine.price_unit
                         };
-                        
+
                         if (transformedLine.date_planned) {
                             updatedLineData.date_planned = transformedLine.date_planned;
                         }
@@ -1033,24 +1036,24 @@ const purchaseOrderService = {
                             data: updatedLineData
                         });
                         console.log(`Línea ${transformedLine.x_studio_n_remesa} marcada para actualización (ID: ${existingLine.id})`);
+
                     }
                     lineIndex++;
-                } else if (transformedLine.action !== 'DELETE') {
+                }
+                if (transformedLine.action === 'CREATE') {
+
                     // Línea nueva (no existe en la orden actual)
                     const newLineData = {
                         product_id: transformedLine.product_id,
                         product_qty: transformedLine.product_qty,
                         price_unit: transformedLine.price_unit
                     };
-                    
                     if (transformedLine.date_planned) {
                         newLineData.date_planned = transformedLine.date_planned;
                     }
-                    
                     if (transformedLine.x_studio_n_remesa) {
                         newLineData.x_studio_n_remesa = transformedLine.x_studio_n_remesa;
                     }
-
                     linesToCreate.push(newLineData);
                     console.log(`Línea ${transformedLine.x_studio_n_remesa} será creada como nueva`);
                 }
@@ -1080,13 +1083,28 @@ const purchaseOrderService = {
             // 2. Actualizar líneas existentes
             if (linesToUpdate.length > 0) {
                 console.log('Actualizando líneas...');
-                const linesToUpdateData = linesToUpdate.map(item => item.data);
-                const updateResponse = await this.updatePurchaseOrderLines(id, 1, linesToUpdateData);
-                if (updateResponse.statusCode !== 200) {
+                
+                const linesToUpdateData = linesToUpdate.map((lineData) => {
+                    // Extraer id y data del objeto lineData
+                    console.log(lineData);
+                    const { id, data } = lineData;
+                    return [1, id, data];
+                });
+
+                console.log('Actualizando líneas existentes...', linesToUpdateData);
+                const updateResponse = await odooConector.executeOdooRequest("purchase.order", "write", {
+                    ids: [Number(id)],
+                    vals: {
+                        order_line: linesToUpdateData
+                    }
+                });
+                
+
+                if (!updateResponse.success) {
                     return {
-                        statusCode: updateResponse.statusCode,
+                        statusCode: updateResponse.statusCode || 500,
                         message: 'Error al actualizar líneas de orden de compra',
-                        error: updateResponse.error
+                        error: updateResponse.error || updateResponse.message
                     };
                 }
                 updateResults.push({ action: 'UPDATE', count: linesToUpdate.length });
@@ -1097,7 +1115,7 @@ const purchaseOrderService = {
                 console.log('Creando nuevas líneas...');
                 // Para crear nuevas líneas, usamos el comando 0 (create)
                 const createCommands = linesToCreate.map(lineData => [0, 0, lineData]);
-                
+                console.log('Creando líneas nuevas...', createCommands);
                 const createResponse = await odooConector.executeOdooRequest("purchase.order", "write", {
                     ids: [Number(id)],
                     vals: {
