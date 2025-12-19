@@ -635,6 +635,7 @@ const quotationService = {
                     price_unit: Number(line.preciounitario),
                     name: line.name,
                     x_studio_n_remesa: line.x_studio_n_remesa,
+                    x_studio_rad_rndc: line.x_studio_rad_rndc,
                     action: line.action
                 };
             });
@@ -654,18 +655,40 @@ const quotationService = {
                 const existingLine = linesResult.data.find(
                     line => line.x_studio_n_remesa === transformedLine.x_studio_n_remesa
                 );
-                if (transformedLine.action === 'DELETE') {
+                if (transformedLine.action === 'DELETE' && existingLine) {
                     // Marcar para eliminación - eliminar todas las existentes
 
                     linesToDelete.push(existingLine.id);
 
                     console.log(`Línea marcada para eliminación`);
-                } else {
+                } else if (transformedLine.action === 'UPDATE' && existingLine) {
+
+                    // Actualizar línea existente
+                    const updatedLineData = {
+                        product_id: transformedLine.product_id,
+                        product_uom_qty: transformedLine.product_uom_qty,
+                        price_unit: transformedLine.price_unit,
+                        x_studio_n_remesa: transformedLine.x_studio_n_remesa,
+                        x_studio_rad_rndc: transformedLine.x_studio_rad_rndc
+                    };
+                    if (transformedLine.name) {
+                        updatedLineData.name = transformedLine.name;
+                    }
+                    if (transformedLine.date_maturity) {
+                        updatedLineData.date_maturity = transformedLine.date_maturity;
+                    }
+                    linesToUpdate.push({ id: existingLine.id, data: updatedLineData });
+                    console.log(`Línea marcada para actualización`);
+
+                }else if (transformedLine.action === 'CREATE' && !existingLine)
+                    {
                     // Crear nuevas líneas o actualizar
                     const newLineData = {
                         product_id: transformedLine.product_id,
-                        quantity: transformedLine.quantity,
-                        price_unit: transformedLine.price_unit
+                        product_uom_qty: transformedLine.product_uom_qty,
+                        price_unit: transformedLine.price_unit,
+                        x_studio_n_remesa: transformedLine.x_studio_n_remesa,
+                        x_studio_rad_rndc: transformedLine.x_studio_rad_rndc
                     };
 
                     if (transformedLine.name) {
@@ -700,6 +723,21 @@ const quotationService = {
                     return { statusCode: createResp.statusCode || 500, message: 'Error al crear nuevas líneas de cotización', error: createResp.error || createResp.message };
                 }
                 updateResults.push({ action: 'CREATE', count: linesToCreate.length });
+            }
+
+            //3) Actualizar
+
+            if(linesToUpdate.length>0){
+                const linesToUpdateData = linesToUpdate.map(lines => [1, lines.id, lines.data]);
+                const updateResp = await odooConector.executeOdooRequest('sale.order', 'write', {
+                    ids: [Number(quotationId)],
+                    vals: { order_line: linesToUpdateData }
+                });
+                if (!updateResp.success) {
+                    return { statusCode: updateResp.statusCode || 500, message: 'Error al actualizar líneas de cotización', error: updateResp.error || updateResp.message };
+                }
+                updateResults.push({ action: 'UPDATE', count: linesToUpdate.length });
+
             }
 
             // Cotización actualizada
