@@ -62,6 +62,16 @@ const quotationController = {
             res.status(500).json({ statusCode: 500, message: 'Error al cancelar cotización por External ID', error: error.message });
         }
     },
+    async confirmQuotationByExternalId(req, res) {
+        try {
+            const { externalId } = req.params;
+            const result = await quotationService.confirmQuotationByExternalId(externalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en quotationController.confirmQuotationByExternalId:', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al confirmar cotización por External ID', error: error.message });
+        }
+    },
     /**
     async updateBill(req, res) {
         try{

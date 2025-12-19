@@ -13,6 +13,7 @@ const {createQuotationSchema} = require('../schemas/Quotation/createQuotation.sc
     router.post('/update-lines-payload-external/:quotationExternalId', quotationController.updateQuotationLinesFromPayloadByExternalIds);
     router.put('/reset-external/:externalId', quotationController.resetToDraftQuotationByExternalId);
     router.put('/cancel-external/:externalId', quotationController.cancelQuotationByExternalId);
+    router.post('/confirm-external/:externalId', quotationController.confirmQuotationByExternalId);
     router.get('/:id', quotationController.getOneQuotation);
     router.post('/', validateBody(createQuotationSchema), quotationController.createQuotation);
 

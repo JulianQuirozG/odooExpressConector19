@@ -306,6 +306,70 @@ const quotationService = {
             };
         }
     },
+
+    /**
+     * Confirmar (action_confirm) una cotización usando External ID.
+     *
+     * @async
+     * @param {string} externalId - External ID de la cotización a confirmar.
+     * @returns {Promise<Object>} Resultado con statusCode, message y data o error.
+     */
+    async confirmQuotationByExternalId(externalId) {
+        try {
+            if (!externalId) {
+                return {
+                    statusCode: 400,
+                    message: 'El External ID de la cotización es requerido',
+                    data: null
+                };
+            }
+
+            // Buscar sale.order por External ID
+            const soExternalSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [
+                    ['name', '=', String(externalId)],
+                    ['model', '=', 'sale.order'],
+                    ['module', '=', '__custom__']
+                ],
+                fields: ['res_id']
+            });
+
+            if (!soExternalSearch.success || soExternalSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró una cotización con External ID: ${externalId}`,
+                    data: null
+                };
+            }
+
+            const quotationId = soExternalSearch.data[0].res_id;
+
+            // Reutilizar confirmQuotation con el ID interno
+            const confirmResult = await this.confirmQuotation(quotationId);
+
+            if (confirmResult.statusCode === 200) {
+                return {
+                    statusCode: 200,
+                    message: 'Cotización confirmada con éxito usando External ID',
+                    data: {
+                        quotationId,
+                        quotationExternalId: externalId,
+                        confirmData: confirmResult.data
+                    }
+                };
+            }
+
+            return confirmResult;
+        } catch (error) {
+            console.error("Error en quotationService.confirmQuotationByExternalId:", error);
+            return {
+                statusCode: 500,
+                message: "Error al confirmar cotización por External ID",
+                error: error.message
+            };
+        }
+    },
+
     /**
      * Obtener las órdenes de compra relacionadas a una orden de venta (sale.order).
      *
