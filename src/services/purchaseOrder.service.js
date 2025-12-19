@@ -1296,6 +1296,7 @@ const purchaseOrderService = {
                     preciounitario: line.preciounitario,
                     name: line.name,
                     x_studio_n_remesa: line.x_studio_n_remesa,
+                    x_studio_rad_rndc: line.x_studio_rad_rndc,
                     date_planned: line.date_planned,
                     action: line.action
                 };

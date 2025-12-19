@@ -635,6 +635,7 @@ const quotationService = {
                     price_unit: Number(line.preciounitario),
                     name: line.name,
                     x_studio_n_remesa: line.x_studio_n_remesa,
+                    x_studio_rad_rndc: line.x_studio_rad_rndc,
                     action: line.action
                 };
             });
@@ -656,6 +657,7 @@ const quotationService = {
                     const newLine = { product_id: l.product_id, product_uom_qty: l.product_uom_qty, price_unit: l.price_unit };
                     if (l.name) newLine.name = l.name;
                     if (l.x_studio_n_remesa) newLine.x_studio_n_remesa = l.x_studio_n_remesa;
+                    if (l.x_studio_rad_rndc) newLine.x_studio_rad_rndc = l.x_studio_rad_rndc;
                     linesToCreate.push(newLine);
                 }
             });

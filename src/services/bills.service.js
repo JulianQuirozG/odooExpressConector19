@@ -3031,6 +3031,7 @@ const billService = {
                     quantity: line.quantity,
                     price_unit: line.price_unit,
                     name: line.name,
+                    x_studio_rad_rndc: line.x_studio_rad_rndc,
                     date_maturity: line.date_maturity,
                     action: line.action
                 };
