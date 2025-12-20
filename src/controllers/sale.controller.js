@@ -45,6 +45,18 @@ const saleController = {
             console.error('Error al crear la venta', error);
             res.status(500).json({ statusCode: 500, message: 'Error al crear venta', error: error.message });
         }
+    },
+
+    // Controlador para actualizar líneas de venta
+    async updateSaleLines(req, res) {
+        const { data, quotationExternalId, purchaseOrderExternalId, purchaseBillExternalId } = req.body;
+        try {
+            const result = await saleService.updateSaleLines(data, quotationExternalId, purchaseOrderExternalId, purchaseBillExternalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error al actualizar líneas de venta', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al actualizar líneas de venta', error: error.message });
+        }
     }
 };
 

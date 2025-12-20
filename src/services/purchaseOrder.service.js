@@ -968,9 +968,9 @@ const purchaseOrderService = {
             // Transformar las líneas del formato recibido al formato de Odoo
             const transformedLines = orderLines.map((line, index) => {
                 // Validar que cada línea tenga los campos requeridos
-                if (!line.product_id || line.cantidad === undefined || line.preciounitario === undefined) {
-                    throw new Error(`Línea ${index + 1}: Faltan campos requeridos (product_id, cantidad, preciounitario)`);
-                }
+                // if (!line.product_id || line.cantidad === undefined || line.preciounitario === undefined) {
+                //     throw new Error(`Línea ${index + 1}: Faltan campos requeridos (product_id, cantidad, preciounitario)`);
+                // }
 
                 return {
                     product_id: Number(line.product_id),
@@ -979,7 +979,9 @@ const purchaseOrderService = {
                     x_studio_n_remesa: line.x_studio_n_remesa,
                     price_unit: Number(line.preciounitario),
                     date_planned: line.date_planned,
-                    action: line.action // Puede ser 'UPDATE', 'DELETE', o undefined
+                    action: line.action, // Puede ser 'UPDATE', 'DELETE', o undefined
+                    sale_line_id: line.sale_line_id,
+                    sale_order_id: line.sale_order_id
                 };
             });
 
@@ -1004,25 +1006,32 @@ const purchaseOrderService = {
 
             // Procesar cada línea transformada
             transformedLines.forEach((transformedLine) => {
+                console.log("line", linesResult)
                 // Buscar la línea correspondiente en la orden actual
                 const existingLine = linesResult.data.find(
                     line => line.x_studio_n_remesa === transformedLine.x_studio_n_remesa
                 );
-
+                console.log(`Procesando línea con x_studio_n_remesa purchase: ${transformedLine.x_studio_n_remesa}`);
+                console.log(existingLine)
                 if (existingLine) {
                     // La línea existe
                     if (transformedLine.action === 'DELETE') {
                         // Marcar para eliminación
                         linesToDelete.push(existingLine.id);
                         console.log(`Línea ${transformedLine.x_studio_n_remesa} marcada para eliminación (ID: ${existingLine.id})`);
-                    } else {
+                    }
+                    else if (transformedLine.action === 'UPDATE') {
                         // Actualizar línea existente (action UPDATE o undefined)
                         const updatedLineData = {
+                            //id: existingLine ? existingLine.id : undefined,
                             product_id: transformedLine.product_id,
                             product_qty: transformedLine.product_qty,
-                            price_unit: transformedLine.price_unit
+                            price_unit: transformedLine.price_unit,
+                            sale_line_id: transformedLine.sale_line_id,
+                            sale_order_id: transformedLine.sale_order_id,
+                            name: transformedLine.name || ""
                         };
-                        
+
                         if (transformedLine.date_planned) {
                             updatedLineData.date_planned = transformedLine.date_planned;
                         }
@@ -1033,30 +1042,33 @@ const purchaseOrderService = {
                             data: updatedLineData
                         });
                         console.log(`Línea ${transformedLine.x_studio_n_remesa} marcada para actualización (ID: ${existingLine.id})`);
+
                     }
                     lineIndex++;
-                } else if (transformedLine.action !== 'DELETE') {
+                }
+                if (transformedLine.action === 'CREATE') {
+
                     // Línea nueva (no existe en la orden actual)
                     const newLineData = {
                         product_id: transformedLine.product_id,
                         product_qty: transformedLine.product_qty,
-                        price_unit: transformedLine.price_unit
+                        price_unit: transformedLine.price_unit,
+                        sale_line_id: transformedLine.sale_line_id,
+                        sale_order_id: transformedLine.sale_order_id,
+                        name: transformedLine.name || ""
                     };
-                    
                     if (transformedLine.date_planned) {
                         newLineData.date_planned = transformedLine.date_planned;
                     }
-                    
                     if (transformedLine.x_studio_n_remesa) {
                         newLineData.x_studio_n_remesa = transformedLine.x_studio_n_remesa;
                     }
-
                     linesToCreate.push(newLineData);
                     console.log(`Línea ${transformedLine.x_studio_n_remesa} será creada como nueva`);
                 }
             });
 
-            console.log('Líneas a crear:', linesToCreate);
+            console.log('Líneas a crear: purchase', linesToCreate);
             console.log('Líneas a actualizar:', linesToUpdate);
             console.log('Líneas a eliminar:', linesToDelete);
 
@@ -1080,13 +1092,28 @@ const purchaseOrderService = {
             // 2. Actualizar líneas existentes
             if (linesToUpdate.length > 0) {
                 console.log('Actualizando líneas...');
-                const linesToUpdateData = linesToUpdate.map(item => item.data);
-                const updateResponse = await this.updatePurchaseOrderLines(id, 1, linesToUpdateData);
-                if (updateResponse.statusCode !== 200) {
+                
+                const linesToUpdateData = linesToUpdate.map((lineData) => {
+                    // Extraer id y data del objeto lineData
+                    console.log(lineData);
+                    const { id, data } = lineData;
+                    return [1, id, data];
+                });
+
+                console.log('Actualizando líneas existentes...', linesToUpdateData);
+                const updateResponse = await odooConector.executeOdooRequest("purchase.order", "write", {
+                    ids: [Number(id)],
+                    vals: {
+                        order_line: linesToUpdateData
+                    }
+                });
+                
+
+                if (!updateResponse.success) {
                     return {
-                        statusCode: updateResponse.statusCode,
+                        statusCode: updateResponse.statusCode || 500,
                         message: 'Error al actualizar líneas de orden de compra',
-                        error: updateResponse.error
+                        error: updateResponse.error || updateResponse.message
                     };
                 }
                 updateResults.push({ action: 'UPDATE', count: linesToUpdate.length });
@@ -1097,7 +1124,7 @@ const purchaseOrderService = {
                 console.log('Creando nuevas líneas...');
                 // Para crear nuevas líneas, usamos el comando 0 (create)
                 const createCommands = linesToCreate.map(lineData => [0, 0, lineData]);
-                
+                console.log('Creando líneas nuevas...', createCommands);
                 const createResponse = await odooConector.executeOdooRequest("purchase.order", "write", {
                     ids: [Number(id)],
                     vals: {
@@ -1296,8 +1323,11 @@ const purchaseOrderService = {
                     preciounitario: line.preciounitario,
                     name: line.name,
                     x_studio_n_remesa: line.x_studio_n_remesa,
+                    x_studio_rad_rndc: line.x_studio_rad_rndc,
                     date_planned: line.date_planned,
-                    action: line.action
+                    action: line.action,
+                    sale_line_id: line.sale_line_id,
+                    sale_order_id: line.sale_order_id
                 };
             });
 
