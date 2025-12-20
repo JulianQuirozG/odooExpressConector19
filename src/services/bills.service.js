@@ -3028,13 +3028,15 @@ const billService = {
 
                 return {
                     product_id: product_id,
-                    quantity: line.quantity,
-                    price_unit: line.price_unit,
+                    quantity: line.cantidad,
+                    price_unit: line.preciounitario,
                     name: line.name,
                     x_studio_n_remesa: line.x_studio_n_remesa,
                     x_studio_rad_rndc: line.x_studio_rad_rndc,
                     date_maturity: line.date_maturity,
-                    action: line.action
+                    action: line.action,
+                    purchase_line_id: line.purchase_line_id,
+                    purchase_order_id: line.purchase_order_id
                 };
             });
 
@@ -3062,7 +3064,9 @@ const billService = {
                         id: existingLine.id,
                         product_id: transformedLine.product_id,
                         quantity: transformedLine.quantity,
-                        price_unit: transformedLine.price_unit
+                        price_unit: transformedLine.price_unit,
+                        purchase_line_id: transformedLine.purchase_line_id,
+                        purchase_order_id: transformedLine.purchase_order_id
                     };
 
                     if (transformedLine.name) {
@@ -3088,7 +3092,9 @@ const billService = {
                         quantity: transformedLine.quantity,
                         price_unit: transformedLine.price_unit,
                         x_studio_n_remesa: transformedLine.x_studio_n_remesa,
-                        x_studio_rad_rndc: transformedLine.x_studio_rad_rndc
+                        x_studio_rad_rndc: transformedLine.x_studio_rad_rndc,
+                        purchase_line_id: transformedLine.purchase_line_id,
+                        purchase_order_id: transformedLine.purchase_order_id
                     };
 
                     if (transformedLine.name) {
