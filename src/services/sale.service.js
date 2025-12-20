@@ -47,6 +47,133 @@ const saleService = {
         }
     },
 
+    updateSaleLines: async (data, quotationExternalId, purchaseOrderExternalId, purchaseBillExternalId) =>{
+        try {
+            console.log("datasasa: ",data)
+            console.log("quotationExternalId: ",quotationExternalId)
+            console.log("purchaseOrderExternalId: ",purchaseOrderExternalId)
+            console.log("purchaseBillExternalId: ",purchaseBillExternalId)
+            const saleOrder = {
+                invoice_line_ids: data.order_lines
+            };
+
+            //consultar el id de la cotizacion por el id externo
+            const quotation = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', quotationExternalId], ['model', '=', 'sale.order'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            const saleOrderLines = await quotationService.getLinesByQuotationId(quotation.data[0].res_id,'full');
+            
+
+            const quotationLinesToUpdateCreate = data.order_lines.map(line => {
+
+                const lineExist = saleOrderLines.data.find(saleLine => saleLine.x_studio_n_remesa === line.x_studio_n_remesa);
+
+                return {
+                    ...line,
+                    action: lineExist ? 'UPDATE' : 'CREATE',
+                }
+            })
+
+            const quotationLinesToDelete = saleOrderLines.data.map(line => {
+
+                const lineExist = data.order_lines.find(saleLine => saleLine.x_studio_n_remesa === line.x_studio_n_remesa);
+
+                if (!lineExist) {
+                    return {
+                        product_external_id:"service_14_11001000",
+                        x_studio_n_remesa: line.x_studio_n_remesa,
+                        action: 'DELETE',
+                    }
+                }
+
+            })
+
+            const quotationNewLines = [
+                ...quotationLinesToUpdateCreate,
+                ...quotationLinesToDelete.filter(line => line !== undefined)
+            ]
+
+            console.log("data para cotizacion de venta",quotationNewLines)
+            console.log("quotationExternalId",quotationExternalId)
+            const quotationUpdate = await quotationService.updateQuotationLinesFromPayloadByExternalIds(quotationExternalId, quotationNewLines);
+
+            if (quotationUpdate.statusCode !== 200) return quotationUpdate;
+
+            //Ahora actualizaremos la orden de compra
+
+            const saleOrderLinesUpdated = await quotationService.getLinesByQuotationId(quotation.data[0].res_id,'full');
+
+
+            const purchaseNewLines = quotationNewLines.map(line => {
+
+                const lineUpdated = saleOrderLinesUpdated.data.find(saleLine => saleLine.x_studio_n_remesa === line.x_studio_n_remesa);
+
+                if( line.action === 'DELETE') return {...line};
+                
+                return {
+                    ...line,
+                    sale_order_id: quotation.data[0].res_id,
+                    sale_line_id: lineUpdated ? lineUpdated.id : null,
+                }
+            })
+
+            console.log("data para cotizacion de compra",purchaseNewLines)
+            console.log("purchaseOrderExternalId",purchaseOrderExternalId)
+            //Ahora utilizo el endpoint y actualizo las lineas de la orden de compra
+            const purchaseOrderUpdate = await purchaseOrderService.updatePurchaseOrderLinesFromPayloadByExternalIds(purchaseOrderExternalId, purchaseNewLines);
+
+            if (purchaseOrderUpdate.statusCode !== 200) return purchaseOrderUpdate;
+            
+            const purchaseOrder = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', purchaseOrderExternalId], ['model', '=', 'purchase.order'], ['module', '=', '__custom__']],
+                fields: ['res_id']
+            });
+
+            const purchaseOrderLinesUpdated = await purchaseOrderService.getLinesByPurchaseOrderId(purchaseOrder.data[0].res_id,'full');
+            
+            //Finalmente actualizamos las lineas de la factura de compra
+
+            const purchaseBillNewLines = purchaseNewLines.map(line => {
+
+                const lineUpdated = purchaseOrderLinesUpdated.data.find(purchaseLine => purchaseLine.x_studio_n_remesa === line.x_studio_n_remesa);
+                if( line.action === 'DELETE') return line;
+                
+                return {
+                    ...line,
+                    purchase_order_id: purchaseOrder.data[0].res_id,
+                    purchase_line_id: lineUpdated ? lineUpdated.id : null,
+                }
+            }   )
+
+            console.log("data para factura de compra",purchaseBillNewLines)
+            console.log("purchaseBillExternalId",purchaseBillExternalId)
+            const purchaseBillUpdate = await billService.updateBillLinesFromPayloadByExternalIds(purchaseBillExternalId, purchaseBillNewLines); 
+
+            if (purchaseBillUpdate.statusCode !== 200) return purchaseBillUpdate;
+            return {
+                statusCode: 200,
+                message: 'Líneas de venta, orden de compra y factura de compra actualizadas con éxito',
+                data: {
+                    quotationUpdate: quotationUpdate.data,
+                    purchaseOrderUpdate: purchaseOrderUpdate.data,
+                    purchaseBillUpdate: purchaseBillUpdate.data
+                }
+            };
+                       
+
+        }
+        catch(error){
+            console.error('Error al actualizar las ventas en Odoo', error);
+            return {
+                statusCode: 500,
+                message: 'Error al actualizar ventas',
+                error: error.message
+            };
+        }
+    },
+
     /**
      * Obtiene el detalle de una orden de venta (sale.order) por su ID desde Odoo.
      *

@@ -968,9 +968,9 @@ const purchaseOrderService = {
             // Transformar las líneas del formato recibido al formato de Odoo
             const transformedLines = orderLines.map((line, index) => {
                 // Validar que cada línea tenga los campos requeridos
-                if (!line.product_id || line.cantidad === undefined || line.preciounitario === undefined) {
-                    throw new Error(`Línea ${index + 1}: Faltan campos requeridos (product_id, cantidad, preciounitario)`);
-                }
+                // if (!line.product_id || line.cantidad === undefined || line.preciounitario === undefined) {
+                //     throw new Error(`Línea ${index + 1}: Faltan campos requeridos (product_id, cantidad, preciounitario)`);
+                // }
 
                 return {
                     product_id: Number(line.product_id),
@@ -979,7 +979,9 @@ const purchaseOrderService = {
                     x_studio_n_remesa: line.x_studio_n_remesa,
                     price_unit: Number(line.preciounitario),
                     date_planned: line.date_planned,
-                    action: line.action // Puede ser 'UPDATE', 'DELETE', o undefined
+                    action: line.action, // Puede ser 'UPDATE', 'DELETE', o undefined
+                    sale_line_id: line.sale_line_id,
+                    sale_order_id: line.sale_order_id
                 };
             });
 
@@ -1004,26 +1006,30 @@ const purchaseOrderService = {
 
             // Procesar cada línea transformada
             transformedLines.forEach((transformedLine) => {
+                console.log("line", linesResult)
                 // Buscar la línea correspondiente en la orden actual
                 const existingLine = linesResult.data.find(
                     line => line.x_studio_n_remesa === transformedLine.x_studio_n_remesa
                 );
-                console.log(`Procesando línea con x_studio_n_remesa: ${transformedLine.x_studio_n_remesa}`);
+                console.log(`Procesando línea con x_studio_n_remesa purchase: ${transformedLine.x_studio_n_remesa}`);
                 console.log(existingLine)
                 if (existingLine) {
                     // La línea existe
-                    if (transformedLine.action === 'DELETE' && existingLine != null) {
+                    if (transformedLine.action === 'DELETE') {
                         // Marcar para eliminación
                         linesToDelete.push(existingLine.id);
                         console.log(`Línea ${transformedLine.x_studio_n_remesa} marcada para eliminación (ID: ${existingLine.id})`);
                     }
-                    else if (transformedLine.action === 'UPDATE' && existingLine != null) {
+                    else if (transformedLine.action === 'UPDATE') {
                         // Actualizar línea existente (action UPDATE o undefined)
                         const updatedLineData = {
                             //id: existingLine ? existingLine.id : undefined,
                             product_id: transformedLine.product_id,
                             product_qty: transformedLine.product_qty,
-                            price_unit: transformedLine.price_unit
+                            price_unit: transformedLine.price_unit,
+                            sale_line_id: transformedLine.sale_line_id,
+                            sale_order_id: transformedLine.sale_order_id,
+                            name: transformedLine.name || ""
                         };
 
                         if (transformedLine.date_planned) {
@@ -1046,7 +1052,10 @@ const purchaseOrderService = {
                     const newLineData = {
                         product_id: transformedLine.product_id,
                         product_qty: transformedLine.product_qty,
-                        price_unit: transformedLine.price_unit
+                        price_unit: transformedLine.price_unit,
+                        sale_line_id: transformedLine.sale_line_id,
+                        sale_order_id: transformedLine.sale_order_id,
+                        name: transformedLine.name || ""
                     };
                     if (transformedLine.date_planned) {
                         newLineData.date_planned = transformedLine.date_planned;
@@ -1059,7 +1068,7 @@ const purchaseOrderService = {
                 }
             });
 
-            console.log('Líneas a crear:', linesToCreate);
+            console.log('Líneas a crear: purchase', linesToCreate);
             console.log('Líneas a actualizar:', linesToUpdate);
             console.log('Líneas a eliminar:', linesToDelete);
 
@@ -1316,7 +1325,9 @@ const purchaseOrderService = {
                     x_studio_n_remesa: line.x_studio_n_remesa,
                     x_studio_rad_rndc: line.x_studio_rad_rndc,
                     date_planned: line.date_planned,
-                    action: line.action
+                    action: line.action,
+                    sale_line_id: line.sale_line_id,
+                    sale_order_id: line.sale_order_id
                 };
             });
 
