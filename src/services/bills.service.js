@@ -2450,8 +2450,8 @@ const billService = {
                     lines2.RNDC_consignment_number = line.x_studio_rad_rndc || "";
                     lines2.internal_consignment_number = line.x_studio_n_remesa || "";
                     lines2.value_consignment = line.price_subtotal || 0; //FALTA
-                    lines2.unit_measure_consignment_id = Number(unit_measure_id.data[0].id);  //FALTA
-                    lines2.quantity_consignment = line.quantity;
+                    lines2.unit_measure_consignment_id = 767;  //FALTA
+                    lines2.quantity_consignment = line.quantity*1000;
                 }
                 const tax_totals = [];
                 if (line.tax_ids.length === 0) return { statusCode: 400, message: `La linea ${line.id} no tiene impuestos` };
