@@ -41,11 +41,11 @@ const productController = {
         const { externalId } = req.params;
         try {
             const { fields } = req.body || {};
-            const defaultFields = ['id', 'name', 'default_code', 'list_price'];
+            const defaultFields = ['id', 'name', 'default_code', 'list_price','x_codigo_dane','x_municipio_dane'];
             
             const result = await productService.getProductByExternalId(
                 externalId,
-                fields || defaultFields
+                defaultFields
             );
             res.status(result.statusCode).json(result);
         } catch (error) {
