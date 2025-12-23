@@ -981,7 +981,9 @@ const purchaseOrderService = {
                     date_planned: line.date_planned,
                     action: line.action, // Puede ser 'UPDATE', 'DELETE', o undefined
                     sale_line_id: line.sale_line_id,
-                    sale_order_id: line.sale_order_id
+                    sale_order_id: line.sale_order_id,
+                    qty_invoiced: line.qty_invoiced,
+                    qty_received: line.qty_received
                 };
             });
 
@@ -1024,13 +1026,15 @@ const purchaseOrderService = {
                         // Actualizar línea existente (action UPDATE o undefined)
                         const updatedLineData = {
                             //id: existingLine ? existingLine.id : undefined,
-                            product_id: transformedLine.product_id,
-                            product_qty: transformedLine.product_qty,
-                            price_unit: transformedLine.price_unit,
                             sale_line_id: transformedLine.sale_line_id,
                             sale_order_id: transformedLine.sale_order_id,
-                            name: transformedLine.name || ""
                         };
+
+                        if(transformedLine.product_id)updatedLineData.product_id = transformedLine.product_id;
+                        if(transformedLine.product_qty)updatedLineData.product_qty = transformedLine.product_qty;
+                        if(transformedLine.price_unit)updatedLineData.price_unit = transformedLine.price_unit;
+                        if(transformedLine.qty_invoiced)updatedLineData.qty_invoiced = transformedLine.qty_invoiced;
+                        if(transformedLine.qty_received)updatedLineData.qty_received = transformedLine.qty_received;
 
                         if (transformedLine.date_planned) {
                             updatedLineData.date_planned = transformedLine.date_planned;
@@ -1042,7 +1046,8 @@ const purchaseOrderService = {
                             data: updatedLineData
                         });
                         console.log(`Línea ${transformedLine.x_studio_n_remesa} marcada para actualización (ID: ${existingLine.id})`);
-
+                        console.log('Updated Line Data:', updatedLineData);
+                        console.log('Lines to Update so far:', transformedLine);
                     }
                     lineIndex++;
                 }
@@ -1327,7 +1332,9 @@ const purchaseOrderService = {
                     date_planned: line.date_planned,
                     action: line.action,
                     sale_line_id: line.sale_line_id,
-                    sale_order_id: line.sale_order_id
+                    sale_order_id: line.sale_order_id,
+                    qty_received: line.qty_received,
+                    qty_invoiced: line.qty_invoiced
                 };
             });
 

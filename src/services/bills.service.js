@@ -2941,6 +2941,8 @@ const billService = {
                 };
             }
 
+            console.log("invoiceLines")
+
             // Validar y resolver External IDs de productos
             const productExternalIds = invoiceLines
                 .filter(line => line.product_external_id)
@@ -3063,12 +3065,11 @@ const billService = {
                      const newLineData = {
                         id: existingLine.id,
                         product_id: transformedLine.product_id,
-                        quantity: transformedLine.quantity,
-                        price_unit: transformedLine.price_unit,
                         purchase_line_id: transformedLine.purchase_line_id,
                         purchase_order_id: transformedLine.purchase_order_id
                     };
-
+                    if(transformedLine.quantity) newLineData.quantity = transformedLine.quantity;
+                    if(transformedLine.price_unit) newLineData.price_unit = transformedLine.price_unit;
                     if (transformedLine.name) {
                         newLineData.name = transformedLine.name;
                     }

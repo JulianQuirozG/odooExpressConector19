@@ -636,7 +636,11 @@ const quotationService = {
                     name: line.name,
                     x_studio_n_remesa: line.x_studio_n_remesa,
                     x_studio_rad_rndc: line.x_studio_rad_rndc,
-                    action: line.action
+                    action: line.action,
+                    qty_invoiced: line.qty_invoiced,
+                    qty_delivered: line.qty_delivered,
+
+
                 };
             });
 
@@ -665,20 +669,18 @@ const quotationService = {
 
                     // Actualizar línea existente
                     const updatedLineData = {
-                        product_id: transformedLine.product_id,
-                        product_uom_qty: transformedLine.product_uom_qty,
-                        price_unit: transformedLine.price_unit,
                         x_studio_n_remesa: transformedLine.x_studio_n_remesa,
-                        x_studio_rad_rndc: transformedLine.x_studio_rad_rndc
                     };
-                    if (transformedLine.name) {
-                        updatedLineData.name = transformedLine.name;
-                    }
-                    if (transformedLine.date_maturity) {
-                        updatedLineData.date_maturity = transformedLine.date_maturity;
-                    }
+                    if(transformedLine.product_id) updatedLineData.product_id = transformedLine.product_id;
+                    if(transformedLine.product_uom_qty) updatedLineData.product_uom_qty = transformedLine.product_uom_qty;
+                    if(transformedLine.price_unit) updatedLineData.price_unit = transformedLine.price_unit;
+                    if(transformedLine.name) updatedLineData.name = transformedLine.name;
+                    if(transformedLine.date_maturity) updatedLineData.date_maturity = transformedLine.date_maturity;
+                    if(transformedLine.x_studio_rad_rndc) updatedLineData.x_studio_rad_rndc = transformedLine.x_studio_rad_rndc;
+                    if(transformedLine.qty_delivered) updatedLineData.qty_delivered = transformedLine.qty_delivered;
                     linesToUpdate.push({ id: existingLine.id, data: updatedLineData });
-                    console.log(`Línea marcada para actualización`);
+                    console.log(`Línea marcada para actualización`,updatedLineData);
+                    console.log("asdasd",transformedLine);
 
                 }else if (transformedLine.action === 'CREATE' && !existingLine)
                     {
