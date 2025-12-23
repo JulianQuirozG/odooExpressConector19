@@ -655,7 +655,232 @@ const saleService = {
                 error: error.message
             };
         }
+    },
+
+    /**
+ * Actualiza líneas de orden de venta, orden de compra y factura de compra
+ * basándose en coincidencias con x_studio_n_remesa
+ * 
+ * @async
+ * @param {Object} data - Datos de las líneas a actualizar
+ * @param {Array<Object>} data.order_lines - Array de líneas con x_studio_n_remesa
+ * @param {string} quotationExternalId - External ID de la orden de venta
+ * @param {string} purchaseOrderExternalId - External ID de la orden de compra
+ * @param {string} purchaseBillExternalId - External ID de la factura de compra
+ * @returns {Promise<Object>} Resultado con statusCode, message y data
+ * 
+ * @example
+ * const result = await saleService.updateSaleLines(
+ *   { order_lines: [{ x_studio_n_remesa: '19247', cantidad: 5, preciounitario: 100 }] },
+ *   'sale_ext_123',
+ *   'po_ext_456', 
+ *   'bill_ext_789'
+ * );
+ */
+updateSaleLinesXRemesa: async (data, quotationExternalId, purchaseOrderExternalId, purchaseBillExternalId) => {
+    try {
+        console.log("Datos recibidos:", data);
+        console.log("quotationExternalId:", quotationExternalId);
+        console.log("purchaseOrderExternalId:", purchaseOrderExternalId);
+        console.log("purchaseBillExternalId:", purchaseBillExternalId);
+
+        // Validar datos de entrada
+        if (!data.order_lines || !Array.isArray(data.order_lines) || data.order_lines.length === 0) {
+            return {
+                statusCode: 400,
+                message: 'Debe proporcionar un array de order_lines para actualizar'
+            };
+        }
+
+        // Validar que todas las líneas tengan x_studio_n_remesa
+        const linesWithoutRemesa = data.order_lines.filter(line => !line.x_studio_n_remesa);
+        if (linesWithoutRemesa.length > 0) {
+            return {
+                statusCode: 400,
+                message: 'Todas las líneas deben tener x_studio_n_remesa',
+                data: { linesWithoutRemesa }
+            };
+        }
+
+        // 1. ACTUALIZAR ORDEN DE VENTA (COTIZACIÓN)
+        console.log('\n=== PASO 1: ACTUALIZANDO ORDEN DE VENTA ===');
+        
+        // Buscar orden de venta por External ID
+        const quotationSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+            domain: [['name', '=', quotationExternalId], ['model', '=', 'sale.order'], ['module', '=', '__custom__']],
+            fields: ['res_id']
+        });
+
+        if (!quotationSearch.success || quotationSearch.data.length === 0) {
+            return {
+                statusCode: 404,
+                message: `No se encontró orden de venta con External ID: ${quotationExternalId}`
+            };
+        }
+
+        const quotationId = quotationSearch.data[0].res_id;
+        console.log("ID de orden de venta encontrado:", quotationId);
+
+        // Obtener líneas actuales de la orden de venta
+        const saleOrderLines = await quotationService.getLinesByQuotationId(quotationId, 'full');
+        if (saleOrderLines.statusCode !== 200) {
+            return saleOrderLines;
+        }
+
+        console.log(`Líneas actuales en orden de venta: ${saleOrderLines.data.length}`);
+
+        // Mapear líneas para actualizar en orden de venta
+        const quotationLinesToUpdate = data.order_lines.map(line => {
+            const lineExist = saleOrderLines.data.find(
+                saleLine => saleLine.x_studio_n_remesa === line.x_studio_n_remesa
+            );
+
+            if (lineExist) {
+                return {
+                    ...line,
+                    action: 'UPDATE',
+                    line_id: lineExist.id
+                };
+            }
+            
+            return null;
+        }).filter(line => line !== null);
+
+        if (quotationLinesToUpdate.length === 0) {
+            return {
+                statusCode: 404,
+                message: 'No se encontraron líneas con x_studio_n_remesa coincidente en la orden de venta'
+            };
+        }
+
+        console.log(`Líneas a actualizar en orden de venta: ${quotationLinesToUpdate.length}`);
+
+        // Actualizar orden de venta
+        const quotationUpdate = await quotationService.updateQuotationLinesFromPayloadByExternalIds(
+            quotationExternalId, 
+            quotationLinesToUpdate
+        );
+
+        if (quotationUpdate.statusCode !== 200) {
+            return quotationUpdate;
+        }
+
+        // 2. ACTUALIZAR ORDEN DE COMPRA
+        console.log('\n=== PASO 2: ACTUALIZANDO ORDEN DE COMPRA ===');
+
+        // Obtener líneas actualizadas de la orden de venta
+        const saleOrderLinesUpdated = await quotationService.getLinesByQuotationId(quotationId, 'full');
+        if (saleOrderLinesUpdated.statusCode !== 200) {
+            return saleOrderLinesUpdated;
+        }
+
+        // Buscar orden de compra por External ID
+        const purchaseOrderSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+            domain: [['name', '=', purchaseOrderExternalId], ['model', '=', 'purchase.order'], ['module', '=', '__custom__']],
+            fields: ['res_id']
+        });
+
+        if (!purchaseOrderSearch.success || purchaseOrderSearch.data.length === 0) {
+            return {
+                statusCode: 404,
+                message: `No se encontró orden de compra con External ID: ${purchaseOrderExternalId}`
+            };
+        }
+
+        const purchaseOrderId = purchaseOrderSearch.data[0].res_id;
+        console.log("ID de orden de compra encontrado:", purchaseOrderId);
+
+        // Mapear líneas para orden de compra incluyendo sale_order_id y sale_line_id
+        const purchaseLinesToUpdate = quotationLinesToUpdate.map(line => {
+            const lineUpdated = saleOrderLinesUpdated.data.find(
+                saleLine => saleLine.x_studio_n_remesa === line.x_studio_n_remesa
+            );
+
+            return {
+                ...line,
+                sale_order_id: lineUpdated ? quotationId : null,
+                sale_line_id: lineUpdated ? lineUpdated.id : null
+            };
+        }).filter(line => line.sale_line_id !== null);
+
+        console.log(`Líneas a actualizar en orden de compra: ${purchaseLinesToUpdate.length}`);
+
+        // Actualizar orden de compra
+        const purchaseOrderUpdate = await purchaseOrderService.updatePurchaseOrderLinesFromPayloadByExternalIds(
+            purchaseOrderExternalId, 
+            purchaseLinesToUpdate
+        );
+
+        if (purchaseOrderUpdate.statusCode !== 200) {
+            return purchaseOrderUpdate;
+        }
+
+        // 3. ACTUALIZAR FACTURA DE COMPRA
+        console.log('\n=== PASO 3: ACTUALIZANDO FACTURA DE COMPRA ===');
+
+        // Obtener líneas actualizadas de la orden de compra
+        const purchaseOrderLinesUpdated = await purchaseOrderService.getLinesByPurchaseOrderId(
+            purchaseOrderId, 
+            'full'
+        );
+        if (purchaseOrderLinesUpdated.statusCode !== 200) {
+            return purchaseOrderLinesUpdated;
+        }
+
+        // Mapear líneas para factura de compra incluyendo purchase_order_id y purchase_line_id
+        const billLinesToUpdate = purchaseLinesToUpdate.map(line => {
+            const lineUpdated = purchaseOrderLinesUpdated.data.find(
+                purchaseLine => purchaseLine.x_studio_n_remesa === line.x_studio_n_remesa
+            );
+
+            return {
+                ...line,
+                purchase_order_id: lineUpdated ? purchaseOrderId : null,
+                purchase_line_id: lineUpdated ? lineUpdated.id : null
+            };
+        }).filter(line => line.purchase_line_id !== null);
+
+        console.log(`Líneas a actualizar en factura de compra: ${billLinesToUpdate.length}`);
+
+        // Actualizar factura de compra
+        const purchaseBillUpdate = await billService.updateBillLinesFromPayloadByExternalIds(
+            purchaseBillExternalId, 
+            billLinesToUpdate
+        );
+
+        if (purchaseBillUpdate.statusCode !== 200) {
+            return purchaseBillUpdate;
+        }
+
+        console.log('\n=== ACTUALIZACIÓN COMPLETADA EXITOSAMENTE ===');
+
+        return {
+            statusCode: 200,
+            message: 'Líneas actualizadas con éxito en orden de venta, orden de compra y factura de compra',
+            data: {
+                summary: {
+                    linesReceived: data.order_lines.length,
+                    linesUpdated: quotationLinesToUpdate.length,
+                    quotationId: quotationId,
+                    purchaseOrderId: purchaseOrderId
+                },
+                quotationUpdate: quotationUpdate.data,
+                purchaseOrderUpdate: purchaseOrderUpdate.data,
+                purchaseBillUpdate: purchaseBillUpdate.data
+            }
+        };
+
+    } catch (error) {
+        console.error('Error al actualizar las líneas:', error);
+        return {
+            statusCode: 500,
+            message: 'Error al actualizar líneas',
+            error: error.message
+        };
     }
+}
+
+
 };
 
 module.exports = saleService;
