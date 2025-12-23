@@ -148,7 +148,7 @@ const productService = {
      * const res = await productService.getProductByExternalId('product_123');
      * if (res.statusCode === 200) console.log(res.data);
      */
-    async getProductByExternalId(externalId, fields = ['id', 'name', 'default_code', 'list_price']) {
+    async getProductByExternalId(externalId, fields = ['id', 'name', 'default_code', 'list_price','x_codigo_dane','x_municipio_dane']) {
         try {
             // Validamos que el external ID no esté vacío
             if (!externalId || externalId.toString().trim() === '') {
@@ -172,7 +172,7 @@ const productService = {
 
             // Si no encontramos el external ID regresamos 404
             if (externalIdResponse.data.length === 0) {
-                return { statusCode: 404, message: 'Producto no encontrado con ese external ID', data: null };
+                return { statusCode: 400, message: 'Producto no encontrado con ese external ID', data: null };
             }
 
             // Obtenemos el res_id (ID del producto)
