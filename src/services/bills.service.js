@@ -1345,6 +1345,8 @@ const billService = {
                 };
             }
 
+            
+
             // Intentar buscar por ID primero
             let billExists = null;
             if (!isNaN(Number(invoiceId))) {
@@ -1389,15 +1391,76 @@ const billService = {
             if (paymentDatas.amount <= 0) return { statusCode: 400, message: "El monto del pago debe ser positivo", data: [] };
 
 
+            // Intentar obtener/crear la cuenta bancaria del partner si se proporcionan datos
+            let partnerBankId = null;
+            try {
+                const partnerId = invoice.partner_id?.[0] || null;
+                if (partnerId && (paymentDatas.partner_bank_account || paymentDatas.partner_bank_name)) {
+                    // Si se proporcionó nombre de banco, buscar el banco en res.bank por nombre
+                    let bankId = null;
+                    if (paymentDatas.partner_bank_name) {
+                        try {
+                            const bankSearch = await odooConector.executeOdooRequest('res.bank', 'search_read', {
+                                domain: [['name', '=', String(paymentDatas.partner_bank_name)]],
+                                fields: ['id'],
+                                limit: 1
+                            });
+                            if (bankSearch.success && Array.isArray(bankSearch.data) && bankSearch.data.length > 0) {
+                                bankId = bankSearch.data[0].id || bankSearch.data[0];
+                            }
+                        } catch (err) {
+                            console.warn('Error buscando res.bank por nombre:', err && err.message ? err.message : err);
+                        }
+                    }
+
+                    // Buscar si ya existe una cuenta bancaria del partner que coincida
+                    const domain = [["partner_id", "=", Number(partnerId)]];
+                    if (paymentDatas.partner_bank_account) domain.push(["acc_number", "=", String(paymentDatas.partner_bank_account)]);
+                    if (bankId) domain.push(["bank_id", "=", Number(bankId)]);
+
+                    const foundBanks = await odooConector.executeOdooRequest('res.partner.bank', 'search_read', {
+                        domain,
+                        fields: ['id'],
+                        limit: 1
+                    });
+
+                    if (foundBanks.success && Array.isArray(foundBanks.data) && foundBanks.data.length > 0) {
+                        partnerBankId = foundBanks.data[0].id || foundBanks.data[0];
+                    } else {
+                        // Crear la cuenta bancaria en res.partner.bank incluyendo bank_id si lo encontramos
+                        const bankVals = {
+                            partner_id: Number(partnerId),
+                            acc_number: paymentDatas.partner_bank_account || "",
+                            bank_name: paymentDatas.partner_bank_name || "",
+                        };
+                        if (bankId) bankVals.bank_id = Number(bankId);
+
+                        const createBank = await odooConector.executeOdooRequest('res.partner.bank', 'create', {
+                            vals_list: [bankVals]
+                        });
+
+                        if (createBank.success && createBank.data) {
+                            partnerBankId = Array.isArray(createBank.data) ? createBank.data[0] : createBank.data;
+                        }
+                    }
+                }
+            } catch (errBank) {
+                console.warn('Error buscando/creando cuenta bancaria del partner:', errBank && errBank.message ? errBank.message : errBank);
+            }
+
             const wizardData = {
                 payment_date: paymentDatas.date || new Date().toISOString().split("T")[0],
                 communication: paymentDatas.memo || `Pago de ${invoice.name}`,
                 amount: paymentDatas.amount || residual,
                 journal_id: paymentDatas.journal_id || false,
                 payment_method_line_id: Number(paymentDatas.payment_method_line_id) || false,
-                communication: invoice.payment_reference || ""
-
+                communication: invoice.payment_reference || `Pago de la factura ${invoice.name}`,
             };
+
+            // If we found/created a partner bank, include it in the wizard so the created payment links to it
+            if (partnerBankId) {
+                wizardData.partner_bank_id = Number(partnerBankId);
+            }
 
             // Crear el wizard con la estructura correcta
             const wizardCreate = await odooConector.executeOdooRequest(
@@ -1439,6 +1502,18 @@ const billService = {
                 };
             }
             console.log("payment ", payment)
+            // Asegurar que el pago tenga la cuenta bancaria del partner asignada
+            try {
+                const paymentRecordId = payment.data?.res_id || (Array.isArray(payment.data) ? payment.data[0] : payment.data);
+                if (partnerBankId && paymentRecordId) {
+                    await odooConector.executeOdooRequest('account.payment', 'write', {
+                        ids: [Number(paymentRecordId)],
+                        vals: { partner_bank_id: Number(partnerBankId) }
+                    });
+                }
+            } catch (errWriteBank) {
+                console.warn('No se pudo asignar partner_bank_id al pago:', errWriteBank && errWriteBank.message ? errWriteBank.message : errWriteBank);
+            }
             // Obtener información actualizada de la factura
             const updatedInvoice = await this.getOneBill(billId);
 
@@ -1741,7 +1816,7 @@ const billService = {
     async listInvoicePayments(invoiceId) {
         try {
             // Verificar que la factura exista y esté confirmada
-            const billExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            const billExists = await this.getOneBill(invoiceId);
             if (billExists.statusCode !== 200) {
                 return {
                     statusCode: billExists.statusCode,
@@ -1807,8 +1882,10 @@ const billService = {
                 };
             }
 
+            console.log("Deshaciendo conciliación del pago move_id:", account_payment_id, "en la factura ID:", invoiceId);
+            console.log("Verificando existencia de factura ID:", invoiceId);
             // Verificar que la factura exista y esté confirmada
-            const invoiceExists = await this.getOneBill(invoiceId, [['state', '=', 'posted']]);
+            const invoiceExists = await this.getOneBill(invoiceId);
             if (invoiceExists.statusCode !== 200) {
                 return {
                     statusCode: invoiceExists.statusCode,
@@ -1816,6 +1893,7 @@ const billService = {
                     data: invoiceExists.data
                 };
             }
+            console.log("Factura encontrada:", invoiceExists.data);
 
             // Obtener la lista de pagos para verificar que el partial existe
             const invoicePayments = await this.listInvoicePayments(invoiceId);
@@ -1967,7 +2045,7 @@ const billService = {
             console.log("Pago encontrado por External ID:", paymentMoveId);
 
             // Reutilizar removeOutstandingPartial con los IDs internos
-            console.log("Deshaciendo conciliación entre factura ID", invoiceId, "y pago move ID", paymentMoveId);
+            console.log("Deshaciendo conciliación del pago move_id:", paymentMoveId, "en la factura ID:", invoiceId);
             const removeResult = await this.removeOutstandingPartial(invoiceId, paymentMoveId);
 
             // Si hubo error, retornar sin formatear
