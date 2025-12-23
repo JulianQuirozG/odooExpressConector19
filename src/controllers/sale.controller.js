@@ -57,6 +57,18 @@ const saleController = {
             console.error('Error al actualizar líneas de venta', error);
             res.status(500).json({ statusCode: 500, message: 'Error al actualizar líneas de venta', error: error.message });
         }
+    },
+
+    // Controlador para actualizar líneas de venta por x_studio_n_remesa
+    async updateSaleLinesXRemesa(req, res) {
+        const { data, quotationExternalId, purchaseOrderExternalId, purchaseBillExternalId } = req.body;
+        try {
+            const result = await saleService.updateSaleLinesXRemesa(data, quotationExternalId, purchaseOrderExternalId, purchaseBillExternalId);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error al actualizar líneas de venta por x_studio_n_remesa', error);
+            res.status(500).json({ statusCode: 500, message: 'Error al actualizar líneas de venta por x_studio_n_remesa', error: error.message });
+        }
     }
 };
 
