@@ -65,13 +65,15 @@ const saleService = {
 
             const saleOrderLines = await quotationService.getLinesByQuotationId(quotation.data[0].res_id,'full');
             
-
+            
             const quotationLinesToUpdateCreate = data.order_lines.map(line => {
 
                 const lineExist = saleOrderLines.data.find(saleLine => saleLine.x_studio_n_remesa === line.x_studio_n_remesa);
-
+                const { preciounitario , preciounitarioventa , ...linea} = line;
                 return {
-                    ...line,
+                    ...linea,
+                    preciounitario: preciounitarioventa,
+                    preciounitariocompra: preciounitario,
                     action: lineExist ? 'UPDATE' : 'CREATE',
                 }
             })
@@ -111,9 +113,10 @@ const saleService = {
                 const lineUpdated = saleOrderLinesUpdated.data.find(saleLine => saleLine.x_studio_n_remesa === line.x_studio_n_remesa);
 
                 if( line.action === 'DELETE') return {...line};
-                
+                const { preciounitario, ...datas } = line;
                 return {
-                    ...line,
+                    ...datas,
+                    preciounitario:  line.preciounitariocompra,
                     sale_order_id: quotation.data[0].res_id,
                     sale_line_id: lineUpdated ? lineUpdated.id : null,
                 }
@@ -139,9 +142,10 @@ const saleService = {
 
                 const lineUpdated = purchaseOrderLinesUpdated.data.find(purchaseLine => purchaseLine.x_studio_n_remesa === line.x_studio_n_remesa);
                 if( line.action === 'DELETE') return line;
-                
+                const { preciounitario, ...datass } = line;
                 return {
                     ...line,
+                    preciounitario:  line.preciounitariocompra,
                     purchase_order_id: purchaseOrder.data[0].res_id,
                     purchase_line_id: lineUpdated ? lineUpdated.id : null,
                 }
