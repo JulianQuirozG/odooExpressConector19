@@ -755,15 +755,15 @@ updateSaleLinesXRemesa: async (data, quotationExternalId, purchaseOrderExternalI
 
         console.log(`Líneas a actualizar en orden de venta: ${quotationLinesToUpdate.length}`);
 
-        // Actualizar orden de venta
-        const quotationUpdate = await quotationService.updateQuotationLinesFromPayloadByExternalIds(
-            quotationExternalId, 
-            quotationLinesToUpdate
-        );
+        // // Actualizar orden de venta
+        // const quotationUpdate = await quotationService.updateQuotationLinesFromPayloadByExternalIds(
+        //     quotationExternalId, 
+        //     quotationLinesToUpdate
+        // );
 
-        if (quotationUpdate.statusCode !== 200) {
-            return quotationUpdate;
-        }
+        // if (quotationUpdate.statusCode !== 200) {
+        //     return quotationUpdate;
+        // }
 
         // 2. ACTUALIZAR ORDEN DE COMPRA
         console.log('\n=== PASO 2: ACTUALIZANDO ORDEN DE COMPRA ===');
@@ -860,11 +860,8 @@ updateSaleLinesXRemesa: async (data, quotationExternalId, purchaseOrderExternalI
             data: {
                 summary: {
                     linesReceived: data.order_lines.length,
-                    linesUpdated: quotationLinesToUpdate.length,
-                    quotationId: quotationId,
                     purchaseOrderId: purchaseOrderId
                 },
-                quotationUpdate: quotationUpdate.data,
                 purchaseOrderUpdate: purchaseOrderUpdate.data,
                 purchaseBillUpdate: purchaseBillUpdate.data
             }

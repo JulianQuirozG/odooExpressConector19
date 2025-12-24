@@ -1726,7 +1726,7 @@ const billService = {
 
             if (!paymentExternalSearch.success || paymentExternalSearch.data.length === 0) {
                 return {
-                    statusCode: 404,
+                    statusCode: 200,
                     message: `No se encontró un pago con External ID: ${paymentExternalId}`,
                     data: null
                 };
@@ -1908,7 +1908,7 @@ const billService = {
 
             if (!partialExists) {
                 return {
-                    statusCode: 404,
+                    statusCode: 200,
                     message: `El pago con ID ${account_payment_id} no se encuentra entre los pagos de esta factura`,
                     data: {
                         invoiceId: invoiceId,
@@ -2035,7 +2035,7 @@ const billService = {
 
             if (!paymentExternalSearch.success || paymentExternalSearch.data.length === 0) {
                 return {
-                    statusCode: 404,
+                    statusCode: 200,
                     message: `No se encontró un pago con External ID: ${paymentExternalId}`,
                     data: null
                 };
