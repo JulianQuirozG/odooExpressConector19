@@ -8,5 +8,6 @@ const router = express.Router();
     router.post('/', bankAccountController.createBankAccount);
     router.put('/:id', bankAccountController.updateBankAccount);
     router.delete('/:id', bankAccountController.deleteBankAccount);
+    router.put('/partner/:partnerExternalId/replace', bankAccountController.replacePartnerBankAccounts);
 
 module.exports = router;
