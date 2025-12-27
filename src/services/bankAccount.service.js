@@ -192,6 +192,249 @@ const bankAccountService = {
             console.log('Error en bankService.deleteBank:', error);
             return { statusCode: 500, message: 'Error al eliminar banco', error: error.message };
         }
+    },
+
+    /**
+     * Reemplaza todas las cuentas bancarias de un partner por nuevas cuentas.
+     * 
+     * @async
+     * @param {string} partnerExternalId - External ID del partner
+     * @param {Array<Object>} bankAccounts - Array de nuevas cuentas bancarias
+     * @param {string} bankAccounts[].acc_number - Número de cuenta
+     * @param {number} bankAccounts[].currency_id - ID de la moneda
+     * @param {string} bankAccounts[].acc_holder_name - Nombre del titular
+     * @param {string} bankAccounts[].bank_name - Nombre del banco
+     * @param {string} [bankAccounts[].bic] - Código BIC del banco
+     * @returns {Promise<Object>} Resultado con statusCode, message y data
+     * 
+     * @example
+     * const result = await bankAccountService.replacePartnerBankAccounts(
+     *   'partner_ext_123',
+     *   [
+     *     {
+     *       acc_number: "ES7620770024003102575766",
+     *       currency_id: 1,
+     *       acc_holder_name: "Prueba 2 Mueve sas",
+     *       bank_name: "csaSurOccidente",
+     *       bic: "BEXAESMMXXX"
+     *     }
+     *   ]
+     * );
+     */
+    async replacePartnerBankAccounts(partnerExternalId, bankAccounts) {
+        try {
+            // Validar que se proporcionen cuentas bancarias
+            if (!bankAccounts || !Array.isArray(bankAccounts) || bankAccounts.length === 0) {
+                return {
+                    statusCode: 400,
+                    message: 'Debe proporcionar al menos una cuenta bancaria en el array bankAccounts'
+                };
+            }
+
+            console.log(`Buscando partner con External ID: ${partnerExternalId}`);
+
+            // Buscar el partner por External ID
+            const partnerSearch = await odooConector.executeOdooRequest('ir.model.data', 'search_read', {
+                domain: [['name', '=', partnerExternalId], ['model', '=', 'res.partner']],
+                fields: ['res_id']
+            });
+
+            if (!partnerSearch.success || partnerSearch.data.length === 0) {
+                return {
+                    statusCode: 404,
+                    message: `No se encontró partner con External ID: ${partnerExternalId}`
+                };
+            }
+
+            const partnerId = partnerSearch.data[0].res_id;
+            console.log(`Partner encontrado con ID: ${partnerId}`);
+
+            // Obtener todas las cuentas bancarias existentes del partner (activas y archivadas)
+            const existingBankAccounts = await odooConector.executeOdooRequest('res.partner.bank', 'search_read', {
+                domain: ['&', ['partner_id', '=', partnerId], '|', ['active', '=', true], ['active', '=', false]],
+                fields: ['id', 'acc_number', 'active'],
+                context: { active_test: false } // Importante: incluir registros archivados
+            });
+
+            if (!existingBankAccounts.success) {
+                return {
+                    statusCode: 500,
+                    message: 'Error al obtener cuentas bancarias existentes',
+                    error: existingBankAccounts.message
+                };
+            }
+
+            console.log(`Cuentas existentes (activas y archivadas): ${existingBankAccounts.data.length}`);
+
+            // Archivar todas las cuentas bancarias existentes (en lugar de eliminarlas)
+            if (existingBankAccounts.data.length > 0) {
+                const idsToArchive = existingBankAccounts.data.map(acc => acc.id);
+                console.log(`Archivando ${idsToArchive.length} cuentas bancarias existentes...`);
+
+                const archiveResponse = await odooConector.executeOdooRequest('res.partner.bank', 'write', {
+                    ids: idsToArchive,
+                    vals: { active: false }
+                });
+
+                if (!archiveResponse.success) {
+                    return {
+                        statusCode: 500,
+                        message: 'Error al archivar cuentas bancarias existentes',
+                        error: archiveResponse.message
+                    };
+                }
+
+                console.log('Cuentas bancarias existentes archivadas con éxito');
+            } else {
+                console.log('No hay cuentas bancarias existentes para archivar');
+            }
+
+            // Procesar las nuevas cuentas bancarias
+            const createdAccounts = [];
+            const updatedAccounts = [];
+            const failedAccounts = [];
+
+            for (const bankAccount of bankAccounts) {
+                try {
+                    // Preparar los datos de la cuenta bancaria
+                    const accountData = {
+                        partner_id: partnerId,
+                        acc_number: bankAccount.acc_number,
+                        currency_id: bankAccount.currency_id,
+                        acc_holder_name: bankAccount.acc_holder_name || null,
+                        active: true // Asegurar que la cuenta esté activa
+                    };
+
+                    // Si viene el BIC, agregarlo
+                    if (bankAccount.bic) {
+                        accountData.bic = bankAccount.bic;
+                    }
+
+                    // Si viene el nombre del banco, obtener/crear el banco
+                    if (bankAccount.bank_name) {
+                        let bank = await bankService.getBanks(['id', 'name'], [['name', 'ilike', bankAccount.bank_name]]);
+
+                        // Si no existe el banco, crearlo
+                        if (bank.data.length === 0) {
+                            console.log(`Creando banco: ${bankAccount.bank_name}`);
+                            bank = await bankService.createBank({ name: bankAccount.bank_name, bic: bankAccount.bic || null });
+                            
+                            if (bank.statusCode !== 201) {
+                                failedAccounts.push({
+                                    account: bankAccount,
+                                    error: 'No se pudo crear el banco'
+                                });
+                                continue;
+                            }
+                            accountData.bank_id = bank.data[0];
+                        } else {
+                            accountData.bank_id = bank.data[0].id;
+                        }
+                    }
+
+                    // Buscar si ya existe una cuenta con este número (activa o archivada)
+                    const existingAccount = await odooConector.executeOdooRequest('res.partner.bank', 'search_read', {
+                        domain: ['&', ['acc_number', '=', bankAccount.acc_number], '|', ['active', '=', true], ['active', '=', false]],
+                        fields: ['id', 'partner_id', 'active'],
+                        context: { active_test: false },
+                        limit: 1
+                    });
+
+                    if (existingAccount.success && existingAccount.data.length > 0) {
+                        const existingId = existingAccount.data[0].id;
+                        const existingPartnerId = existingAccount.data[0].partner_id[0];
+
+                        // Si la cuenta existe para el mismo partner, actualizarla y activarla
+                        if (existingPartnerId === partnerId) {
+                            console.log(`Cuenta ${bankAccount.acc_number} ya existe (ID: ${existingId}), actualizando y desarchivando...`);
+                            
+                            const filteredData = pickFields(accountData, BANK_ACCOUNT_FIELDS);
+                            const updateResponse = await odooConector.executeOdooRequest('res.partner.bank', 'write', {
+                                ids: [existingId],
+                                vals: { ...filteredData, active: true }
+                            });
+
+                            if (!updateResponse.success) {
+                                failedAccounts.push({
+                                    account: bankAccount,
+                                    error: updateResponse.message || 'Error al actualizar cuenta bancaria'
+                                });
+                            } else {
+                                updatedAccounts.push({
+                                    id: existingId,
+                                    acc_number: bankAccount.acc_number,
+                                    action: 'updated_unarchived'
+                                });
+                            }
+                        } else {
+                            // Si existe para otro partner, no se puede usar
+                            failedAccounts.push({
+                                account: bankAccount,
+                                error: `La cuenta ${bankAccount.acc_number} ya existe para otro partner`
+                            });
+                        }
+                    } else {
+                        // No existe, crear una nueva
+                        const filteredData = pickFields(accountData, BANK_ACCOUNT_FIELDS);
+                        const createResponse = await odooConector.executeOdooRequest('res.partner.bank', 'create', {
+                            vals_list: [filteredData]
+                        });
+
+                        if (!createResponse.success) {
+                            failedAccounts.push({
+                                account: bankAccount,
+                                error: createResponse.message || 'Error al crear cuenta bancaria'
+                            });
+                        } else {
+                            createdAccounts.push({
+                                id: createResponse.data[0],
+                                acc_number: bankAccount.acc_number,
+                                action: 'created'
+                            });
+                        }
+                    }
+
+                } catch (accountError) {
+                    console.error(`Error procesando cuenta bancaria ${bankAccount.acc_number}:`, accountError);
+                    failedAccounts.push({
+                        account: bankAccount,
+                        error: accountError.message
+                    });
+                }
+            }
+
+            // Verificar resultados
+            const totalProcessed = createdAccounts.length + updatedAccounts.length;
+            if (totalProcessed === 0 && failedAccounts.length > 0) {
+                return {
+                    statusCode: 500,
+                    message: 'No se pudo procesar ninguna cuenta bancaria',
+                    data: {
+                        failed: failedAccounts
+                    }
+                };
+            }
+
+            return {
+                statusCode: 201,
+                message: `Cuentas bancarias del partner actualizadas exitosamente. Archivadas: ${existingBankAccounts.data.length}, Creadas: ${createdAccounts.length}, Actualizadas: ${updatedAccounts.length}`,
+                data: {
+                    partnerId: partnerId,
+                    archivedCount: existingBankAccounts.data.length,
+                    created: createdAccounts,
+                    updated: updatedAccounts,
+                    failed: failedAccounts.length > 0 ? failedAccounts : undefined
+                }
+            };
+
+        } catch (error) {
+            console.error('Error en bankAccountService.replacePartnerBankAccounts:', error);
+            return {
+                statusCode: 500,
+                message: 'Error al reemplazar cuentas bancarias del partner',
+                error: error.message
+            };
+        }
     }
 }
 

@@ -50,6 +50,22 @@ const bankAccountsController = {
             res.status(500).json({ statusCode: 500, message: 'Error al eliminar la cuenta de banco', error: error.message });
         }
     },
+    async replacePartnerBankAccounts(req, res) {
+        try {
+            const { partnerExternalId } = req.params;
+            const { bankAccounts } = req.body;
+            
+            const result = await bankAccountsService.replacePartnerBankAccounts(partnerExternalId, bankAccounts);
+            res.status(result.statusCode).json(result);
+        } catch (error) {
+            console.error('Error en bankAccountsController.replacePartnerBankAccounts:', error);
+            res.status(500).json({ 
+                statusCode: 500, 
+                message: 'Error al reemplazar cuentas bancarias del partner', 
+                error: error.message 
+            });
+        }
+    }
 }
 
 module.exports = bankAccountsController;

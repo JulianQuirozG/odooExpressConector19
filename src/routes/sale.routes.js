@@ -17,8 +17,8 @@ router.get('/', saleController.getSales);
 router.get('/:id', saleController.getSaleById);
 router.post('/create-bill', saleController.createBillFromSalesOrder);
 router.post('/', saleController.createSale);
-router.put('/update-lines', saleController.updateSaleLines);
 router.put('/update-lines-remesa', saleController.updateSaleLinesXRemesa);
+router.put('/update-lines', saleController.updateSaleLines);
 
 
 module.exports = router;
